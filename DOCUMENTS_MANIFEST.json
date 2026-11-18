@@ -1,0 +1,153 @@
+{
+  "project": "Escape 60",
+  "date": "2026-11-19",
+  "status": "documentation-only",
+  "files": [
+    {
+      "path": ".editorconfig",
+      "sha256": "292befa852cdc796d6798ea3a956a33bebd8cfaa0c8c84cb708e1e8644e72b2c",
+      "bytes": 154
+    },
+    {
+      "path": ".github/ISSUE_TEMPLATE/bug.md",
+      "sha256": "931714b2deb6c933e5553312d4547f0fa6d16b56d3b589210faff94dca36021e",
+      "bytes": 265
+    },
+    {
+      "path": ".github/ISSUE_TEMPLATE/feature.md",
+      "sha256": "348790df5f707ac7bcba07e4f0959962932693fb0dd460cc911a5cd9a4fed72d",
+      "bytes": 285
+    },
+    {
+      "path": ".gitignore",
+      "sha256": "5f8dcb19b1748f085bc21553ebdeaf26dce1f780d6f0d77771621246ef924993",
+      "bytes": 131
+    },
+    {
+      "path": "AGENTS.md",
+      "sha256": "f8741339d4c649daf538f69a87b594ea1d616273a18c605d298859f25c501486",
+      "bytes": 363
+    },
+    {
+      "path": "CONTRIBUTING.md",
+      "sha256": "3abbdec92d3e8248a157e5364e1684894f25caaae0e19556e78604dbe4312559",
+      "bytes": 564
+    },
+    {
+      "path": "README.md",
+      "sha256": "6d84d6a87d304342230d6a297dcf4cd794f156976ced33eda3518bd709d1fbeb",
+      "bytes": 6266
+    },
+    {
+      "path": "docs/00_STATUS.md",
+      "sha256": "8b6bc678ceb8dd2797c4d13e4660a479d7df98ef1e8b0e9e3530b989dd1907b3",
+      "bytes": 1589
+    },
+    {
+      "path": "docs/01_PRODUCT_BRIEF.md",
+      "sha256": "dd3a4d48962fb499e7b046c0ae554169084222bdd23b952954ec0306b58166d1",
+      "bytes": 1970
+    },
+    {
+      "path": "docs/02_GAME_DESIGN.md",
+      "sha256": "81a28961bf058d6df2333609520ced0e3091322d099b62f71343c88985eb7abd",
+      "bytes": 3295
+    },
+    {
+      "path": "docs/03_GAMEPLAY_BALANCE.md",
+      "sha256": "722a3712ab0111c78b97b6913ba545597a92b7ad4607d6a7191b120b9ee2291d",
+      "bytes": 2337
+    },
+    {
+      "path": "docs/04_UX_UI.md",
+      "sha256": "7ead8d60481920149febe16f3d5a27e749abfda6f8b1ebb1eb315589e2e7df6e",
+      "bytes": 1565
+    },
+    {
+      "path": "docs/05_ARCHITECTURE.md",
+      "sha256": "f8080cd301dced2868a40fc431fc4680d43c6d6b6c99c8c2c9f76f96ca751796",
+      "bytes": 1945
+    },
+    {
+      "path": "docs/06_EDGE_SPEC.md",
+      "sha256": "f220924699cfa74cd52a33a22ad5018ee870a2123fb4fc2dd33f8cc919b84780",
+      "bytes": 2103
+    },
+    {
+      "path": "docs/07_COMPETITION.md",
+      "sha256": "d65c2576f69bcf6c2fc3133fa5e9d978088d64fc41b917f3b44a998636e9939c",
+      "bytes": 1966
+    },
+    {
+      "path": "docs/08_MARKET_RESEARCH.md",
+      "sha256": "cb7cf2210ce4602bf1da4b86308118e9808e606573798b34ce3d5e71d6931f93",
+      "bytes": 2603
+    },
+    {
+      "path": "docs/09_GROWTH.md",
+      "sha256": "24b12211e118fd239cdea5b8753894a02ed022d45c61b24ec065431f741fa8c0",
+      "bytes": 1471
+    },
+    {
+      "path": "docs/10_ROADMAP.md",
+      "sha256": "41919e391f42daddb576f80a53ee2f4c74af6ab7190058185bac1d1f0bf6b366",
+      "bytes": 1355
+    },
+    {
+      "path": "docs/11_QA.md",
+      "sha256": "110d1e9cc5ae209e89d1bd77e238664b1b0b9c703d922a257761018ed262799b",
+      "bytes": 1305
+    },
+    {
+      "path": "docs/12_PRIVACY_SECURITY.md",
+      "sha256": "f98be49e73a852b5176c0747d2458871eb133cecf126d642ee7415d25dc28883",
+      "bytes": 1389
+    },
+    {
+      "path": "docs/13_DECISIONS.md",
+      "sha256": "1db74c49a96578000d8d183ed8ba7d81023a21ce277636723b1c9d21ea71f262",
+      "bytes": 1411
+    },
+    {
+      "path": "docs/14_IP_ASSETS.md",
+      "sha256": "d171423529f62241a97c5ad686f8a183d3ca674449c387aae3a6f57df4a43a2c",
+      "bytes": 1311
+    },
+    {
+      "path": "docs/15_METRICS.md",
+      "sha256": "86b80fb390ccc103b5c2b1d39263bd9cfbd84886b4b96a29ff06121a5abe5be2",
+      "bytes": 1351
+    },
+    {
+      "path": "docs/16_BACKLOG.md",
+      "sha256": "1f642c9816755ebe25e3aee6a0b56e647a0e9fa2f9371de41cdaff19247630bf",
+      "bytes": 1450
+    },
+    {
+      "path": "docs/17_SOURCES.md",
+      "sha256": "b5a7dd8d48df79ada98bff9c57f6a934131826024578168bdfa90c15a8929af0",
+      "bytes": 1521
+    },
+    {
+      "path": "docs/18_AGENTS.md",
+      "sha256": "debc2d31fb325dbd230939366a243d8290ae6260eb0d1064ba81deccfb59ccd6",
+      "bytes": 1494
+    },
+    {
+      "path": "docs/19_GLOSSARY.md",
+      "sha256": "9b632eb2f49e8e847079ad23ae6006a5c3eba7e84f7bc9462e48a19dc1d44c9a",
+      "bytes": 825
+    },
+    {
+      "path": "docs/20_RESEARCH_QUESTIONS.md",
+      "sha256": "dbba557ca6f9156bb189bd13be9f4fe8724d9addf300c69ad4de553753e662af",
+      "bytes": 1059
+    },
+    {
+      "path": "docs/CHANGELOG.md",
+      "sha256": "4f7e54e34c9ab65f6a9959a163c3b1020b0e0e8a1f09aa5d71540150a317b801",
+      "bytes": 392
+    }
+  ],
+  "repository": "https://github.com/ar-karkon/Escape60"
+}
