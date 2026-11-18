@@ -18,3 +18,6 @@ Playable Canvas browser game with Node replay-verified local online leaderboard.
 - Do not commit credentials or `.env` files.
 - Keep bundle light, prioritize 60fps on midrange mobile and native touch gestures.
 - When production changes are made, run tests and verify the actual URL.
+
+## Target visual redesign (authoritative specification)
+Before any graphics or UI redesign, read [`docs/23_VOXEL_3D_VISION_FA.md`](docs/23_VOXEL_3D_VISION_FA.md). The approved target is **real 3D voxel/pixel-art**, not the current smooth Canvas 2D renderer, and never a static mockup. The document is a design target; do not mark it implemented until code and tests verify it. Preserve deterministic gameplay/server replay and report actual browser screenshots, not concept art.
