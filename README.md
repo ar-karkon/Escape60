@@ -1,3 +1,5 @@
+
+> **Next visual direction (specification, NOT yet implemented):** true 3D voxel/pixel-art rendering with a compact isometric-follow camera. See [the full Persian execution brief for Claude Code](docs/23_VOXEL_3D_VISION_FA.md). The current playable code remains the original 2D Canvas version until the redesign is developed and tested.
 # ESCAPE 60 — فرار ۶۰
 
 **An original, fully playable, mobile-first 60-second arcade police chase game.** Built for ArvanCloud Edge Games. No third-party game assets or runtime dependencies.
