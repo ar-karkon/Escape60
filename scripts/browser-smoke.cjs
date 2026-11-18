@@ -49,7 +49,7 @@ const assert = require("node:assert/strict");
       );
     await time(2.4);
     await shot("coastal");
-    await time(51.65);
+    await time(52.15);
     await shot("pursuit");
     await p.locator("#results").waitFor({ timeout: 90000 });
     await p.waitForFunction(() =>

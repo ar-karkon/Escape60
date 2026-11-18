@@ -57,6 +57,19 @@ export function createRenderer(canvas) {
     scene.add(light);
     return light;
   });
+  // Remove only city fragments that project in front of the hero. This also
+  // covers signs and bridge decks whose bases lie outside the camera ray.
+  const cityPaint = paint.clone(),
+    cutout = new T.Vector4();
+  cityPaint.onBeforeCompile = (shader) => {
+    shader.uniforms.heroCutout = { value: cutout };
+    shader.fragmentShader =
+      "uniform vec4 heroCutout;\n" +
+      shader.fragmentShader.replace(
+        "#include <clipping_planes_fragment>",
+        "#include <clipping_planes_fragment>\nif(gl_FragCoord.z < heroCutout.z && distance(gl_FragCoord.xy,heroCutout.xy)<heroCutout.w) discard;",
+      );
+  };
   const hero = vehicle(),
     police = [],
     traffic = [],
@@ -131,6 +144,7 @@ export function createRenderer(canvas) {
           keep.add(id);
           if (!tiles.has(id)) {
             const tile = chunk(currentSeed, i, j);
+            tile.material = cityPaint;
             scene.add(tile);
             tiles.set(id, tile);
           }
@@ -237,17 +251,14 @@ export function createRenderer(canvas) {
     if (game?.invuln > 0.83 && !reducedMotion && playing)
       camera.position.x += Math.sin(t) * 0.09;
     camera.lookAt(target);
-    // Cut away any lot directly between the lens and car, leaving the curb visible via neighboring roads.
-    for (const obj of tiles.values()) {
-      const cx = obj.position.x + 26,
-        cz = obj.position.z + 26;
-      obj.scale.y =
-        playing &&
-        Math.abs((camera.position.x + x) / 2 - cx) < 19 &&
-        Math.abs((camera.position.z + z) / 2 - cz) < 19
-          ? 0.065
-          : 1;
-    }
+    camera.updateMatrixWorld();
+    center.set(x, 1.2, z).project(camera);
+    cutout.set(
+      ((center.x + 1) * w) / 2,
+      ((center.y + 1) * h) / 2,
+      (center.z + 1) / 2 - 0.00005,
+      playing ? h * 0.055 : 0,
+    );
     glow.position.set(x - 2, 3, z + 1);
     glow.color.setHex(
       !reducedMotion && Math.floor(t / 420) % 2 ? 0x3dd8e7 : 0xff5d95,
