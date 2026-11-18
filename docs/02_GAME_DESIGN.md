@@ -44,3 +44,6 @@ Player car, steering, one pursuing police car, one obstacle, collision consequen
 
 ## Accessibility / sensitivity
 High-contrast UI, motion reduction toggle, audio off by default on mobile pending user interaction, no flashing/strobing, clear controls for color-blind users. Suitable content without realistic violence, gore or real-world crime simulation.
+
+## Sunset Bay implementation
+Menu and results use a street-level camera. Racing uses an elevated damped camera, directional pursuit warnings, skid marks and a seeded district grid. The marina perimeter and shop foundations follow the same solid footprints as authoritative replay.

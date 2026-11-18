@@ -5,31 +5,21 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no"/>
   <meta name="theme-color" content="#091020"/>
   <meta name="description" content="فرار ۶۰ — بازی رایگان و سریع تعقیب و گریز. ۶۰ ثانیه از پلیس فرار کن و دوستات رو به چالش بکش!"/>
-  <title>فرار ۶۰ | ESCAPE 60</title>
+  <link rel="icon" href="./logo.svg"><title>فرار ۶۰ | ESCAPE 60</title>
   <link rel="stylesheet" href="./style.css"/>
 </head>
 <body data-view="home">
   <main id="app">
     <canvas id="game" aria-label="نقشه بازی فرار ۶۰؛ با چپ و راست فرمان بده"></canvas>
-    <div id="texture"></div>
+    <div id="texture"></div><span id="threat" aria-hidden="true">▲</span>
     <div id="overlay" class="overlay">
       <section id="home" class="menu">
-        <div class="tag">ARCADE PURSUIT <span class="green">•</span> 60 SECONDS</div>
-        <div class="logo-wrap">
-          <div class="logo-en">ESCAPE <strong>60</strong></div>
-          <h1>فرار <span>۶۰</span></h1>
-          <p>یک شهر. یک ماشین. فقط شصت ثانیه برای فرار.</p>
-        </div>
-        <div class="line"></div>
-        <div class="rules">
-          <div><b>۶۰<span>ثانیه</span></b><small>تا خط پایان</small></div>
-          <div><b>۳<span>جان</span></b><small>برای فرار</small></div>
-          <div><b>∞</b><small>تلاش دوباره</small></div>
-        </div>
-        <p class="daily" id="daily-label">چالش امروز · مسیر مشترک</p>
-        <button id="play" class="primary big">شروع تعقیب <span>↗</span></button>
-        <div class="mini"><span>با انگشت به چپ و راست بکش</span><span>یا با کلیدهای ← → فرمان بده</span></div>
-        <div class="bottom-bar"><span id="online-state" class="offline">در حال بررسی اتصال…</span><button class="quiet" id="sound">♪ صدا خاموش</button></div>
+        <div class="mast"><span>SUNSET BAY</span><i></i><span>ARCADE PURSUIT</span></div>
+        <div class="logo-wrap"><h1 aria-label="Escape 60"><img src="./logo.svg" alt="ESCAPE 60"></h1><p>یک شهر. سه جان. شصت ثانیه برای فرار.</p></div>
+        <div class="dock"><div class="daily" id="daily-label"></div>
+        <button id="play" class="primary big">شروع فرار <span>◀</span></button>
+        <div class="links"><button id="daily-play">چالش روزانه</button><button id="board">جدول رکوردها</button><button id="settings">تنظیمات</button></div>
+        <small id="online-state">در حال بررسی اتصال…</small></div>
       </section>
       <section id="results" class="menu hidden">
         <div class="tag">RUN COMPLETE <span class="green">•</span> ESCAPE 60</div>
@@ -39,13 +29,13 @@
         <div class="result-lbl">ثانیه دوام آوردی</div>
         <div class="result-score"><span>امتیاز مهارت</span><strong id="result-score">۰</strong></div>
         <p class="rank" id="rank">رتبه آنلاین: هنوز تأیید نشده</p>
-        <button id="replay" class="primary big">یک بار دیگه <span>↻</span></button>
-        <button id="share" class="secondary">↗ دعوت به چالش</button>
-        <button id="random" class="quiet alt">چالش تصادفی تازه</button>
+        <button id="replay" class="primary big">دوباره بازی کن <span>↻</span></button>
+        <button id="share" class="secondary">اشتراک رکورد</button>
+        <button id="home-button" class="secondary">منوی اصلی</button><button id="random" class="quiet alt">چالش تصادفی تازه</button>
       </section>
     </div>
     <header id="hud" class="hud hidden" aria-live="off">
-      <div class="hud-brand">ESCAPE<span>60</span><small> تعقیب ادامه دارد</small></div>
+      <div class="hud-brand">ESCAPE<span>60</span><small><span id="pressure">فشار تعقیب</span></small></div>
       <div class="hud-time"><b id="time">00.00</b><small>زمان بقا</small></div>
       <button aria-label="توقف بازی" id="pause-button" class="pause-button">Ⅱ</button>
       <div class="hud-bottom"><div class="health-box"><span id="health">♥♥♥</span><small>جان‌های باقی‌مانده</small></div><div class="score-box"><span id="score">۰</span><small>امتیاز</small></div></div>
@@ -57,6 +47,8 @@
       <button id="left" aria-label="فرمان چپ">↶</button>
     </nav>
     <section id="pause" class="pause-overlay hidden"><div class="pause-card"><div class="tag">PAUSED</div><h2>توقف بازی</h2><p>برای ادامه آماده‌ای؟</p><button id="resume" class="primary">ادامه بازی</button><button id="quit" class="secondary">برگشت به منو</button></div></section>
+    <dialog id="config"><h2>تنظیمات</h2><button id="sound">♪ صدا خاموش</button><label><input id="motion" type="checkbox"> کاهش حرکت</label><label><input id="quality" type="checkbox"> گرافیک سبک</label><button id="close-config">بازگشت</button></dialog>
+    <dialog id="records"><h2>جدول رکوردها</h2><div id="entries"></div><button id="close-board">بازگشت</button></dialog>
     <footer class="game-footer">ESCAPE 60 · ORIGINAL BROWSER GAME <span>·</span> v1.0</footer>
   </main>
   <script type="module" src="./src/main.js"></script>

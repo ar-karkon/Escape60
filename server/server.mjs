@@ -36,7 +36,7 @@ async function route(req,res){
  if(url.pathname==='/api/v1/leaderboard'&&req.method==='GET'){
    const seed=url.searchParams.get('seed')||today;
    if(!seedValid(seed))return error(res,400,'Invalid seed');
-   const entries=(board[seed]||[]).slice(0,Math.min(20,Math.max(1,Number(url.searchParams.get('limit'))||10)));
+   const entries=(board[SIM_VERSION+'/'+seed]||[]).slice(0,Math.min(20,Math.max(1,Number(url.searchParams.get('limit'))||10)));
    return json(res,200,{seed,entries:entries.map((entry,i)=>({rank:i+1,timeMs:entry.timeMs,points:entry.points,label:entry.label})),verified:true});
  }
  if(url.pathname==='/api/v1/runs/start'&&req.method==='POST'){
@@ -61,9 +61,9 @@ async function route(req,res){
    if(age<result.timeMs*.78)return error(res,422,'Run finished too quickly');
    sessions.delete(b.runId);
    const entry={timeMs:result.timeMs,points:result.points,label:`راننده ${b.runId.slice(0,4)}`,at:Date.now()};
-   const rows=board[session.seed]||[];rows.push(entry);rows.sort((a,b)=>compareResult(a,b)||(a.at-b.at));board[session.seed]=rows.slice(0,200);
+   const rows=board[SIM_VERSION+'/'+session.seed]||[];rows.push(entry);rows.sort((a,b)=>compareResult(a,b)||(a.at-b.at));board[SIM_VERSION+'/'+session.seed]=rows.slice(0,200);
    writeChain=writeChain.then(saveBoard);await writeChain;
-   const rank=board[session.seed].findIndex(e=>e===entry)+1;
+   const rank=board[SIM_VERSION+'/'+session.seed].findIndex(e=>e===entry)+1;
    return json(res,200,{accepted:true,rank:rank||null,result,verification:'deterministic-replay-v1'});
  }
  error(res,404,'Unknown API route');

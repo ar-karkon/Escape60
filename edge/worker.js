@@ -1,7 +1,7 @@
 /* Arvan Edge adapter. Set ESCAPE60_EDGE_UPSTREAM and ESCAPE60_EDGE_KEY securely before deploying.
  * This file deliberately uses the Service Worker fetch-event interface; validate on Arvan first.
  * Persistent leaderboard remains at the separately deployed Node origin. */
-const APP_VERSION='1.0.0';
+const APP_VERSION='1.1.0';
 const UPSTREAM=globalThis.ESCAPE60_EDGE_UPSTREAM||'';
 const EDGE_KEY=globalThis.ESCAPE60_EDGE_KEY||'';
 const rate=new Map();

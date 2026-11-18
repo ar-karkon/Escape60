@@ -13,3 +13,5 @@
 - The Edge worker only provides request routing and perimeter validation; persistent scoreboard and replay validation are owned by Node origin.
 - No non-tested Arvan provider features have been asserted as operational. Separate origin is still a deployment dependency.
 - Offline mode indicates local-only result, not a verified online rank.
+
+The static host must serve web/vendor/three.js as JavaScript and logo.svg as SVG. Deploy client, Node simulation 1.1.0 and Edge adapter together. Chromium desktop with software WebGL is a functional test only. Device FPS and Arvan routing require separate verification.

@@ -1,96 +1,306 @@
-import {buildingRectsNear, hashSeed, MAX_TICKS, TICK_RATE} from './simulation.js';
-const BLOCK=520,ROAD=184,TAU=Math.PI*2;
-const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
-const noise=(x,y)=>{let a=hashSeed(`${x},${y}`);return ((a ^ (a>>>11))*0.0000000002328306)%1;};
-const n=(x,y)=>Math.abs(noise(x,y));
-function rect(ctx,x,y,w,h,color,r=0){ctx.fillStyle=color;if(r){ctx.beginPath();ctx.roundRect(x,y,w,h,r);ctx.fill();}else ctx.fillRect(x,y,w,h);}
-function circle(ctx,x,y,r,color){ctx.beginPath();ctx.arc(x,y,r,0,TAU);ctx.fillStyle=color;ctx.fill();}
-function glow(ctx,x,y,r,color,alpha=1){ctx.save();ctx.globalAlpha=alpha;const grad=ctx.createRadialGradient(x,y,0,x,y,r);grad.addColorStop(0,color);grad.addColorStop(1,'transparent');circle(ctx,x,y,r,grad);ctx.restore();}
-function city(ctx,camera,w,h){
-  const radius=Math.hypot(w,h)/2+600;
-  const ix=Math.floor((camera.x-radius)/BLOCK)-1,ax=Math.floor((camera.x+radius)/BLOCK)+1;
-  const iy=Math.floor((camera.y-radius)/BLOCK)-1,ay=Math.floor((camera.y+radius)/BLOCK)+1;
-  rect(ctx,camera.x-radius,camera.y-radius,radius*2,radius*2,'#151a2d');
-  for(let i=ix;i<=ax;i++)for(let j=iy;j<=ay;j++){
-    const x=i*BLOCK,y=j*BLOCK;
-    rect(ctx,x-ROAD/2,y-ROAD/2,BLOCK+ROAD,ROAD,'#272d3a');
-    rect(ctx,x-ROAD/2,y-ROAD/2,ROAD,BLOCK+ROAD,'#272d3a');
-    // Lane center dashes with slight luminous edges.
-    for(let k=0;k<7;k++){
-      rect(ctx,x + 115 + k*57,y-2,27,4,'#667078');
-      rect(ctx,x-2,y+115+k*57,4,27,'#667078');
+import * as T from "../vendor/three.js";
+import { chunk, vehicle, batch, cube, paint } from "./city.js";
+const skyVertex =
+  "varying vec3 ray; void main(){ray=position;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}";
+const skyFragment = `varying vec3 ray;
+void main(){
+ vec3 d=normalize(ray);
+ vec3 col=mix(vec3(1.,.53,.40),vec3(.96,.34,.59),smoothstep(-.04,.17,d.y));
+ col=mix(col,vec3(.11,.09,.33),smoothstep(.08,.52,d.y));
+ vec2 pixel=floor(vec2(atan(d.x,-d.z),d.y)*160.);
+ float bands=sin(pixel.x*.031+pixel.y*.117)+.48*sin(pixel.x*.083-pixel.y*.37);
+ if(d.y>.16 && d.y<.43 && bands>1.04+abs(sin(pixel.y*.23))*.25)
+   col=mix(col,vec3(.94,.51,.67),.48);
+ float sun=distance(d,normalize(vec3(.38,.17,-1.)));
+ if(sun<.091 && (d.y>.14 || mod(d.y,.026)>.004)) col=vec3(1.,.88,.52);
+ gl_FragColor=vec4(col,1.);
+}`;
+export function createRenderer(canvas) {
+  const renderer = new T.WebGLRenderer({
+    canvas,
+    antialias: false,
+    powerPreference: "high-performance",
+  });
+  const scene = new T.Scene(),
+    camera = new T.PerspectiveCamera(51, 1, 0.16, 245);
+  scene.fog = new T.FogExp2(0xf9a0a2, 0.009);
+  const sky = new T.Mesh(
+    new T.SphereGeometry(205, 32, 18),
+    new T.ShaderMaterial({
+      vertexShader: skyVertex,
+      fragmentShader: skyFragment,
+      side: T.BackSide,
+      depthWrite: false,
+    }),
+  );
+  scene.add(sky, new T.HemisphereLight(0xffecdf, 0x847ba6, 2.15));
+  const sun = new T.DirectionalLight(0xffcf8f, 2);
+  sun.position.set(-32, 46, -25);
+  scene.add(sun, sun.target);
+  renderer.shadowMap.type = T.BasicShadowMap;
+  sun.castShadow = true;
+  sun.shadow.mapSize.set(512, 512);
+  Object.assign(sun.shadow.camera, {
+    left: -38,
+    right: 38,
+    top: 38,
+    bottom: -38,
+    near: 1,
+    far: 135,
+  });
+  sun.shadow.camera.updateProjectionMatrix();
+  sun.shadow.normalBias = 0.09;
+  const glow = new T.PointLight(0xff5d95, 22, 14);
+  scene.add(glow);
+  const beacon = [0xff416a, 0x3f98ff].map((color) => {
+    const light = new T.PointLight(color, 52, 13);
+    scene.add(light);
+    return light;
+  });
+  const hero = vehicle(),
+    police = [],
+    traffic = [],
+    blocks = [],
+    tiles = new Map();
+  scene.add(hero);
+  const trail = new T.InstancedMesh(cube, paint, 96),
+    ring = [],
+    dummy = new T.Object3D();
+  scene.add(trail);
+  trail.count = 0;
+  trail.frustumCulled = false;
+  let seed = "",
+    tileKey = "",
+    previous = null,
+    lastTick = -1,
+    heading = 0,
+    prevAngle = 0,
+    lastTime = 0,
+    cost = 16,
+    economy = false;
+  const center = new T.Vector3(),
+    eye = new T.Vector3(),
+    target = new T.Vector3();
+  function actors(list, states, make, t) {
+    while (list.length < states.length) {
+      const object = make(list.length);
+      list.push(object);
+      scene.add(object);
     }
-    rect(ctx,x+ROAD/2+7,y+ROAD/2+7,BLOCK-ROAD-14,BLOCK-ROAD-14,'#0f1825');
+    list.forEach((o, i) => {
+      const s = states[i];
+      o.visible = !!s;
+      if (!s) return;
+      o.position.set(s.x / 10, 0, s.y / 10);
+      o.rotation.y = -s.angle - Math.PI / 2;
+      if (o.userData.bar)
+        o.userData.bar.rotation.y = (Math.floor(t / 280 + i) % 2) * Math.PI;
+    });
   }
-  for(const b of buildingRectsNear(camera.x,camera.y,Math.ceil(radius/BLOCK)+1)){
-    const palette=['#1b2337','#20283d','#192339','#232b40'];const f=n(b.i,b.j);
-    const col=palette[Math.floor(f*palette.length)%palette.length];
-    rect(ctx,b.x+15,b.y+19,b.w,b.h,'#080b17',10);
-    rect(ctx,b.x,b.y,b.w,b.h,'#33405a',9);
-    rect(ctx,b.x+5,b.y+5,b.w-10,b.h-10,col,5);
-    rect(ctx,b.x+8,b.y+8,b.w-16,8,f>.55?'#273e57':'#2c3149');
-    // Rooftop light wells and windows.
-    for(let k=0;k<5;k++)for(let l=0;l<4;l++) {
-      if(n(b.i*19+k,b.j*11+l)>.53){
-        const color=n(k+b.i,l+b.j)>.58?'#0c6f82':'#5b536a';
-        rect(ctx,b.x+25+k*(b.w-45)/5,b.y+25+l*(b.h-45)/4,13,5,color,1);
+  return function draw(game, t, { reducedMotion, low, seed: menuSeed }) {
+    const dt = Math.max(0, Math.min(0.1, (t - lastTime) / 1000));
+    lastTime = t;
+    cost += 0.03 * (dt * 1000 - cost);
+    if (cost > 35) economy = true;
+    if (cost < 23) economy = false;
+    renderer.shadowMap.enabled = !low && !economy;
+    const h = Math.min(canvas.clientHeight, low ? 320 : economy ? 408 : 568),
+      w = Math.max(
+        1,
+        Math.round((canvas.clientWidth * h) / canvas.clientHeight),
+      );
+    if (canvas.width !== w || canvas.height !== h) {
+      renderer.setSize(w, h, false);
+      camera.aspect = w / h;
+      camera.updateProjectionMatrix();
+    }
+    const demo = !game,
+      playing = game?.state === "playing",
+      p = game?.player ?? { x: 0, y: 228, angle: Math.PI * 0.31, drift: 0 };
+    const x = p.x / 10,
+      z = p.y / 10,
+      ix = Math.floor(x / 52),
+      iz = Math.floor(z / 52),
+      currentSeed = game?.seed ?? menuSeed,
+      key = [currentSeed, ix, iz].join("/");
+    if (key !== tileKey) {
+      const keep = new Set();
+      for (let i = ix - 2; i <= ix + 2; i++)
+        for (let j = iz - 3; j <= iz + 2; j++) {
+          const id = [currentSeed, i, j].join("/");
+          keep.add(id);
+          if (!tiles.has(id)) {
+            const tile = chunk(currentSeed, i, j);
+            scene.add(tile);
+            tiles.set(id, tile);
+          }
+        }
+      for (const [id, obj] of tiles)
+        if (!keep.has(id)) {
+          scene.remove(obj);
+          obj.dispose();
+          tiles.delete(id);
+        }
+      tileKey = key;
+    }
+    const snap = game !== previous || seed !== currentSeed;
+    if (snap) {
+      heading = p.angle;
+      prevAngle = p.angle;
+      ring.length = 0;
+      lastTick = -1;
+    }
+    sun.target.position.set(x, 0, z);
+    sun.position.set(x - 32, 46, z - 25);
+    previous = game;
+    seed = currentSeed;
+    hero.position.set(x, 0, z);
+    hero.rotation.y = -p.angle - Math.PI / 2;
+    const steer = Math.sin(p.angle - prevAngle);
+    prevAngle = p.angle;
+    hero.rotation.z +=
+      (Math.sign(steer) * p.drift * 0.075 - hero.rotation.z) * 0.24;
+    hero.userData.wheels.forEach((w) => (w.rotation.y = hero.rotation.z * 3));
+    hero.visible =
+      reducedMotion ||
+      !game?.invuln ||
+      game.state === "ended" ||
+      game.ticks % 12 < 9;
+    actors(
+      police,
+      game?.police ?? [
+        { x: -28, y: 112, angle: 1.45 },
+        { x: 30, y: 48, angle: 1.52 },
+      ],
+      () => vehicle(true),
+      reducedMotion ? 0 : t,
+    );
+    const nearest = police
+      .filter((o) => o.visible)
+      .sort(
+        (a, b) =>
+          a.position.distanceToSquared(hero.position) -
+          b.position.distanceToSquared(hero.position),
+      )[0];
+    beacon.forEach((lamp, i) => {
+      lamp.visible = !!nearest && !low;
+      if (!nearest) return;
+      lamp.position.copy(nearest.position);
+      lamp.position.x += i ? 1 : -1;
+      lamp.position.y = 3;
+      lamp.intensity = reducedMotion
+        ? 16
+        : Math.floor(t / 260) % 2 === i
+          ? 65
+          : 8;
+    });
+    actors(
+      traffic,
+      game?.traffic ?? [],
+      (i) =>
+        vehicle(false, [0x19b8bc, 0xffe37c, 0xae86db, 0xc85976][i % 4], i % 4),
+      t,
+    );
+    actors(
+      blocks,
+      game?.marks ?? [],
+      () =>
+        batch((b) => {
+          b(0, 0.7, 0, 5, 1.4, 1.7, 0xff8872);
+          for (let i = -2; i <= 2; i += 2)
+            b(i, 0.75, 0.01, 0.72, 1.46, 1.73, 0xffead0);
+        }),
+      t,
+    );
+    heading +=
+      Math.atan2(Math.sin(p.angle - heading), Math.cos(p.angle - heading)) *
+      (1 - Math.exp(-dt * 3.6));
+    if (playing) {
+      const dx = Math.cos(heading),
+        dz = Math.sin(heading);
+      eye.set(x - dx * 39 - dz * 9, 39, z - dz * 39 + dx * 9);
+      target.set(x + dx * 7, 0, z + dz * 7);
+    } else {
+      const a = reducedMotion ? 0 : Math.sin(t * 0.00015) * 0.6;
+      if (demo) {
+        eye.set(x - 3.2 + a, 4.1, z + 12.5);
+        target.set(x, 2.2, z - 1);
+      } else {
+        const dx = Math.cos(p.angle),
+          dz = Math.sin(p.angle);
+        eye.set(x + dx * 12 - dz * 4, 6, z + dz * 12 + dx * 4);
+        target.set(x + dx * 2, -0.25, z + dz * 2);
       }
     }
-  }
-}
-function car(ctx,x,y,angle,theme='player',boost=0){
-  ctx.save();ctx.translate(x,y);ctx.rotate(angle+Math.PI/2);
-  const body=theme==='player'?'#f4b44e':theme==='red'?'#eb6267':theme==='blue'?'#5b9bf4':['#7c9eaa','#b6c5db','#a389a7','#80af99'][theme%4];
-  glow(ctx,0,13,60,theme==='player'?'rgba(255,141,40,.24)':theme==='red'?'rgba(255,54,74,.23)':'rgba(28,124,255,.2)',.8);
-  rect(ctx,-17,-27,36,62,'#080e18',9);
-  rect(ctx,-16,-30,32,58,body,7);
-  rect(ctx,-12,-23,24,14,'#132e43',3);
-  rect(ctx,-12,6,24,11,'#26364d',3);
-  rect(ctx,-14,23,10,5,'#f4515c',1);rect(ctx,4,23,10,5,'#f4515c',1);
-  rect(ctx,-14,-29,9,4,'#feefaf',2);rect(ctx,5,-29,9,4,'#feefaf',2);
-  if(theme==='red'||theme==='blue'){rect(ctx,-13,-2,26,5,'#e6eef5',2);rect(ctx,-10,-3,10,7,'#e84b5b');rect(ctx,1,-3,10,7,'#348df2');}
-  if(theme==='player'){rect(ctx,-6,-12,12,19,'#d28c37',2);if(boost>0.45){glow(ctx,0,36,31,'#f9ac3e',.4);}}
-  ctx.restore();
-}
-function roadway(ctx,s){
-  for(const mark of s.marks){glow(ctx,mark.x,mark.y,75,'#ed414a',.4);ctx.save();ctx.translate(mark.x,mark.y);rect(ctx,-37,-17,74,34,'#e3b64d',5);for(let j=-25;j<30;j+=20){rect(ctx,j,-17,10,34,'#23242b');}ctx.restore();}
-  for(const c of s.traffic)car(ctx,c.x,c.y,c.angle,c.color);
-  for(const c of s.police)car(ctx,c.x,c.y,c.angle,c.color);
-}
-function markers(ctx,s,w,h){
- const player=s.player;
- for(const c of s.police){const dx=c.x-player.x,dy=c.y-player.y;const d=Math.hypot(dx,dy);if(d<470)continue;
-   // offscreen danger arrows near camera center, rotating with camera orientation
-   const a=Math.atan2(dy,dx)-player.angle-Math.PI/2;
-   const x=Math.cos(a)*Math.min(w,h)*.35,y=Math.sin(a)*Math.min(w,h)*.35;
-   ctx.save();ctx.translate(x,y);ctx.rotate(a+Math.PI/2);ctx.beginPath();ctx.moveTo(0,-11);ctx.lineTo(-8,9);ctx.lineTo(8,9);ctx.closePath();ctx.fillStyle='rgba(255,99,110,.9)';ctx.fill();ctx.restore();
- }
-}
-export function renderGame(canvas,ctx,s,now,settings={}){
-  const width=canvas.clientWidth,height=canvas.clientHeight;
-  if(!width||!height)return;
-  const pixelRatio=canvas.width/width;
-  ctx.setTransform(pixelRatio,0,0,pixelRatio,0,0);
-  ctx.clearRect(0,0,width,height);
-  const p=s?s.player:{x:0,y:0,angle:-Math.PI/2};
-  const camRotation=-p.angle-Math.PI/2;
-  const zoom=clamp(Math.min(width/540,height/690),.58,1.08);
-  const renderSize={x:p.x,y:p.y};
-  // Landscape has wider area, portrait preserves a useful view ahead.
-  ctx.save();ctx.translate(width/2,height*.53);ctx.scale(zoom,zoom);ctx.rotate(camRotation);
-  ctx.translate(-p.x,-p.y);
-  city(ctx,renderSize,width/zoom,height/zoom);
-  if(s){
-    roadway(ctx,s);
-    if(s.invuln<=0||Math.floor(now/110)%2===0)car(ctx,p.x,p.y,p.angle,'player',p.drift);
-    if(p.drift>.45&&!settings.reducedMotion){
-      for(let k=0;k<3;k++)glow(ctx,p.x+Math.cos(p.angle+Math.PI/2)*((k-1)*18),p.y+Math.sin(p.angle+Math.PI/2)*((k-1)*18),18,'rgba(250,169,62,.15)');
+    if (snap) camera.position.copy(eye);
+    else camera.position.lerp(eye, 1 - Math.exp(-dt * 8));
+    if (game?.invuln > 0.83 && !reducedMotion && playing)
+      camera.position.x += Math.sin(t) * 0.09;
+    camera.lookAt(target);
+    // Cut away any lot directly between the lens and car, leaving the curb visible via neighboring roads.
+    for (const obj of tiles.values()) {
+      const cx = obj.position.x + 26,
+        cz = obj.position.z + 26;
+      obj.scale.y =
+        playing &&
+        Math.abs((camera.position.x + x) / 2 - cx) < 19 &&
+        Math.abs((camera.position.z + z) / 2 - cz) < 19
+          ? 0.065
+          : 1;
     }
-    markers(ctx,s,width/zoom,height/zoom);
-  }else car(ctx,0,0,-Math.PI/2,'player');
-  ctx.restore();
-  // Atmospheric gradient to integrate HUD with the city.
-  const v=ctx.createLinearGradient(0,0,0,height);
-  v.addColorStop(0,'rgba(8,11,26,.55)');v.addColorStop(.25,'rgba(8,11,26,0)');v.addColorStop(.73,'rgba(8,11,26,0)');v.addColorStop(1,'rgba(8,11,26,.56)');
-  rect(ctx,0,0,width,height,v);
+    glow.position.set(x - 2, 3, z + 1);
+    glow.color.setHex(
+      !reducedMotion && Math.floor(t / 420) % 2 ? 0x3dd8e7 : 0xff5d95,
+    );
+    if (!reducedMotion && !low && playing && game.ticks !== lastTick) {
+      if (p.drift > 0.25 || game.invuln > 0.82) {
+        for (const side of [-1, 1]) {
+          const spark = game.invuln > 0.82;
+          ring.push({
+            x: x - Math.cos(p.angle) * 2 + Math.sin(p.angle) * side,
+            y: spark ? 0.95 : 0.08,
+            z: z - Math.sin(p.angle) * 2 - Math.cos(p.angle) * side,
+            t,
+            color: spark ? 0xffe37c : 0x252036,
+          });
+          if (p.drift > 0.6) ring.push({ x, y: 0.8, z, t, color: 0xb49bae });
+        }
+      }
+      lastTick = game.ticks;
+    }
+    while (
+      ring.length > (economy ? 40 : 96) ||
+      (ring.length && t - ring[0].t > 700)
+    )
+      ring.shift();
+    trail.count = low || reducedMotion ? 0 : ring.length;
+    for (let i = 0; i < trail.count; i++) {
+      const e = ring[i],
+        age = (t - e.t) / 700;
+      dummy.position.set(e.x, e.y + (e.y > 0.2 ? age * 1.8 : 0), e.z);
+      dummy.scale.set(0.34, e.y > 0.2 ? 0.35 : 0.04, 0.57);
+      dummy.updateMatrix();
+      trail.setMatrixAt(i, dummy.matrix);
+      trail.setColorAt(i, new T.Color(e.color));
+    }
+    trail.instanceMatrix.needsUpdate = true;
+    if (trail.instanceColor) trail.instanceColor.needsUpdate = true;
+    sky.position.copy(camera.position);
+    renderer.render(scene, camera);
+    const arrow = document.getElementById("threat");
+    arrow.hidden = true;
+    if (playing)
+      for (const car of police) {
+        if (!car.visible || car.position.distanceTo(hero.position) > 48)
+          continue;
+        const v = center.copy(car.position).project(camera);
+        if (Math.abs(v.x) <= 1 && Math.abs(v.y) <= 1 && v.z < 1) continue;
+        const a = Math.atan2(-v.y, v.x) + (v.z > 1 ? Math.PI : 0);
+        arrow.style.left = 50 + 44 * Math.cos(a) + "%";
+        arrow.style.top = 50 + 32 * Math.sin(a) + "%";
+        arrow.style.transform = "rotate(" + (a + Math.PI / 2) + "rad)";
+        arrow.hidden = false;
+        break;
+      }
+  };
 }

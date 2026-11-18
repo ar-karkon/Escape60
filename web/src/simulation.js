@@ -1,7 +1,7 @@
 /** Deterministic 60 FPS game simulation. Shared by browser and authoritative Node replay. */
 export const TICK_RATE = 60;
 export const MAX_TICKS = 60 * TICK_RATE;
-export const SIM_VERSION = '1.0.0';
+export const SIM_VERSION = '1.1.0';
 const TAU = Math.PI * 2;
 const BLOCK = 520;
 const ROAD = 184;
@@ -18,10 +18,13 @@ export function rng(seed) {
   let s = hashSeed(seed) || 0x9e3779b9;
   return () => { s += 0x6d2b79f5; let t = s; t = Math.imul(t ^ t >>> 15, t | 1); t ^= t + Math.imul(t ^ t >>> 7, t | 61); return ((t ^ t >>> 14) >>> 0) / 4294967296; };
 }
+export function district(i,j){return ((i+Math.floor(-j/4))%4+4)%4}
 export function isRoad(x, y) {
   const dx = Math.abs(((x + BLOCK / 2) % BLOCK + BLOCK) % BLOCK - BLOCK / 2);
   const dy = Math.abs(((y + BLOCK / 2) % BLOCK + BLOCK) % BLOCK - BLOCK / 2);
-  return dx <= HALF || dy <= HALF;
+  const i=Math.floor(x/BLOCK),j=Math.floor(y/BLOCK);
+  const alley=district(i,j)===3 && Math.min(Math.abs(x-(i+.5)*BLOCK),Math.abs(y-(j+.5)*BLOCK))<=40;
+  return dx <= HALF || dy <= HALF || alley;
 }
 export function buildingRectsNear(x, y, radius = 2) {
   const result = [];
@@ -29,17 +32,25 @@ export function buildingRectsNear(x, y, radius = 2) {
   for (let i = ix - radius; i <= ix + radius; i++) {
     for (let j = iy - radius; j <= iy + radius; j++) {
       const margin = 22;
-      result.push({x: i * BLOCK + HALF + margin, y: j * BLOCK + HALF + margin,
-        w: BLOCK - ROAD - margin * 2, h: BLOCK - ROAD - margin * 2, i, j});
+      const width=BLOCK-ROAD-margin*2;
+      const offsets=district(i,j)===3?[0,width/2+40]:[0];
+      const size=offsets.length===1?width:width/2-40;
+      for(const ox of offsets)for(const oy of offsets)result.push({x:i*BLOCK+HALF+margin+ox,y:j*BLOCK+HALF+margin+oy,w:size,h:size,i,j});
     }
   }
   return result;
 }
 export function circleHitsBuilding(x, y, radius = 18) {
   // Nearest block center is half-grid offset from road centerlines.
-  const bx = Math.floor(x / BLOCK) * BLOCK + BLOCK / 2;
-  const by = Math.floor(y / BLOCK) * BLOCK + BLOCK / 2;
-  const half = (BLOCK - ROAD) / 2 - 22;
+  let bx = Math.floor(x / BLOCK) * BLOCK + BLOCK / 2;
+  let by = Math.floor(y / BLOCK) * BLOCK + BLOCK / 2;
+  let half = (BLOCK - ROAD) / 2 - 22;
+  if(district(Math.floor(x/BLOCK),Math.floor(y/BLOCK))===3){
+    const offset=(half+40)/2;
+    bx+=x<bx?-offset:offset;
+    by+=y<by?-offset:offset;
+    half-=offset;
+  }
   const cx = clamp(x, bx - half, bx + half);
   const cy = clamp(y, by - half, by + half);
   return (x - cx) ** 2 + (y - cy) ** 2 < radius ** 2;
@@ -64,12 +75,12 @@ export function createGame(seed = 'daily', opts = {}) {
     player:{x:0,y:0,angle:-Math.PI / 2,speed:250,drift:0},
     events:[], nextPolice:0, nextTraffic:0, nextRoadblock:0};
   s.player.x=0; s.player.y=0;
-  if (!opts.noPolice) { s.police.push(newPolice(s,0)); s.nextPolice=8*60; }
+  if (!opts.noPolice) { s.police.push(newPolice(s,0)); s.nextPolice=10*60; }
   return s;
 }
 function damage(s, type) {
   if (s.invuln>0 || s.state!=='playing') return;
-  s.health--; s.hits++; s.points=Math.max(0,s.points-150); s.invuln=0.95;
+  s.player.speed=205;s.health--; s.hits++; s.points=Math.max(0,s.points-150); s.invuln=0.95;
   s.events.push({type:'hit',kind:type,tick:s.ticks});
   if (s.health<=0) {s.state='ended';s.events.push({type:'end',tick:s.ticks});}
 }
@@ -95,10 +106,10 @@ function spawnRoadblock(s) {
   const vertical=Math.abs(Math.sin(p.angle))>Math.abs(Math.cos(p.angle));
   if(vertical) {
     const x=Math.round(tx/BLOCK)*BLOCK-43;
-    s.marks.push({x,y:Math.round(ty/BLOCK)*BLOCK + (p.angle>0?-190:190),ttl:13});
+    s.marks.push({angle:-Math.PI/2,x,y:Math.round(ty/BLOCK)*BLOCK + (p.angle>0?-190:190),ttl:13});
   } else {
     const y=Math.round(ty/BLOCK)*BLOCK-43;
-    s.marks.push({x:Math.round(tx/BLOCK)*BLOCK +(Math.cos(p.angle)>0?-190:190),y,ttl:13});
+    s.marks.push({angle:0,x:Math.round(tx/BLOCK)*BLOCK +(Math.cos(p.angle)>0?-190:190),y,ttl:13});
   }
 }
 export function stepGame(s, steer=0) {
@@ -109,7 +120,8 @@ export function stepGame(s, steer=0) {
   const p=s.player;
   // Readable, high-grip arcade controls. Speed continues without input.
   const intensity= Math.abs(steer);
-  p.speed=clamp(p.speed+(intensity>0.8?-14:8)*dt,205,265);
+  const area=district(Math.floor(p.x/BLOCK),Math.floor(p.y/BLOCK));
+  p.speed=clamp(p.speed+(intensity>0.8?-14:8)*dt,205,area===2?279:265);
   p.angle=normAngle(p.angle+steer*(1.95 + 0.4*intensity)*dt);
   const ox=p.x,oy=p.y;
   p.x+=Math.cos(p.angle)*p.speed*dt;
@@ -124,15 +136,15 @@ export function stepGame(s, steer=0) {
   }
   if(intensity>0.82 && s.ticks%24===0) s.points+=8;
   const elapsed=s.ticks/TICK_RATE;
-  if(s.ticks>=s.nextPolice && s.police.length<Math.min(6,1+Math.floor(elapsed/9))) {
-    s.police.push(newPolice(s,s.police.length));s.nextPolice=s.ticks+9*TICK_RATE;
+  if(s.ticks>=s.nextPolice && s.police.length<(elapsed<10?1:elapsed<25?2:elapsed<40?3:elapsed<55?5:6)) {
+    s.police.push(newPolice(s,s.police.length));s.nextPolice=s.ticks+5*TICK_RATE;
     s.events.push({type:'police',tick:s.ticks});
   }
-  if(s.ticks>=s.nextTraffic) {spawnTraffic(s);s.nextTraffic=s.ticks + Math.round((4.4-s.ticks/MAX_TICKS*2)*TICK_RATE);}
-  if(elapsed>24 && s.ticks>=s.nextRoadblock) {spawnRoadblock(s);s.nextRoadblock=s.ticks+Math.round(9*TICK_RATE);s.events.push({type:'roadblock',tick:s.ticks});}
+  if(s.ticks>=s.nextTraffic) {spawnTraffic(s);s.nextTraffic=s.ticks + Math.round((4.4-s.ticks/MAX_TICKS*2)*(area===1?.85:1)*TICK_RATE);}
+  if(elapsed>=25 && (s.ticks>=s.nextRoadblock || s.ticks===55*TICK_RATE)) {spawnRoadblock(s);s.nextRoadblock=s.ticks+Math.round(9*TICK_RATE);s.events.push({type:'roadblock',tick:s.ticks});}
   for(const car of s.police) {
     if(car.stun>0){car.stun-=dt;continue;}
-    const lead=0.4+Math.min(0.65,elapsed/100);
+    const lead=(car.id%2?.85:.28)+Math.min(0.65,elapsed/100);
     const targetX=p.x+Math.cos(p.angle)*p.speed*lead;
     const targetY=p.y+Math.sin(p.angle)*p.speed*lead;
     let desired=Math.atan2(targetY-car.y,targetX-car.x);

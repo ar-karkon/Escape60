@@ -1,8 +1,6 @@
-
-> **Next visual direction (specification, NOT yet implemented):** true 3D voxel/pixel-art rendering with a compact isometric-follow camera. See [the full Persian execution brief for Claude Code](docs/23_VOXEL_3D_VISION_FA.md). The current playable code remains the original 2D Canvas version until the redesign is developed and tested.
 # ESCAPE 60 — فرار ۶۰
 
-**An original, fully playable, mobile-first 60-second arcade police chase game.** Built for ArvanCloud Edge Games. No third-party game assets or runtime dependencies.
+**An original, fully playable, mobile-first 60-second arcade police chase game.** Built for ArvanCloud Edge Games. Sunset Bay uses original procedural models and a locally bundled Three.js r170 renderer (MIT).
 
 **Status (2026-11-19):** browser game and local persistent replay-validated leaderboard implemented. Arvan Edge production deployment **not** performed and no live competition entry has been submitted. Online leaderboard requires an API origin; static-only deployment plays offline and displays local bests honestly.
 
@@ -19,10 +17,18 @@ npm run build
 
 On mobile, drag across the screen or press the steering buttons. On desktop, press Left/Right or A/D, and P/Esc to pause. Survive for 60 seconds. Each crash costs one of three lives. Avoid traffic, police cars, buildings, and roadblocks. Close calls and precise driving add skill points. Use **Replay**, **Share challenge**, or **New challenge** after each round.
 
+## Sunset Bay
+
+The same 3D city renders the menu, race and finish. Each 520-unit simulation block maps to a 52-unit scene tile. Marinas have solid quay walls at the building footprint. Downtown has tall hotels, the highway has sign gantries, and Old Town has small storefronts. Old Town splits each block into four shops with driveable alleys. The other districts share the main intersection grid. Graphics and reduced-motion controls are in تنظیمات.
+
+The 1.1.0 simulation schedules pursuit changes at 10, 25, 40 and 55 seconds. Downtown increases traffic frequency and highway driving has a higher speed cap. Local and server rankings use version-specific keys. The static bundle includes Three.js and its license, so gameplay needs no CDN requests.
+
+[Menu](docs/screenshots/menu.png) · [Driving](docs/screenshots/coastal.png) · [Roadblock](docs/screenshots/pursuit.png) · [Finish](docs/screenshots/results.png)
+
 ## Delivered
 
 - Deterministic seeded 60Hz game loop, escalating police AI, moving traffic, buildings, roadblocks, 3-heart damage, invulnerability window, drift/near-miss scoring, 60-second win condition.
-- Responsive original Canvas graphics, neon city, pause on tab hide, touch and keyboard controls, optional synthesized sound, no external sprites.
+- Pixel-scaled WebGL2 graphics, neon city, pause on tab hide, touch and keyboard controls, optional synthesized sound, no external sprites.
 - Daily UTC seed and portable challenge URL (`?seed=challenge-xxxx`), local best persistence, native share or copy link.
 - Node HTTP API with no dependencies, disk-backed leaderboard, session tokens, simple in-memory throttling, and server-authoritative replay of quantized steering trace. No personal registration needed.
 - Edge Service-Worker-style proxy adapter with daily challenge at Edge and validation gates (not deployed/tested on Arvan runtime).
@@ -31,7 +37,7 @@ On mobile, drag across the screen or press the steering buttons. On desktop, pre
 ## Project layout
 
 ```text
-web/                 static HTML/CSS/Canvas browser game
+web/                 static HTML/CSS/WebGL2 browser game
 web/src/simulation.js deterministic rules imported by game AND Node score verifier
 web/src/main.js      UI, controls, fixed-timestep loop, share and API handling
 web/src/render.js    original procedural game graphics

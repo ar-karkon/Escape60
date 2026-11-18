@@ -31,3 +31,7 @@ Median survival, survival histogram, crash by second, first run/second run, comp
 
 ## Prohibited design mistakes
 Inescapable ambushes, abrupt acceleration without warning, unreadable police car sprites, invisible collision boxes, reward based on uncontrolled randomness, forced ads, deceptive prompts.
+
+## Implemented in simulation 1.1.0
+
+At 10 seconds a second patrol joins. At 25 seconds a third patrol and the first roadblock appear. From 40 seconds the cap rises to five, then six at 55 seconds with a final barrier. Patrols alternate their pursuit lead distance. Damage sets speed to 205 units/s and grants 0.95 seconds of immunity. Highway speed caps at 279 units/s. Downtown traffic intervals are 85% of the standard interval. Old Town has 80-unit-wide alleys. Replay uses the same rules on the Node origin.

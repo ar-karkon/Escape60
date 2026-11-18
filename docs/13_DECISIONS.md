@@ -7,11 +7,11 @@ Date: 2026-11-19
 | D01 | Game concept | CONFIRMED | Arcade police-car escape, 60 seconds | User approved concept |
 | D02 | Working name | CONFIRMED | Escape 60 / فرار ۶۰ | Discussed |
 | D03 | Distribution | CONFIRMED | Browser/Edge competition | User intent |
-| D04 | Camera | PROPOSED | Isometric 2.5D | Mobile performance/art clarity; need user decision |
+| D04 | Camera | IMPLEMENTED | Elevated perspective camera | Readable road ahead in portrait |
 | D05 | Mobile controls | PROPOSED | Auto forward + finger steering | One-finger ease; test alternatives |
-| D06 | Art identity | PROPOSED | Original imaginary neon city | Clear action; decision pending |
+| D06 | Art identity | IMPLEMENTED | Sunset Bay | Tropical neon direction in document 24 |
 | D07 | Mechanics | PROPOSED | Pursuit first, optional drift score | Test fun |
-| D08 | Engine | PROPOSED | Phaser 3 + TS + Vite | Appropriate 2D; spike pending |
+| D08 | Engine | IMPLEMENTED | Three.js r170 | Instanced 3D geometry and low-resolution WebGL |
 | D09 | Competitive mode | PROPOSED | Seeded shared/daily challenges | Fair sharing |
 | D10 | Score | PROPOSED | Survival time plus skill points tie-break | Needs testing |
 | D11 | Backend | OPEN | Edge API + durable adapter | Runtime, quota, persistence TBD |

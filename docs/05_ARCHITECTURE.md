@@ -2,7 +2,7 @@
 
 ## Architecture sketch
 ```
-User Browser (Phaser + TS + Vite)
+User Browser (ES modules + Three.js WebGL2)
   | static files (CDN / Arvan Edge static hosting)
   | HTTPS REST
   v
@@ -16,7 +16,7 @@ Durable store [selection pending Arvan feature verification]
 ```
 
 ## Frontend
-- `TypeScript`, `Vite` build, `Phaser 3` suggested for 2D/isometric rendering; version pin after spike.
+- Native ES modules load the bundled engine in web/vendor. city.js builds instanced block geometry. render.js owns the camera, scene and reusable vehicle/particle pools. The renderer reads the 60 Hz simulation and never writes race state.
 - Game loop with fixed timestep where possible, interpolation rendering, independent UI state.
 - Separate game simulation from networking to support offline practice.
 - Asset budgets: <= 4 MB first-load *target*, not yet measured; compression, sprite atlas, lazy loading.

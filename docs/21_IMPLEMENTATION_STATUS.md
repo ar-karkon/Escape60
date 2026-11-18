@@ -15,11 +15,11 @@
 - A real public URL that the edge judges can visit.
 
 ## Design decisions promoted for implementation
-- D04: overhead pseudo-isometric neon city, no true 3D engine.
+- D04: perspective follow camera in a procedural voxel city.
 - D05: drag steering, virtual left/right buttons and keyboard.
 - D06: original neon fictional city.
 - D07: collision-based 3-health failure; near misses + drift score; 60s victory.
-- D08: no external engine (native HTML Canvas), to minimize dependency and maximize deployment portability.
+- D08: locally vendored Three.js r170 with instanced voxel geometry.
 - D09: seed-specific share URLs, daily UTC seed.
 - D10: score compared by survival time then points.
 - D11: Node durable origin with deterministic replay + separate provisional Edge route.

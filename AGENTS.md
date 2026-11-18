@@ -2,7 +2,7 @@
 Read README.md, docs/02_GAME_DESIGN.md and docs/13_DECISIONS.md before changing systems.
 
 ## Current state
-Playable Canvas browser game with Node replay-verified local online leaderboard. Edge adapter exists but is untested on ArvanCloud. Do **not** claim Arvan deployed, official entry completed or mobile QA passed.
+Playable WebGL2 voxel browser game with Node replay-verified local online leaderboard. Edge adapter exists but is untested on ArvanCloud. Do **not** claim Arvan deployed, official entry completed or mobile QA passed.
 
 ## Commands
 - `npm start`: serve game + local API on localhost:4173
@@ -20,4 +20,6 @@ Playable Canvas browser game with Node replay-verified local online leaderboard.
 - When production changes are made, run tests and verify the actual URL.
 
 ## Target visual redesign (authoritative specification)
-Before any graphics or UI redesign, read [`docs/23_VOXEL_3D_VISION_FA.md`](docs/23_VOXEL_3D_VISION_FA.md). The approved target is **real 3D voxel/pixel-art**, not the current smooth Canvas 2D renderer, and never a static mockup. The document is a design target; do not mark it implemented until code and tests verify it. Preserve deterministic gameplay/server replay and report actual browser screenshots, not concept art.
+Before any graphics or UI redesign, read [`docs/23_VOXEL_3D_VISION_FA.md`](docs/23_VOXEL_3D_VISION_FA.md). The approved target is **real 3D voxel/pixel-art**, using locally bundled Three.js. The document is a design target; do not mark it implemented until code and tests verify it. Preserve deterministic gameplay/server replay and report actual browser screenshots, not concept art.
+
+Use docs/24_TROPICAL_NEON_DIRECTION_FA.md for palette and art direction. The browser renderer consumes simulation state. Update both version constants and replay tests when changing rules.
