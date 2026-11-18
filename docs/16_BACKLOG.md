@@ -1,36 +1,27 @@
-# Implementation backlog — ordered by dependency
+# Backlog — after first full code implementation
 
-## P0: Design and runtime validation
-- [ ] Decide camera/orientation and control scheme (from user)
-- [ ] Lock rules for win/loss, injury and collisions
-- [ ] Verify Arvan Edge hosting/runtimes and storage options
-- [ ] Implement empty Vite/Phaser TypeScript prototype and dev scripts
-- [ ] Implement 20s vertical slice with keyboard and touch
-- [ ] 5–10 manual testers and feedback log
+## Completed in source
+- [x] Canvas browser game with touch and keyboard input
+- [x] 60-second fixed-step game director, player motion and police AI
+- [x] Traffic, obstacles, crash feedback, lives, retry and success
+- [x] Seeded daily + shareable friend challenges
+- [x] Results screen, local best scores, sound toggle, pause
+- [x] Node API with tokenized runs, rate cap, deterministic score replay and disk persistence
+- [x] Edge API adapter draft, CI and unit tests
 
-## P1: Core game
-- [ ] 60s difficulty director
-- [ ] Player handling, drift tuning, responsive input
-- [ ] 2 police behaviors, fair spawn warning, road obstacles
-- [ ] Damage/end state, restart
-- [ ] Original sprites/audio and responsive HUD
-- [ ] Performance profiling and low-end fallback
+## Release-blocking work (NOT COMPLETE)
+- [ ] Test on iPhone Safari and low/midrange Android Chrome, measure FPS and input responsiveness
+- [ ] Conduct 5–10 real-user playtests, tune difficulty and steering
+- [ ] Verify Arvan Edge-supported Service Worker event API, outbound fetch, secrets, quotas and deployment settings
+- [ ] Provision persistent origin or approved managed datastore; configure HTTPS and origin authentication
+- [ ] Smoke-test real Edge route and score submission against deployed origin
+- [ ] Check full competition terms; submit official game URL and archive receipt
 
-## P2: Edge and competition
-- [ ] Edge-compatible API deployment spike
-- [ ] Challenge seed/version lifecycle
-- [ ] Durable result storage and schema
-- [ ] Abuse controls; validation tier declaration
-- [ ] Public leaderboard only when trustworthy
-- [ ] Domain, HTTPS, observability and rollback
-- [ ] Check official rules; submit entry and save receipt
+## Nice-to-have
+- [ ] Original sound/music pack (licensed or self-composed)
+- [ ] Improved procedural roadblock anticipation and AI tuning
+- [ ] Friend-vs-friend result compare and 9:16 sharing card
+- [ ] Benchmark accessibility and performance
 
-## P3: Growth/polish
-- [ ] Share card and direct invitation link
-- [ ] Daily seeded challenge
-- [ ] Creator-friendly 9:16 share layout
-- [ ] Translations and accessibility polish
-- [ ] Test metrics; creator outreach
-
-## Out of scope
-Open-world map, online PvP, vehicle store/customization, realistic police driving simulator, user accounts, intrusive telemetry.
+## Not planned for competition
+Open-world missions, payments, user accounts, real-time multiplayer, intrusive analytics.

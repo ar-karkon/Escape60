@@ -1,14 +1,8 @@
 node_modules/
-dist/
-coverage/
-.vite/
 .env
 .env.*
 !.env.example
-*.log
+server/data/
+dist/
 .DS_Store
-.idea/
-.vscode/
-*.local
-__pycache__/
-.pytest_cache/
+*.log

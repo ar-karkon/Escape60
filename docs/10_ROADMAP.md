@@ -1,20 +1,15 @@
-# Timeboxed roadmap — 28 Aban to 9 Azar 1405
+# Release roadmap — updated 2026-11-19
 
-**Anchor:** 2026-11-19 ≈ 28 Aban 1405. Official organizer says submit by end 9 Azar. Schedule is a planning target, not a commitment or evidence of work.
+The user chose to build a complete game directly rather than waiting on a 20-second prototype.
 
-| Date (Solar Hijri) | Desired deliverable | Exit gate |
+| Stage | Status | Required gate |
 |---|---|---|
-| 28–30 Aban | Lock MVP controls + basic engine vertical slice | Running in mobile browser |
-| 1–3 Azar | Playable 60s game, original graphics/audio, tuning | 5–10-user test, at least half replay voluntarily (heuristic) |
-| 4–5 Azar | Edge runtime/storage spike, beta deploy | Basic real link and challenge flow |
-| 6 Azar | Public launch and submission (target) | Form receipt and stable Edge URL |
-| 7–9 Azar | Bug fixes, creator outreach, performance | Real players, crash monitoring, no rule violations |
+| Full single-player game and UX | Source implemented | Manual browser/device testing still needed |
+| Local API and replay-verification backend | Source implemented | Live scoring tests, concurrency and persistence review |
+| Automated tests and CI | Implemented | Confirm GitHub Actions successful |
+| Arvan Edge compatibility and staging | Not done | Real provider smoke test |
+| Public HTTPS deployment | Not done | Stable link on phone and desktop |
+| Competition submission | Not done | Official confirmation receipt |
+| Real-user acquisition | Not started | No manufactured traffic or ranks |
 
-## Milestones
-M0 design doc; M1 vertical slice; M2 complete solo game; M3 deployed public beta; M4 challenge/leaderboard validated; M5 submit entry; M6 post-launch tuning.
-
-## Cut order if behind
-Cut live leaderboard before cutting core gameplay → cut traffic variants → cut drifting score → cut daily challenges → cut cosmetic features. Never ship insecure fake online ranks.
-
-## Release readiness
-Performance on midrange Android/iOS Safari; mobile touch; stable retries; zero blocked entry; full competition terms checked; Edge deployment evidence.
+Do not treat code completion as a deployed or competition-accepted product.

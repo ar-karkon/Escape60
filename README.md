@@ -1,66 +1,59 @@
 # ESCAPE 60 — فرار ۶۰
 
-> **Status:** Pre-production / documentation baseline — 2026-11-19 (28 Aban 1405)
->
-> **Repository:** [ar-karkon/Escape60](https://github.com/ar-karkon/Escape60) — public GitHub repository
->
-> **Game:** mobile-first, fast browser arcade police chase; original IP, unrelated to Rockstar Games.
+**An original, fully playable, mobile-first 60-second arcade police chase game.** Built for ArvanCloud Edge Games. No third-party game assets or runtime dependencies.
 
-## خلاصه
+**Status (2026-11-19):** browser game and local persistent replay-validated leaderboard implemented. Arvan Edge production deployment **not** performed and no live competition entry has been submitted. Online leaderboard requires an API origin; static-only deployment plays offline and displays local bests honestly.
 
-«فرار ۶۰» یک بازی آرکید تعقیب‌وگریز خودرو در مرورگر است. بازیکن باید تا ۶۰ ثانیه از محاصره پلیس فرار کند؛ پس از هر تلاش، زمان بقا، رکورد و امکان دعوت دوستان برای تجربه همان چالش نمایش داده می‌شود. هدف، تجربه‌ای سریع، قابل اشتراک‌گذاری و مناسب موبایل است.
+## Run and play
 
-**این پوشه فقط شامل اسناد طراحی است؛ هنوز هیچ نمونه بازی، بک‌اند، استقرار یا امتیاز واقعی وجود ندارد.** اطلاعات پیشنهادی در اسناد با برچسب `PROPOSED` و تصمیم‌های نهایی با `CONFIRMED` مشخص شده‌اند.
+Requires Node.js 20+; no `npm install` is necessary.
 
-## چرا این پروژه؟
+```bash
+npm start
+# open http://localhost:4173
+npm test
+npm run build
+```
 
-ساخته‌شدن برای رویداد [Edge Games آروان‌کلاد](https://try.arvancloud.ir/edge-games/) و انتشار بازی روی پردازش لبه؛ مهلت ثبت لینک مطابق [اطلاعیه رسمی آروان](https://t.me/s/arvancloud) پایان ۹ آذر ۱۴۰۵ است. اهداف رقابتی: جذب بازیکنان واقعی، تجربه قابل دفاع در داوری، و کاربرد مناسب Edge. هیچ جایزه یا نتیجه‌ای تضمین‌شده نیست.
+On mobile, drag across the screen or press the steering buttons. On desktop, press Left/Right or A/D, and P/Esc to pause. Survive for 60 seconds. Each crash costs one of three lives. Avoid traffic, police cars, buildings, and roadblocks. Close calls and precise driving add skill points. Use **Replay**, **Share challenge**, or **New challenge** after each round.
 
-## Design pillars
+## Delivered
 
-1. **First play in seconds** — بدون ثبت‌نام اجباری و بدون آموزش طولانی.
-2. **60-second dramatic arc** — تعقیب رو به سخت‌تر شدن، چالش منصفانه و پایان به‌یادماندنی.
-3. **Replay and challenge** — تکرار سریع، رقابت منصفانه با Seed یکسان، لینک دعوت.
-4. **Mobile-first** — حجم کم، کنترل ساده، عملکرد پایدار در گوشی میان‌رده.
-5. **Real edge logic** — اعتبارسنجی درخواست‌ها/نتیجه‌ها و مدیریت چالش‌ها در سمت سرویس، نه صرفاً میزبانی فایل‌ها.
-6. **Original assets and respectful growth** — محتوای مستقل؛ بدون تقلید از IP بازی‌های دیگر یا بازیکن ساختگی.
+- Deterministic seeded 60Hz game loop, escalating police AI, moving traffic, buildings, roadblocks, 3-heart damage, invulnerability window, drift/near-miss scoring, 60-second win condition.
+- Responsive original Canvas graphics, neon city, pause on tab hide, touch and keyboard controls, optional synthesized sound, no external sprites.
+- Daily UTC seed and portable challenge URL (`?seed=challenge-xxxx`), local best persistence, native share or copy link.
+- Node HTTP API with no dependencies, disk-backed leaderboard, session tokens, simple in-memory throttling, and server-authoritative replay of quantized steering trace. No personal registration needed.
+- Edge Service-Worker-style proxy adapter with daily challenge at Edge and validation gates (not deployed/tested on Arvan runtime).
+- Tests, CI, operational guide, pre-existing GDD and design rationale.
 
-## وضعیت تصمیم‌ها
+## Project layout
 
-- **CONFIRMED:** نام کاری Escape 60 / فرار ۶۰، بازی تعقیب‌وگریز آرکید خودرو، مرورگر، زمان هدف هر دست ۶۰ ثانیه، تاکید بر چالش دوستان و مناسب‌بودن برای مسابقه.
-- **PROPOSED:** دوربین ایزومتریک 2.5D؛ حرکت خودکار خودرو + فرمان لمسی؛ شهر خیالی نئونی؛ Phaser + TypeScript + Vite؛ چالش روزانه؛ پلیس با AI الگوریتمی.
-- **OPEN:** رفتار دقیق برخورد، مدل امتیازدهی، نقشه‌ها، فناوری ذخیره‌سازی و واج‌های نهایی Arvan Edge، مجوز متن‌باز، لوگو و هویت بصری.
+```text
+web/                 static HTML/CSS/Canvas browser game
+web/src/simulation.js deterministic rules imported by game AND Node score verifier
+web/src/main.js      UI, controls, fixed-timestep loop, share and API handling
+web/src/render.js    original procedural game graphics
+server/server.mjs    Node origin API, persisted leaderboards and replay validation
+edge/worker.js       provisional Arvan Edge API adapter
+scripts/build.mjs    static dist/ copy
+.github/workflows/    tests and build
+ docs/                full design, rules, architecture, research and backlog
+```
 
-## نقشه مستندات
+## Production deployment
 
-| فایل | موضوع |
-|---|---|
-| [docs/00_STATUS.md](docs/00_STATUS.md) | وضعیت پروژه، سطح اطمینان و کارهای باز |
-| [docs/01_PRODUCT_BRIEF.md](docs/01_PRODUCT_BRIEF.md) | خلاصه محصول، مخاطب و مزیت |
-| [docs/02_GAME_DESIGN.md](docs/02_GAME_DESIGN.md) | GDD کامل و حلقه بازی |
-| [docs/03_GAMEPLAY_BALANCE.md](docs/03_GAMEPLAY_BALANCE.md) | فیزیک، رفتار پلیس و امتیاز |
-| [docs/04_UX_UI.md](docs/04_UX_UI.md) | جریان‌ها و الزامات رابط |
-| [docs/05_ARCHITECTURE.md](docs/05_ARCHITECTURE.md) | معماری پیشنهادی و ساختار پروژه |
-| [docs/06_EDGE_SPEC.md](docs/06_EDGE_SPEC.md) | مدل API، امنیت نتیجه‌ها و امکان‌سنجی |
-| [docs/07_COMPETITION.md](docs/07_COMPETITION.md) | الزامات مسابقه و موارد نیازمند تأیید |
-| [docs/08_MARKET_RESEARCH.md](docs/08_MARKET_RESEARCH.md) | دلایل انتخاب ایده و منابع آماری |
-| [docs/09_GROWTH.md](docs/09_GROWTH.md) | راهبرد جذب بازیکن واقعی |
-| [docs/10_ROADMAP.md](docs/10_ROADMAP.md) | برنامه انتشار تا مهلت رقابت |
-| [docs/11_QA.md](docs/11_QA.md) | تست و معیار آماده‌بودن |
-| [docs/12_PRIVACY_SECURITY.md](docs/12_PRIVACY_SECURITY.md) | حریم خصوصی و ضدتقلب |
-| [docs/13_DECISIONS.md](docs/13_DECISIONS.md) | ثبت تصمیم‌ها و فرضیات |
-| [docs/14_IP_ASSETS.md](docs/14_IP_ASSETS.md) | حقوق مالکیت، دارایی‌ها، مجوز |
-| [docs/15_METRICS.md](docs/15_METRICS.md) | رویدادهای تحلیلی، بدون داده شخصی |
-| [docs/16_BACKLOG.md](docs/16_BACKLOG.md) | تسک‌های توسعه اولویت‌بندی‌شده |
-| [docs/17_SOURCES.md](docs/17_SOURCES.md) | منابع و لینک‌های بررسی‌شده |
-| [docs/18_AGENTS.md](docs/18_AGENTS.md) | دستورالعمل Codex/Claude Code |
-| [docs/19_GLOSSARY.md](docs/19_GLOSSARY.md) | اصطلاحات و تعاریف |
-| [docs/20_RESEARCH_QUESTIONS.md](docs/20_RESEARCH_QUESTIONS.md) | فهرست ابهام‌های فنی/مسابقه |
+1. Host files from `dist/` on a static HTTPS site supported by Arvan. Verify `/src/main.js` loads as a module and SPA route fallback is not required.
+2. Deploy `server/server.mjs` on **persistent Node hosting** for leaderboards, configure `ESCAPE60_SECRET` and persistent `server/data/` volume. `PORT` defaults to `4173`.
+3. If routing API via an Arvan Edge function, inspect actual Arvan-supported runtime and configure upstream/edge key using **server-side** environment or build-time injection, not browser JS. `edge/worker.js` is an adapter requiring provider validation. Route `/api/v1/*` to the worker and protect the Node origin with `REQUIRE_EDGE_AUTH=1` and `ESCAPE60_EDGE_KEY`.
+4. If static and API origins are separate, set `globalThis.ESCAPE60_API_BASE` in HTML **before** the `main.js` import, and configure appropriately scoped CORS on the API. Same-origin routing is preferred.
+5. Test actual public URL, no-secret exposure, rate and quota alarms, restart behavior and validity of score acceptance on mobile. Submit only once official rules are confirmed.
 
-## توسعه
+**Limitations:** score authenticity is deterministic replay, not tamperproof against automated clients. Rate limiting is in-memory and IP-level; edge per-isolate checks are not globally authoritative. API server needs durable storage and HTTPS. No real user telemetry or ranking is invented.
 
-هنوز هیچ کد اجرایی وجود ندارد. پس از تأیید تصمیم‌های باز، شاخه‌ی `feat/vertical-slice` برای نمونه نخست پیشنهاد می‌شود. راهنمای همکاری در [CONTRIBUTING.md](CONTRIBUTING.md) آمده است.
+## Competition and research
 
-## Licensing
+The project was created for [Arvan Edge Games](https://try.arvancloud.ir/edge-games/). The original design research and decision records are under `docs/`. All historic external factual claims are source-labelled and should be verified before public marketing.
 
-**Public ≠ open source.** هنوز هیچ مجوزی برای استفاده، توزیع یا تغییر کد انتخاب نشده است. انتشار عمومی این سند مجوز استفاده مجدد از کد/دارایی‌ها نمی‌دهد. پیش از انتشار سورس واقعی، مالک پروژه باید درباره MIT / Apache-2.0 / proprietary تصمیم بگیرد.
+## License
+
+The repository is public but there is currently **no explicit open-source license**. All original game artwork is procedural code. Please do not use protected GTA or Rockstar assets or branding.
