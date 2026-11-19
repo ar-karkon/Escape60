@@ -1,6 +1,6 @@
-# Edge service — the edge referee (API 4.0.0)
+# Edge service — the edge referee (API 4.1.0)
 
-**Status:** implemented and tested locally (Node tests, a browser run against the built worker in `npm run edge:local`). Not yet deployed — the live edge still runs v2.3 until `npm run deploy` is run (see `22_DEPLOYMENT.md`).
+**Status:** implemented and tested locally (Node tests incl. a mocked AIaaS gateway, a browser run against the built worker in `npm run edge:local`). Judge-facing overview: [TECHNOLOGY.md](TECHNOLOGY.md). Not yet deployed — the live edge still runs v2.3 until `npm run deploy` is run (see `22_DEPLOYMENT.md`).
 
 Code: `edge/app.mjs` (game service), `edge/static.mjs` (static delivery), `edge/card.mjs` + `edge/png.mjs` (PNG cards), `edge/metrics.mjs` (telemetry), `edge/s3.mjs` (storage), `edge/worker.js` (entry). The local dev server runs the same `createApp`.
 
@@ -26,7 +26,7 @@ The browser only sends inputs. The edge is the only judge, and it stays **statel
 |---|---|
 | `GET /api/v1/health` | status, API/SIM versions, storage kind, `secured`, feature list |
 | `GET /api/v1/challenges/today` | `{seed, version, api, expiresAt, live: {every}}` — daily UTC route |
-| `POST /api/v1/runs/start` `{seed, car, spawn, lab?}` | `{runId, token, seed, car, spawn, live: {every}}`; ticket `{r, s, c, p, t, v, l?}` (`p` = start index; invalid → seed default). `lab: true` → route `edge-lab`, verified but never stored |
+| `POST /api/v1/runs/start` `{seed, car, spawn, rules?, lab?}` | `{runId, token, seed, car, spawn, rules, live: {every}}`; ticket `{r, s, c, p, d?, t, v, l?}` (`p` = start index; invalid → seed default; `d` = daily rules id). `lab: true` → route `edge-lab`, verified but never stored |
 | `POST /api/v1/runs/live` `{runId, token, trace, checkpoint?}` | `{verified, complete, ended, points, health, standing: {rank, of, ahead}, cpuMs, checkpoint}` |
 | `POST /api/v1/runs/finish` `{runId, token, trace, result, checkpoint?}` | `202 {continue, progress, checkpoint}` while replaying, then `200 {accepted, rank, of, label, result, verifyMs, ticks, live, better, runs, id, share}` |
 | `GET /api/v1/leaderboard?seed=&limit=` | top entries `{rank, timeMs, points, car, label, ghost}`, 5 s isolate cache |
@@ -36,6 +36,15 @@ The browser only sends inputs. The edge is the only judge, and it stays **statel
 | `GET /api/v1/stats` | today's runs, escapes, live-verified runs, average verify ms |
 | `GET /api/v1/edge` | telemetry (today / all time / this isolate), features, config |
 | `GET /api/v1/edge/bench?ticks=` | steps the simulation ≤ 600 ticks on this node; µs per tick |
+| `GET /api/v1/challenges/today` (AI) | also returns `brief` (theme, briefing, dispatcher, contract titles in EN/FA, `source: ai|fallback`, `model`) and `rules` (`{id, contracts, tactics}`) |
+| `GET /api/v1/radio?date=` | police-radio bank `{radio: {en, fa}: {event: [lines]}, source}` for the day |
+| `POST /api/v1/dispatch` `{seed, car, zone, lang, last?}` | `{who, line, source}` — the dispatcher's call for one run (`line: null` → the client uses the radio bank) |
+| `POST /api/v1/runs/debrief` `{id}` | `{chief: {tip, headline, taunt, next, source}}` for a verified run; generated once and cached in `runs-by-id` |
+
+## Daily rules (AIaaS city director)
+- Written once per UTC day by `edge/ai.mjs` (AIaaS, DeepSeek-V4-Flash) — or the handwritten briefing of the day when there is no key/answer — sanitized by `web/src/director.js` and frozen in `director/v1/<date>.json` (`If-None-Match: *`, first writer wins).
+- Rules = up to three contracts (`drift, near, takedown, dodge, speed, chain, survive, explore`, optional district for drift/near; goals clamped and quantised, rewards computed by `web/src/rules.js`) and police tactics (`pace, patrol, intercept, blocks, spikes, traffic`, clamped). Only daily routes (`daily-YYYY-MM-DD`) carry rules.
+- `POST /runs/start` must send the rules id the client plays by (`rules`); the ticket signs it (`d`); replays create the game with those rules; checkpoints must carry the same rules id; results must report it. A daily run without the day's rules is refused (409) or fails replay (422).
 
 ## Checkpoints
 `{t, ms, at, seen, n, state, sig}` — tick, replay CPU so far, edge time, trace length seen, live checks, full simulation state. `sig = HMAC("ckpt|" + runId | SHA-256(trace prefix of t ticks) | t | ms | at | seen | n | state)`.
@@ -53,7 +62,7 @@ The browser only sends inputs. The edge is the only judge, and it stays **statel
 Refusals are counted by reason (`pacing`, `mismatch`, `checkpoint`, `ticket`, `replayed`, `replay`, `trace`, `expired`, `version`, …) and shown on `/edge`.
 
 ## Storage layout (bucket `escape60-data`)
-`runs/<sim>/<date>/<runId>.json` (single-use guard) · `runs-by-id/<sim>/<id>.json` (trace, result, rank at acceptance — rivals, cards, previews) · `leaderboard/<sim>/<seed>.json` (top 100) · `hist/<sim>/<seed>.json` (score histogram) · `stats/v2/<date>.json` · `metrics/v1/day/<date>.json`, `metrics/v1/total.json`.
+`director/v1/<date>.json` (frozen daily briefing) · `radio/v1/<date>.json` · `runs/<sim>/<date>/<runId>.json` (single-use guard) · `runs-by-id/<sim>/<id>.json` (trace, result, rank at acceptance — rivals, cards, previews) · `leaderboard/<sim>/<seed>.json` (top 100) · `hist/<sim>/<seed>.json` (score histogram) · `stats/v2/<date>.json` · `metrics/v1/day/<date>.json`, `metrics/v1/total.json`.
 
 ## Static delivery
 The build uploads Brotli (`.br`) and gzip (`.gz`) copies of every flat text file and bakes their sizes into the worker. The edge serves the best one the browser accepts (`Content-Encoding`, `Vary: Accept-Encoding`), skips variants that do not exist, passes byte ranges (Safari audio) through untouched and counts the bytes saved. The game bundle travels as ~176 KB instead of ~732 KB. Edge variable `PRECOMPRESSED=false` switches it off; `npm run deploy` checks that the bundle decodes byte-for-byte.

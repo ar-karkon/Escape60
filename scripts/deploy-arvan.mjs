@@ -192,5 +192,16 @@ try {
   const [page, edge] = await Promise.all([fetch(`${GAME_URL}/edge`), fetch(`${GAME_URL}/api/v1/edge`).then((r) => r.json())]);
   console.log(page.ok && edge.features ? c.ok(`  ✔ /edge dashboard up · referee features: ${edge.features.join(', ')}`) : c.warn(`  … /edge → ${page.status}`));
 } catch (e) { console.log(c.warn(`  … /edge check failed: ${e.message}`)); }
+// AIaaS: configured, and today's briefing written by the model (the first call of a UTC day writes it).
+if (apiOk) {
+  if (!after.ai?.configured) console.log(c.warn('  ! AIaaS not configured — set the edge variable AI_API_KEY ("apikey …"); handwritten briefing/radio/crew chief in use.'));
+  else {
+    try {
+      const day = await (await fetch(`${GAME_URL}/api/v1/challenges/today`)).json();
+      const src = day.brief?.source;
+      console.log(src === 'ai' ? c.ok(`  ✔ AIaaS ${after.ai.model}: today's briefing "${day.brief.theme?.en}" · ${day.rules?.contracts?.length} contracts`) : c.warn(`  … today's briefing source is "${src}" — the model call failed or timed out (see aiFails on /edge); it stays handwritten for today`));
+    } catch (e) { console.log(c.warn(`  … briefing check failed: ${e.message}`)); }
+  }
+}
 process.exitCode = live && apiOk && packed ? 0 : 2;
 console.log('\n' + (live && apiOk && packed ? c.ok(c.b('Done. Optional full check: GAME_URL=' + GAME_URL + ' npm run test:browser')) : c.warn(c.b('Finished with warnings (see above).'))));

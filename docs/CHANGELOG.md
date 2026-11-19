@@ -1,5 +1,13 @@
 # Changelog
 
+## 3.5 — city briefing, police radio, crew chief (SIM 2.2.0, API 4.1.0) — 2026-11-19
+- **Daily city briefing**: once a day a language model on Arvan AIaaS (DeepSeek-V4-Flash) writes the theme, a briefing, three **contracts** with point rewards and the **police tactics** of the day (heat pace, patrol rate, interceptors, roadblocks, spike strips, traffic). The simulation plays by these bounded rules (`web/src/rules.js`), the edge freezes them for everyone and signs them into every daily ticket. Home card **TODAY**, contract popups, progress in the pause menu and on the results screen.
+- **Police radio**: a daily bank of dispatcher lines in English and Persian reacts to the chase (heat, roadblocks, takedowns, near misses, pit stops, contracts, busted…), with the current district and your car filled in.
+- **Dispatcher call** for every run during the aerial intro, written from your car, start district and previous result.
+- **Crew chief · Ray** on the results screen: a specific tip from the edge's replay numbers, a **next target** checked during the next run, a headline used for share previews and a taunt other players hear from your ghost.
+- Everything is validated and clamped (`web/src/director.js`), and handwritten bilingual fallbacks keep the game identical without the model. Nothing in the game is labelled AI; Credits → "How it's built" links to `docs/TECHNOLOGY.md` (Persian: `TECHNOLOGY.fa.md`).
+- `/edge` shows today's briefing and model calls/tokens/latency; `npm run deploy` checks AIaaS; 31 tests incl. a mocked AIaaS gateway and hostile model output.
+
 ## 3.4 — the edge referee (API 4.0.0) — 2026-11-19
 - **Live referee**: every 5 s the game sends its input trace; the edge re-simulates the new ticks, answers with its own score and your **live global rank** (LIVE chip under the minimap). Checkpoints are HMAC-bound to the exact input prefix, so the final verdict only replays the last seconds.
 - **Pacing proof**: inputs may not arrive faster than real time — speed hacks are refused mid-run.

@@ -14,7 +14,7 @@ import { createThreats } from './ui/threats.js';
 import { pickRadio, fillRadio, contractText, targetText, fallbackChief } from './director.js';
 
 const $ = (id) => document.getElementById(id);
-const VERSION = 'v3.4';
+const VERSION = 'v3.5';
 /** Seconds of aerial intro + countdown before you get control (skippable with any input). */
 const INTRO = 4.8;
 hydrateIcons();

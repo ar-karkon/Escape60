@@ -4,6 +4,7 @@ The current **code and status** take precedence over older design proposals. The
 
 | Topic | Documents |
 | --- | --- |
+| **How the edge and AIaaS are used (for judges)** | [Technology](TECHNOLOGY.md) · [فارسی](TECHNOLOGY.fa.md) |
 | Latest implementation and missing QA | [Status](00_STATUS.md) |
 | Deployment and current live-version caveats | [Deployment](22_DEPLOYMENT.md) |
 | Release history | [Changelog](CHANGELOG.md) |
