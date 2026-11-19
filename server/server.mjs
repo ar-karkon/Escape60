@@ -23,12 +23,19 @@ function getIp(req){return req.socket.remoteAddress||'unknown';}
 function limited(ip,category,limit,windowMs){const key=`${ip}:${category}`,now=Date.now();const hits=(rates.get(key)||[]).filter(t=>now-t<windowMs);if(hits.length>=limit)return true;hits.push(now);rates.set(key,hits);return false;}
 async function readBody(req){let body='';for await(const chunk of req){body+=chunk.toString();if(body.length>90000)throw Error('Payload too large');}try{return JSON.parse(body||'{}');}catch{throw Error('Invalid JSON');}}
 async function saveBoard(){await mkdir(path.dirname(DATA_FILE),{recursive:true});const tmp=DATA_FILE+'.tmp';await writeFile(tmp,JSON.stringify(board));await rename(tmp,DATA_FILE);}
-const mime={'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.svg':'image/svg+xml','.json':'application/json','.woff2':'font/woff2','.png':'image/png','.txt':'text/plain; charset=utf-8'};
+const mime={'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.svg':'image/svg+xml','.json':'application/json','.woff2':'font/woff2','.png':'image/png','.jpg':'image/jpeg','.mp3':'audio/mpeg','.wav':'audio/wav','.md':'text/markdown; charset=utf-8','.txt':'text/plain; charset=utf-8'};
 async function staticFile(url,res){const p=url.pathname==='/'?'/index.html':decodeURIComponent(url.pathname);const file=path.resolve(ROOT,'web','.'+p);if(!file.startsWith(path.resolve(ROOT,'web')+path.sep)){error(res,403,'Forbidden');return;}
- try{const data=await readFile(file);res.writeHead(200,{'Content-Type':mime[path.extname(file)]||'application/octet-stream','Cache-Control':'public,max-age=60','X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer'});res.end(data);}catch{error(res,404,'Not found');}}
+ try{const data=await readFile(file);const headers={'Content-Type':mime[path.extname(file)]||'application/octet-stream','Cache-Control':'public,max-age=60','X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer','Accept-Ranges':'bytes'};
+  // Byte ranges let Safari stream the music files.
+  const m=/^bytes=(\d*)-(\d*)$/.exec(String(reqRange.get(res)||''));
+  if(m&&(m[1]||m[2])){let a=m[1]?Number(m[1]):data.length-Number(m[2]),b=m[1]&&m[2]?Number(m[2]):data.length-1;b=Math.min(b,data.length-1);
+   if(a>b||a>=data.length){res.writeHead(416,{'Content-Range':`bytes */${data.length}`});res.end();return;}
+   res.writeHead(206,{...headers,'Content-Range':`bytes ${a}-${b}/${data.length}`,'Content-Length':b-a+1});res.end(data.subarray(a,b+1));return;}
+  res.writeHead(200,{...headers,'Content-Length':data.length});res.end(data);}catch{error(res,404,'Not found');}}
+const reqRange=new WeakMap();
 export function handler(req,res){route(req,res).catch(err=>{console.error('request failure',err.message);if(!res.headersSent)error(res,500,'Server error');else res.end();});}
 async function route(req,res){
- const url=new URL(req.url,'http://localhost');if(!url.pathname.startsWith('/api/'))return staticFile(url,res);
+ const url=new URL(req.url,'http://localhost');if(!url.pathname.startsWith('/api/')){if(req.headers.range)reqRange.set(res,req.headers.range);return staticFile(url,res);}
  if(REQUIRE_EDGE&&(!EDGE_KEY||!safeMatch(req.headers['x-escape-edge-key'],EDGE_KEY)))return error(res,401,'Edge authentication required');
  const ip=getIp(req),today=`daily-${new Date().toISOString().slice(0,10)}`;
  if(url.pathname==='/api/v1/health'&&req.method==='GET')return json(res,200,{status:'ok',version:SIM_VERSION,storage:'disk'});

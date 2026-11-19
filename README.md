@@ -30,15 +30,18 @@ The same 3D city renders the menu, race and finish. Each 520-unit simulation blo
 - **Camera:** close rear three-quarter chase (~9.4 up, 14 behind) with speed FOV, damping, steer roll and hit shake; buildings in front of the car dissolve. Off-screen police show as an edge arrow.
 - **Quality:** adaptive resolution / shadows / bloom; «گرافیک سبک» in settings; `?q=high` or `?q=low` pins a tier for benchmarks.
 
-The 1.1.0 simulation schedules pursuit changes at 10, 25, 40 and 55 seconds. Downtown increases traffic frequency and highway driving has a higher speed cap. Local and server rankings use version-specific keys. The static bundle includes Three.js, the fonts (Vazirmatn, Jersey 10 — SIL OFL) and their licenses, so gameplay needs no CDN requests.
+The 1.2.0 simulation schedules pursuit changes at 10, 25, 40 and 55 seconds and adds a skill chain: near misses and roadblock dodges in quick succession multiply points up to ×5 (any hit resets it), verified by the same server replay. Downtown increases traffic frequency and highway driving has a higher speed cap. Local and server rankings use version-specific keys. The static bundle includes Three.js, the fonts (Vazirmatn, Jersey 10 — SIL OFL) and their licenses, so gameplay needs no CDN requests.
 
-Real 390×780 engine screenshots: [Menu](docs/screenshots/menu.png) · [Driving](docs/screenshots/coastal.png) · [High-pressure chase](docs/screenshots/pursuit.png) · [Results](docs/screenshots/results.png) · [Side by side with the concept references](docs/screenshots/comparison.jpg). Concept references live in `design/references/`; the remaining visual gaps are listed in `docs/25_VISUAL_QUALITY_AUDIT_FA.md`.
+Real 390×780 engine screenshots: [Menu](docs/screenshots/menu.png) · [Driving](docs/screenshots/coastal.png) · [High-pressure chase](docs/screenshots/pursuit.png) · [Results](docs/screenshots/results.png) · [Share sheet](docs/screenshots/share-sheet.png) · share cards [Story](docs/screenshots/share-story.jpg) / [Post](docs/screenshots/share-post.jpg) / [Wide](docs/screenshots/share-wide.jpg) · [Side by side with the concept references](docs/screenshots/comparison.jpg). Concept references live in `design/references/`; the remaining visual gaps are listed in `docs/25_VISUAL_QUALITY_AUDIT_FA.md`.
 
 ## Delivered
 
-- Deterministic seeded 60Hz game loop, escalating police AI, moving traffic, buildings, roadblocks, 3-heart damage, invulnerability window, drift/near-miss scoring, 60-second win condition.
-- 3D voxel tropical neon city with HDR bloom, pixel UI, countdown, event popups, pause on tab hide, touch and keyboard controls, optional synthesized engine/siren/music, no external sprites.
-- Daily UTC seed and portable challenge URL (`?seed=challenge-xxxx`), local best persistence, native share or copy link.
+- Deterministic seeded 60Hz game loop, escalating police AI, moving traffic, buildings, roadblocks, 3-heart damage, invulnerability window, drift/near-miss/dodge scoring with a ×5 skill chain, 60-second win condition.
+- 3D voxel tropical neon city with HDR bloom, pixel UI, countdown, combo meter, event popups, pause on tab hide, touch and keyboard controls.
+- **Music & sound:** five synthwave/retrowave tracks (menu, three rotating chase tracks, results) and recorded SFX — engine, tyre squeal, police siren with stereo position, helicopter, crash, whooshes, horn, combo/level stingers — all CC0 / CC-BY from OpenGameArt, credited in-game and in `web/assets/audio/CREDITS.md`. Separate music / SFX switches.
+- **Keep-playing loop:** XP and levels, eight unlockable paint jobs in the garage, three daily missions, a day streak bonus, "new record" and friend-target markers on the timer, instant retry (Space / Enter).
+- **Share & challenge:** share sheet with real in-engine cards in three formats — Story 9:16 (Instagram / Telegram / WhatsApp status), Post 4:5 and Wide 16:9 (X / Telegram) — each with the run's real numbers and a QR code. Native share sends the image on phones; direct Telegram, X and WhatsApp links; download; copy link. Challenge links carry the seed and the friend's target (`?seed=…&c=time.points`), which the game shows as an unverified target and compares at the end.
+- Daily UTC seed and portable challenge URL, local best persistence, Open Graph / Twitter card meta.
 - Node HTTP API with no dependencies, disk-backed leaderboard, session tokens, simple in-memory throttling, and server-authoritative replay of quantized steering trace. No personal registration needed.
 - Edge Service-Worker-style proxy adapter with daily challenge at Edge and validation gates (not deployed/tested on Arvan runtime).
 - Tests, CI, operational guide, pre-existing GDD and design rationale.
@@ -52,7 +55,10 @@ web/src/main.js         UI flow, controls, countdown, fixed-timestep loop, share
 web/src/render.js       camera director, tile streaming, actors, lights and FX orchestration
 web/src/gfx/            voxel builder + shader patterns, city kit, props, cars, sky, FX, HDR post
 web/src/ui/icons.js     original pixel icon set
-web/assets/             logo (generated by scripts/make-logo.mjs) and OFL fonts
+web/src/audio.js        music streaming, SFX buffers, engine/siren/squeal/heli mix, ducking
+web/src/meta.js         XP, levels, paints, daily missions, streak, friend-challenge parsing
+web/src/share.js        social share cards (story/post/wide) with QR, native share and network links
+web/assets/             logo, OFL fonts, licensed audio (see assets/audio/CREDITS.md)
 server/server.mjs       Node origin API, persisted leaderboards and replay validation
 edge/worker.js          provisional Arvan Edge API adapter
 scripts/                build, syntax check, browser smoke test, screenshot capture, comparison sheet

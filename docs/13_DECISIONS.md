@@ -17,6 +17,9 @@ Date: 2026-11-19
 | D11 | Backend | OPEN | Edge API + durable adapter | Runtime, quota, persistence TBD |
 | D12 | Repo license | OPEN | None yet | Public visibility not a license |
 | D13 | Data handling | OPEN | Anonymous/minimal | Full rule/legal review |
+| D15 | Scoring 1.2.0 | IMPLEMENTED | Skill chain ×1…×5 for near misses / roadblock dodges, reset on hit; SIM_VERSION 1.2.0 | Rewards risky skilful driving; replay-verified; rankings keyed per version |
+| D16 | Audio | IMPLEMENTED | Licensed CC0/CC-BY OpenGameArt music + SFX, streamed music, decoded SFX | Owner asked for free tracks with a neon-coastal mood instead of synthesis |
+| D17 | Sharing | IMPLEMENTED | Story/Post/Wide cards from real frames + QR + challenge link with friend target | Friend targets are unverified link data and labelled as such |
 | D14 | UI typography | IMPLEMENTED | Vazirmatn (Persian) + Jersey 10 (digits/Latin), both OFL and bundled | Pixelify Sans rejected: its 5 and S were confusable in the timer |
 
 ## ADR template

@@ -5,3 +5,9 @@ three.js is the bundled ES module from the three@0.170.0 npm package. The MIT li
 ```sh
 ./node_modules/.bin/esbuild node_modules/three/src/Three.js --bundle --minify --format=esm --outfile=three.js
 ```
+
+# qrcode-generator 1.4.4
+
+`qrcode.js` is the MIT-licensed QR encoder by Kazuhiko Arase (npm `qrcode-generator@1.4.4`), with
+`export default qrcode;` appended so it loads as an ES module. Used only to print the challenge link
+on share cards. License: MIT (header retained in the file).

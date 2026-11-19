@@ -4,7 +4,12 @@
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no"/>
   <meta name="theme-color" content="#1b0b2b"/>
-  <meta name="description" content="فرار ۶۰ — بازی رایگان و سریع تعقیب و گریز در شهر ساحلی غروب. ۶۰ ثانیه از پلیس فرار کن و دوستات رو به چالش بکش!"/>
+  <meta name="description" content="فرار ۶۰ — بازی رایگان و سریع تعقیب و گریز در شهر ساحلی غروب. ۶۰ ثانیه از پلیس فرار کن، زنجیره جاخالی بساز و دوستات رو به چالش بکش!"/>
+  <meta property="og:type" content="website"/>
+  <meta property="og:title" content="فرار ۶۰ | ESCAPE 60 — ۶۰ ثانیه از پلیس فرار کن"/>
+  <meta property="og:description" content="تعقیب و گریز سه‌بعدی در شهر ساحلی نئونی. رکوردت رو ثبت کن و دوستات رو به چالش بکش."/>
+  <meta property="og:image" content="./assets/og-card.jpg"/>
+  <meta name="twitter:card" content="summary_large_image"/>
   <link rel="icon" href="./assets/logo.svg"><title>فرار ۶۰ | ESCAPE 60</title>
   <link rel="preload" href="./assets/fonts/vazirmatn-arabic-800-normal.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="./assets/fonts/jersey-10-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
@@ -24,19 +29,27 @@
           <p class="tagline">یک شهر. سه جان. شصت ثانیه برای فرار.</p>
         </header>
         <div class="dock">
+          <div id="challenge-banner" class="challenge hidden" role="status"></div>
+          <div class="profile" id="profile">
+            <b class="lvl" id="lvl">LV 1</b>
+            <div class="xpbar"><i id="xp-fill"></i></div>
+            <small id="xp-text">0 / 400 XP</small>
+            <span class="streak" id="streak" title="روزهای پشت سر هم"><span data-icon="flame"></span><b id="streak-n">0</b></span>
+          </div>
           <p class="chip chip-daily" id="daily-label"></p>
           <button id="play" class="btn btn-primary btn-xl">
             <span class="btn-ico" data-icon="play"></span>
             <span class="btn-text"><b>شروع فرار</b><small>START ESCAPE</small></span>
           </button>
           <div class="cards">
-            <button id="board" class="card"><span class="card-ico" data-icon="trophy"></span><b>جدول رکوردها</b></button>
-            <button id="daily-play" class="card"><i class="badge">!</i><span class="card-ico" data-icon="calendar"></span><b>چالش روزانه</b></button>
+            <button id="board" class="card"><span class="card-ico" data-icon="trophy"></span><b>رکوردها</b></button>
+            <button id="missions-open" class="card"><i class="badge" id="missions-badge">3</i><span class="card-ico" data-icon="calendar"></span><b>مأموریت روز</b></button>
+            <button id="garage-open" class="card"><span class="card-ico" data-icon="car"></span><b>گاراژ</b></button>
             <button id="settings" class="card"><span class="card-ico" data-icon="gear"></span><b>تنظیمات</b></button>
           </div>
           <footer class="status-row">
             <small id="online-state" class="chip chip-status">در حال بررسی اتصال…</small>
-            <small class="ver">v1.2 · SIM 1.1.0</small>
+            <small class="ver" id="ver">v2.0</small>
           </footer>
         </div>
       </section>
@@ -51,22 +64,29 @@
           <div class="title-ribbon">
             <span class="ti" data-icon="trophy"></span><h2 id="result-title">فرار کردی!</h2><span class="ti" data-icon="trophy"></span>
           </div>
-          <p class="time-label"><span data-icon="stopwatch"></span>زمان بقا</p>
+          <p class="time-label"><span data-icon="stopwatch"></span>زمان بقا <b id="new-best" class="new-best hidden">رکورد جدید!</b></p>
           <div class="time-row">
             <span class="laurel" data-icon="laurel"></span>
             <div class="result-time" id="result-time">00.00</div>
             <span class="laurel" data-icon="laurel" data-mirror></span>
           </div>
           <p class="status-chip" id="result-status"><span data-icon="check"></span><b>فرار موفق!</b></p>
+          <p id="challenge-result" class="challenge-result hidden"></p>
           <div class="stats">
             <div class="stat"><span class="stat-ico" data-icon="star"></span><small>امتیاز کل</small><strong id="result-score">0</strong></div>
             <div class="stat"><span class="stat-ico" data-icon="drift"></span><small>جاخالی‌ها</small><strong id="result-near">0</strong></div>
-            <div class="stat"><span class="stat-ico" data-icon="police"></span><small>برخوردها</small><strong id="result-hits">0</strong></div>
+            <div class="stat"><span class="stat-ico" data-icon="combo"></span><small>بهترین ضریب</small><strong id="result-chain">×1</strong></div>
           </div>
+          <div class="xp-row">
+            <b class="lvl" id="lvl2">LV 1</b>
+            <div class="xpbar"><i id="xp-fill2"></i></div>
+            <b class="xp-gain" id="xp-gain">+0 XP</b>
+          </div>
+          <p class="unlocks hidden" id="result-unlocks"></p>
           <div class="rank-row"><span data-icon="bars"></span><p class="rank" id="rank">رکورد فقط روی این دستگاه ذخیره شد</p></div>
           <p class="detail" id="result-detail"></p>
           <div class="actions">
-            <button id="share" class="btn btn-secondary"><span class="btn-ico" data-icon="share"></span><b>اشتراک رکورد</b></button>
+            <button id="share" class="btn btn-secondary btn-share"><span class="btn-ico" data-icon="share"></span><b>اشتراک و چالش</b></button>
             <button id="replay" class="btn btn-primary"><span class="btn-ico" data-icon="play"></span><b>دوباره بازی کن</b></button>
             <button id="home-button" class="btn btn-secondary"><span class="btn-ico" data-icon="home"></span><b>منوی اصلی</b></button>
           </div>
@@ -82,9 +102,14 @@
         <div class="hud-timer">
           <b id="time">00.00</b>
           <small>زمان بقا</small>
-          <div class="progress" aria-hidden="true"><div id="power"></div></div>
+          <div class="progress" aria-hidden="true"><div id="power"></div><i id="mark-best" class="mark best hidden"></i><i id="mark-target" class="mark target hidden"></i></div>
         </div>
         <div class="hud-wanted"><div id="pressure" class="sirens" aria-label="فشار تعقیب"></div><small>تعقیب</small></div>
+      </div>
+      <div id="combo" class="combo off" aria-label="ضریب زنجیره">
+        <b id="combo-x">×1</b>
+        <div class="combo-bar"><i id="combo-fill"></i></div>
+        <small>زنجیره</small>
       </div>
       <div class="hud-bottom">
         <div class="hud-hearts" id="health" aria-label="جان‌های باقی‌مانده"></div>
@@ -113,15 +138,64 @@
 
     <dialog id="config" class="panel">
       <h2><span data-icon="gear"></span>تنظیمات</h2>
-      <button id="sound" class="toggle-row" aria-pressed="false"><span data-icon="mute" id="sound-ico"></span><b id="sound-label">صدا خاموش</b></button>
+      <label class="toggle-row"><input id="music-toggle" type="checkbox"><i class="switch"></i><span data-icon="sound"></span><b>موسیقی</b></label>
+      <label class="toggle-row"><input id="sfx-toggle" type="checkbox"><i class="switch"></i><span data-icon="siren"></span><b>افکت‌های صوتی</b></label>
       <label class="toggle-row"><input id="motion" type="checkbox"><i class="switch"></i><b>کاهش حرکت و لرزش</b></label>
       <label class="toggle-row"><input id="quality" type="checkbox"><i class="switch"></i><b>گرافیک سبک (گوشی ضعیف)</b></label>
+      <button id="credits-open" class="link">سازندگان صدا و فونت‌ها</button>
       <button id="close-config" class="btn btn-primary"><b>بازگشت</b></button>
     </dialog>
     <dialog id="records" class="panel">
       <h2><span data-icon="trophy"></span>جدول رکوردها</h2>
       <div id="entries" class="entries"></div>
       <button id="close-board" class="btn btn-primary"><b>بازگشت</b></button>
+    </dialog>
+    <dialog id="missions" class="panel">
+      <h2><span data-icon="calendar"></span>مأموریت‌های امروز</h2>
+      <ul id="mission-list" class="mission-list"></ul>
+      <p class="hint">هر مأموریت +۱۵۰ XP · هر روز پشت سر هم بازی کنی جایزه XP بیشتر می‌گیری.</p>
+      <button id="daily-play" class="btn btn-primary"><span class="btn-ico" data-icon="play"></span><b>چالش روزانه — یک مسیر برای همه</b></button>
+      <button id="close-missions" class="btn btn-secondary"><b>بازگشت</b></button>
+    </dialog>
+    <dialog id="garage" class="panel">
+      <h2><span data-icon="car"></span>گاراژ</h2>
+      <div id="paint-list" class="paint-list"></div>
+      <p class="hint">با بالا رفتن سطح، رنگ‌های تازه باز می‌شوند. رنگ فقط ظاهری است.</p>
+      <button id="close-garage" class="btn btn-primary"><b>بازگشت</b></button>
+    </dialog>
+    <dialog id="share-sheet" class="panel share-sheet">
+      <h2><span data-icon="share"></span>رکوردت رو به رخ بکش!</h2>
+      <div class="tabs" role="tablist">
+        <button class="tab active" data-format="story" role="tab">استوری ۹:۱۶</button>
+        <button class="tab" data-format="post" role="tab">پست ۴:۵</button>
+        <button class="tab" data-format="wide" role="tab">X / افقی</button>
+      </div>
+      <div class="preview"><img id="share-preview" alt="پیش‌نمایش کارت اشتراک"><p id="share-hint" class="hint"></p></div>
+      <button id="share-image" class="btn btn-primary"><span class="btn-ico" data-icon="share"></span><b>اشتراک تصویر (اینستاگرام، تلگرام…)</b></button>
+      <div class="net-row">
+        <a id="net-telegram" class="net tg" target="_blank" rel="noopener">تلگرام</a>
+        <a id="net-x" class="net x" target="_blank" rel="noopener">X</a>
+        <a id="net-whatsapp" class="net wa" target="_blank" rel="noopener">واتساپ</a>
+        <button id="save-image" class="net save">ذخیره</button>
+      </div>
+      <button id="copy-link" class="btn btn-secondary"><b>کپی لینک چالش</b></button>
+      <button id="close-share" class="link">بستن</button>
+    </dialog>
+    <dialog id="credits" class="panel credits">
+      <h2>سازندگان</h2>
+      <div class="credit-list">
+        <p><b>موسیقی (OpenGameArt)</b></p>
+        <p>Law In The City — Alexandr Zhelanov (CC-BY 4.0)</p>
+        <p>Neon Action II — Bogart VGM (CC-BY 4.0)</p>
+        <p>Maximum Overdrive — Bogart VGM (CC-BY 3.0)</p>
+        <p>Vice Police — tausdei (CC-BY 3.0)</p>
+        <p>Cold Night — Kim Lightyear (CC-BY 3.0)</p>
+        <p><b>افکت‌ها</b></p>
+        <p>aquinn · qubodup · domasx2 · ggbotnet · pyranostudios · rubberduck · Kenney · lukerustltd (CC0 / CC-BY 3.0)</p>
+        <p><b>فونت‌ها</b> Vazirmatn · Jersey 10 (SIL OFL) · <b>موتور</b> Three.js (MIT)</p>
+        <p>جزئیات کامل: assets/audio/CREDITS.md</p>
+      </div>
+      <button id="close-credits" class="btn btn-primary"><b>بازگشت</b></button>
     </dialog>
   </main>
   <script type="module" src="./src/main.js"></script>

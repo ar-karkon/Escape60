@@ -42,6 +42,8 @@ const SEED = process.env.SEED || "sunset-1";
     dir = dir === "ArrowRight" ? "ArrowLeft" : "ArrowRight";
   }
   await waitTime(chaseAt).catch(() => {});
+  // Avoid freezing on a damage-blink frame (the hero flickers while invulnerable).
+  await p.waitForFunction(() => window.__escape60.clear() || document.body.dataset.view !== "game", null, { timeout: 30000, polling: 20 }).catch(() => {});
   if ((await p.evaluate(() => document.body.dataset.view)) === "game") {
     await freeze(true);
     await p.waitForTimeout(400);
@@ -52,6 +54,19 @@ const SEED = process.env.SEED || "sunset-1";
   await p.waitForTimeout(Number(process.env.RESULT_WAIT || 2500));
   await shot("results");
   console.log((await p.locator("#results").innerText()).replace(/\n+/g, " | "));
+  console.log("audio:", JSON.stringify(await p.evaluate(() => window.__escape60.audioState())));
+  // Share sheet + the three social card formats (rendered from the real results scene).
+  const fs = require("node:fs");
+  await p.locator("#share").click();
+  for (const fmt of ["story", "post", "wide"]) {
+    await p.locator(`.tab[data-format="${fmt}"]`).click();
+    await p.waitForFunction(() => document.querySelector("#share-preview").src.startsWith("data:"), null, { timeout: 120000 });
+    await p.waitForTimeout(400);
+    if (fmt === "story") await shot("share-sheet");
+    const data = await p.evaluate(() => document.querySelector("#share-preview").src);
+    fs.writeFileSync(path.join(OUT, `share-${fmt}.jpg`), Buffer.from(data.split(",")[1], "base64"));
+    await p.evaluate(() => document.querySelector("#share-preview").removeAttribute("src"));
+  }
   console.log(errors.length ? "Console errors:\n" + errors.join("\n") : "No console errors.");
   await browser.close();
 })().catch((e) => { console.error(e); process.exit(1); });

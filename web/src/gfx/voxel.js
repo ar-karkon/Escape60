@@ -82,7 +82,11 @@ void pattern(int pid, inout vec3 base, inout vec3 emit, inout float refl, inout 
     vec2 lo=style<1.?vec2(.2,.28):style<2.?vec2(.12,.3):style<3.?vec2(.26,.22):vec2(.16,.2);
     vec2 hi=style<1.?vec2(.8,.84):style<2.?vec2(.88,.8):style<3.?vec2(.74,.86):vec2(.84,.86);
     bool inside=g.x>=0.&&g.x<fw-2.*margin&&g.y>=0.;
-    if(inside&&f.x>lo.x&&f.x<hi.x&&f.y>lo.y&&f.y<hi.y){
+    vec2 cf=(f-vec2(.5,.56))*vec2(cw,ch);
+    bool port=style==3.;
+    bool shape=port?length(cf)<.52:(f.x>lo.x&&f.x<hi.x&&f.y>lo.y&&f.y<hi.y);
+    if(port&&inside&&!shape&&length(cf)<.68){base*=1.4;}
+    else if(inside&&shape){
       float r=h12(cell+seed*7.13+floor(wp.xz*.031)*3.1);
       float r2=h12(cell.yx*1.7+seed);
       if(r<.47){
@@ -164,7 +168,7 @@ void pattern(int pid, inout vec3 base, inout vec3 emit, inout float refl, inout 
       float crack=step(.985,h12(floor(wp.xz*3.)))*step(au,7.);
       base*=1.-crack*.35;
     }
-    base*=1.-wet*.5; refl=wet*.6; spec=wet*1.2;
+    base*=1.-wet*.55; refl=wet*.72; spec=wet*1.3;
   }else if(pid==${P.TILE}){
     float s=q<1.?1.:q<2.?.8:.6;
     vec2 g=uv/s; vec2 f=fract(g);
@@ -177,7 +181,8 @@ void pattern(int pid, inout vec3 base, inout vec3 emit, inout float refl, inout 
     float w=sin(p.x*.9+uTime*1.4+sin(p.y*.5+uTime*.7)*1.6)+sin(p.y*1.3-uTime*1.1);
     float band=step(.75,fract(floor(p.y*3.)*.37+w*.18+uTime*.05));
     base=mix(base,base*1.6,band*.6);
-    refl=.7+band*.2; spec=2.;
+    refl=1.9+band*.5; spec=2.6;
+    emit+=mix(vec3(.02,.12,.16),vec3(.25,.08,.2),.5+.5*sin(p.x*.05+p.y*.03))*.35;
     float sp=step(.985,h12(floor(p*3.)+floor(uTime*4.)));
     emit+=vec3(1.,.8,.6)*sp*.6;
   }else if(pid==${P.SAND}){

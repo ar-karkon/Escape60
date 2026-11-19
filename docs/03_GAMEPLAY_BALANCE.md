@@ -35,3 +35,16 @@ Inescapable ambushes, abrupt acceleration without warning, unreadable police car
 ## Implemented in simulation 1.1.0
 
 At 10 seconds a second patrol joins. At 25 seconds a third patrol and the first roadblock appear. From 40 seconds the cap rises to five, then six at 55 seconds with a final barrier. Patrols alternate their pursuit lead distance. Damage sets speed to 205 units/s and grants 0.95 seconds of immunity. Highway speed caps at 279 units/s. Downtown traffic intervals are 85% of the standard interval. Old Town has 80-unit-wide alleys. Replay uses the same rules on the Node origin.
+
+## Implemented in simulation 1.2.0 (skill chain)
+
+Pursuit timing, speeds, damage and colliders are unchanged from 1.1.0. Scoring adds a **skill chain**:
+- Near miss: police 90, traffic 55 (as before). New: passing within 72 units of a roadblock without touching it is a **dodge** worth 120 (once per barrier).
+- Each skill event within `COMBO_WINDOW` = 3.5 s of the previous one raises the chain; the multiplier is `min(5, chain)` and applies to that event's points (×1…×5).
+- Hard drifting (|steer| > 0.82) keeps an active chain alive for at least 1.2 s and its 8-point ticks are multiplied too.
+- Any hit resets the chain. `gameResult` now also reports `bestChain` and `dodges`.
+- Ranking is still survival time first, points second. The server replays the trace with the same code, so a combo score cannot be claimed without the inputs that produce it. Local and server leaderboards use the new version key `1.2.0`, so 1.1.0 records are not mixed in.
+- Tests: `tests/simulation.test.mjs` covers chain growth, reset on hit, expiry and the single dodge award.
+
+## Meta progression (client only, cosmetic)
+XP per run = time/100 ms + points/4 + 250 on a win + 15 × best chain + 40 × dodge, +10% per consecutive day (max +50%), +150 per completed daily mission. Levels unlock eight paint jobs (cosmetic). Three daily missions are picked deterministically from the UTC date. Everything is stored in `localStorage` on the device; nothing affects the simulation or ranking.

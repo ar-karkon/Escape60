@@ -37,6 +37,11 @@ const assert = require("node:assert/strict");
     await p.locator("#motion").check();
     await p.locator("#motion").uncheck();
     await p.locator("#close-config").tap();
+    await p.locator("#garage-open").tap();
+    await p.locator("#close-garage").tap();
+    await p.locator("#missions-open").tap();
+    assert.equal(await p.locator("#mission-list li").count(), 3);
+    await p.locator("#close-missions").tap();
     await p.locator("#board").tap();
     await p.locator("#close-board").tap();
     await p.locator("#play").tap();
@@ -60,10 +65,15 @@ const assert = require("node:assert/strict");
     await shot("results");
     console.log(await p.locator("#results").innerText());
     await p.locator("#share").tap();
-    assert.match(
-      await p.evaluate(() => navigator.clipboard.readText()),
-      /seed=sunset-1/,
-    );
+    await p.locator("#share-sheet").waitFor();
+    await p.waitForFunction(() => document.querySelector("#share-preview").src.startsWith("data:image"), null, { timeout: 120000 });
+    await p.locator("#copy-link").tap();
+    const copied = await p.evaluate(() => navigator.clipboard.readText());
+    assert.match(copied, /seed=sunset-1/);
+    assert.match(copied, /[?&]c=\d+\.\d+/);
+    assert.match(await p.locator("#net-telegram").getAttribute("href"), /^https:\/\/t\.me\/share\/url\?/);
+    assert.match(await p.locator("#net-x").getAttribute("href"), /^https:\/\/x\.com\/intent\/post\?/);
+    await p.locator("#close-share").tap();
     await p.locator("#replay").tap();
     await p.locator("#hud").waitFor();
     const cdp = await ctx.newCDPSession(p),

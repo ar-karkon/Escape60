@@ -31,7 +31,7 @@ export function createFX(scene) {
   const smokeMat = new T.MeshLambertMaterial({ color: 0xffffff });
   const sparkMat = new T.MeshBasicMaterial({ color: 0xffffff });
   const skidMat = new T.ShaderMaterial({ vertexShader: SKID_VERT, fragmentShader: SKID_FRAG, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
-  const smoke = new Pool(scene, smokeMat, 160);
+  const smoke = new Pool(scene, smokeMat, 320);
   const sparks = new Pool(scene, sparkMat, 140);
   const skids = new Pool(scene, skidMat, 360);
   skids.mesh.renderOrder = 1;

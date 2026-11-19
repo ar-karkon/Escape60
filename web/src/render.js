@@ -142,7 +142,7 @@ export function createRenderer(canvas) {
   // State
   let lastTime = 0, cost = 16, scale = 1, slowFrames = 0, fastFrames = 0;
   let prevGame = null, heading = 0, lastAngle = 0, steerVis = 0, eventIndex = 0, shake = 0, flash = 0, flashCol = new T.Color();
-  let wheelRot = 0, skidTimer = 0, lastDrift = 0, endTime = 0, menuStart = 0;
+  let wheelRot = 0, skidTimer = 0, lastDrift = 0, endTime = 0, menuStart = 0, comboPulse = 0, paintKey = "";
   const seenTmp = new Set();
   const demo = {
     police: [{ x: -36, y: 0, angle: Math.PI / 2, speed: 70 }, { x: 30, y: 0, angle: Math.PI / 2, speed: 70 }],
@@ -174,7 +174,7 @@ export function createRenderer(canvas) {
     return a > b ? 1 : -1;
   }
 
-  return function draw(game, t, opts = {}) {
+  function draw(game, t, opts = {}) {
     const { reducedMotion = false, low = false, seed = "", alpha = 0, countdown = 0, lockHigh = false } = opts;
     const dt = Math.max(0.0001, Math.min(0.1, (t - lastTime) / 1000));
     lastTime = t;
@@ -243,7 +243,10 @@ export function createRenderer(canvas) {
     const dirx = Math.cos(angle), dirz = Math.sin(angle);
     const ahead = game ? 50 : -25;
     ensureTiles(game?.seed ?? seed, px + dirx * ahead, pz + dirz * ahead, camInit ? 7 : -1);
-    for (const a of animated) a.rotation.x += (a.userData.spin || 0) * dt * (reducedMotion ? 0.2 : 1);
+    for (const a of animated) {
+      if (a.userData.update) a.userData.update(t / 1000, dt);
+      else a.rotation.x += (a.userData.spin || 0) * dt * (reducedMotion ? 0.2 : 1);
+    }
 
     // ---------- actors ----------
     if (!game) {
@@ -272,7 +275,7 @@ export function createRenderer(canvas) {
         const ox = o.position.x, oz = o.position.z;
         const k = reducedMotion ? 0.35 : 0.55;
         dyn.add(GLOW.POOL, ox, 0.07, oz, 5.2, 5.2, 0, side > 0 ? RED : BLUE, k);
-        dyn.add(GLOW.STREAK, ox, 0.06, oz, 1.2, 11, 0, side > 0 ? RED : BLUE, 0.9);
+        dyn.add(GLOW.STREAK, ox, 0.06, oz, 1.4, 13, 0, side > 0 ? RED : BLUE, 1.2);
         const a = -o.rotation.y - Math.PI / 2;
         dyn.add(GLOW.CONE, ox + Math.cos(a) * 2.6, 0.06, oz + Math.sin(a) * 2.6, 2.6, 11, a, WARM, 0.22);
       }
@@ -313,8 +316,8 @@ export function createRenderer(canvas) {
     const hx = Math.cos(ha), hz = Math.sin(ha);
     dyn.add(GLOW.CONE, px + hx * 2.8, 0.07, pz + hz * 2.8, 3.6, 15, ha, WARM, 0.32);
     dyn.add(GLOW.POOL, px, 0.07, pz, 1.9, 3.4, ha, t % 1600 < 800 || reducedMotion ? CYAN : PINK, 0.42);
-    dyn.add(GLOW.STREAK, px - hx * 2.85 - hz * 0.85, 0.06, pz - hz * 2.85 + hx * 0.85, 0.5, 6, 0, RED, 0.75);
-    dyn.add(GLOW.STREAK, px - hx * 2.85 + hz * 0.85, 0.06, pz - hz * 2.85 - hx * 0.85, 0.5, 6, 0, RED, 0.75);
+    dyn.add(GLOW.STREAK, px - hx * 2.85 - hz * 0.85, 0.06, pz - hz * 2.85 + hx * 0.85, 0.55, 7, 0, RED, 1);
+    dyn.add(GLOW.STREAK, px - hx * 2.85 + hz * 0.85, 0.06, pz - hz * 2.85 - hx * 0.85, 0.55, 7, 0, RED, 1);
     dyn.add(GLOW.HALO, px - hx * 2.85, 0.9, pz - hz * 2.85, 1.6, 0, 0, RED, 0.25);
     headSpot.position.set(px + hx * 2.2, 1.3, pz + hz * 2.2);
     headSpot.target.position.set(px + hx * 14, 0, pz + hz * 14);
@@ -325,8 +328,8 @@ export function createRenderer(canvas) {
     if (heli.visible) {
       const ht = t / 1000;
       const sway2 = Math.sin(ht * 0.35) * 5;
-      const hx2 = px + Math.cos(heading) * 44 - Math.sin(heading) * sway2, hz2 = pz + Math.sin(heading) * 44 + Math.cos(heading) * sway2;
-      heli.position.set(hx2, 15.5 + Math.sin(ht * 0.8) * 0.8, hz2);
+      const hx2 = px + Math.cos(heading) * 34 - Math.sin(heading) * sway2, hz2 = pz + Math.sin(heading) * 34 + Math.cos(heading) * sway2;
+      heli.position.set(hx2, 12.8 + Math.sin(ht * 0.8) * 0.6, hz2);
       heli.rotation.set(0.12, Math.atan2(hx2 - px, hz2 - pz), 0.08 * Math.sin(ht));
       heli.userData.rotor.rotation.y += dt * 28;
       heli.userData.tail.rotation.x += dt * 30;
@@ -349,8 +352,11 @@ export function createRenderer(canvas) {
         } else if (e.type === "scrape" && !reducedMotion) {
           for (let k = 0; k < 5; k++) fx.spark(px + hx * 2, 0.6, pz + hz * 2, 7, 0xffd27a, 3);
           shake = Math.max(shake, 0.35);
-        } else if (e.type === "near") {
-          flash = Math.max(flash, 0.12); flashCol.setRGB(0.25, 0.9, 1);
+        } else if (e.type === "near" || e.type === "dodge") {
+          const m = e.mult || 1;
+          flash = Math.max(flash, 0.1 + 0.05 * m); flashCol.setRGB(m >= 3 ? 1 : 0.25, m >= 3 ? 0.4 : 0.9, 1);
+          if (!reducedMotion) for (let k = 0; k < 4 + m * 3; k++) fx.spark(px + (Math.random() - 0.5) * 3, 1.2, pz + (Math.random() - 0.5) * 3, 5 + m, m >= 3 ? 0xff5d95 : 0x3dd8e7, 2.5);
+          comboPulse = 1;
         } else if (e.type === "win") {
           flash = 0.4; flashCol.setRGB(1, 0.85, 0.4);
         } else if (e.type === "end") {
@@ -361,10 +367,10 @@ export function createRenderer(canvas) {
     if (!reducedMotion && !low && speed > 0) {
       const rx = px - hx * 2.1, rz = pz - hz * 2.1;
       if (drift > 0.3) {
-        const n = Math.random() < dt * 45 * drift ? 2 : 0;
+        const n = Math.min(6, Math.floor(dt * 70 * drift + Math.random()));
         for (let k = 0; k < n; k++) {
-          const s = k ? 1 : -1;
-          fx.puff(rx - hz * 1.15 * s, 0.35, rz + hx * 1.15 * s, -hx * 2 + (Math.random() - 0.5) * 2.5, -hz * 2 + (Math.random() - 0.5) * 2.5, Math.random() < 0.5 ? 0xf6e2ee : 0xd9c4e8, 1.1);
+          const s = k % 2 ? 1 : -1;
+          fx.puff(rx - hz * 1.15 * s + (Math.random() - 0.5) * 0.6, 0.4, rz + hx * 1.15 * s + (Math.random() - 0.5) * 0.6, -hx * 3 + (Math.random() - 0.5) * 3, -hz * 3 + (Math.random() - 0.5) * 3, Math.random() < 0.5 ? 0xf6e2ee : 0xe3cdf0, 1.25 + drift * 0.9);
         }
         skidTimer += dt;
         if (skidTimer > 0.045) {
@@ -429,6 +435,8 @@ export function createRenderer(canvas) {
       camera.position.y += (Math.random() - 0.5) * shake * 0.5;
       shake = Math.max(0, shake - dt * 3.2);
     }
+    if (!reducedMotion) fov += comboPulse * 5;
+    comboPulse = Math.max(0, comboPulse - dt * 3);
     camera.fov += (fov - camera.fov) * Math.min(1, dt * 4);
     camera.updateProjectionMatrix();
     camera.up.set(playing && !reducedMotion ? steerVis * 0.035 : 0, 1, 0).normalize();
@@ -476,5 +484,32 @@ export function createRenderer(canvas) {
         break;
       }
     }
+  }
+  draw.setPaint = (body, stripe) => {
+    const key = body + "/" + stripe;
+    if (key === paintKey) return;
+    paintKey = key;
+    const old = hero.userData.body.geometry;
+    hero.userData.body.geometry = heroBody(body, stripe);
+    old.dispose();
   };
+  /** Render the current view at a share-card resolution and return a 2D canvas copy. */
+  draw.snapshot = (w, h) => {
+    const pw = canvas.width, ph = canvas.height, aspect = camera.aspect;
+    renderer.setSize(w, h, false);
+    post.setSize(w, h);
+    camera.aspect = w / h;
+    camera.updateProjectionMatrix();
+    post.uniforms.uFlash.value = 0;
+    post.render(scene, camera, true);
+    const out = document.createElement("canvas");
+    out.width = w; out.height = h;
+    out.getContext("2d").drawImage(canvas, 0, 0);
+    renderer.setSize(pw, ph, false);
+    post.setSize(pw, ph);
+    camera.aspect = aspect;
+    camera.updateProjectionMatrix();
+    return out;
+  };
+  return draw;
 }

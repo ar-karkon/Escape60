@@ -84,7 +84,7 @@ export function lampClassic(b, g, x, z, yaw = 0) {
   if (g) {
     g.add(GLOW.POOL, x, 0.24, z, 3.2, 3.2, 0, 0xff9a5a, 0.22);
     g.add(GLOW.HALO, x, 5.3, z, 1.5, 0, 0, WARM, 0.45);
-    g.add(GLOW.STREAK, x, 0.05, z, 0.9, 11, 0, WARM, 0.55);
+    g.add(GLOW.STREAK, x, 0.05, z, 1, 13, 0, WARM, 0.8);
   }
 }
 export function lampArm(b, g, x, z, dirX, dirZ) {
@@ -100,7 +100,7 @@ export function lampArm(b, g, x, z, dirX, dirZ) {
     const lx = ax + dirX * 0.4, lz = az + dirZ * 0.4;
     g.add(GLOW.POOL, lx, 0.06, lz, 4, 4, 0, 0xffa060, 0.22);
     g.add(GLOW.HALO, lx, 6.55, lz, 1.4, 0, 0, 0xffd9a0, 0.4);
-    g.add(GLOW.STREAK, lx, 0.05, lz, 1, 12, 0, 0xffd9a0, 0.5);
+    g.add(GLOW.STREAK, lx, 0.05, lz, 1.1, 14, 0, 0xffd9a0, 0.75);
   }
 }
 

@@ -20,3 +20,10 @@ Simulation, scoring, daily seed and server replay are unchanged (`SIM_VERSION` 1
 - FX: voxel drift smoke, skid marks, sparks, exhaust pops, confetti on win, hit flash, desaturation on bust.
 - UI: one clean pixel stylesheet, new logo, icon set, countdown, event popups, banners, wanted sirens, laurel results card; Vazirmatn + Jersey 10 bundled locally (OFL).
 - Tooling: `npm run capture` (real 390×780 screenshots), `scripts/make-comparison.cjs`, `npm run logo`, syntax check of all modules.
+
+## 2.0 — sound, progression, sharing, visual gaps — 2026-11-19
+- **Simulation 1.2.0** (browser + server replay, tests): skill chain multiplier ×1…×5, roadblock dodge award, `bestChain` / `dodges` in results. Physics, pursuit timing and colliders unchanged.
+- **Audio:** 5 licensed synthwave tracks + recorded SFX (OpenGameArt CC0 / CC-BY), engine pitch with speed, tyre squeal on drift, siren loudness/pan from the nearest police car, helicopter loop, crash/whoosh/horn/combo stingers, ducking, low-pass on pause, music/SFX toggles, in-game credits. Static server now serves audio MIME types and byte ranges.
+- **Progression:** XP, levels, 8 paint jobs (garage), 3 daily missions, day streak, best/friend markers on the timer bar, "new record" popups, final-5-seconds countdown beeps.
+- **Sharing:** share sheet with Story 9:16, Post 4:5 and Wide 16:9 cards rendered from the real results scene with QR challenge link; native image share, Telegram / X / WhatsApp links, save, copy; friend-challenge banner and verdict.
+- **Visual gaps:** Ocean-Drive coastline along the starting boulevard (open bay with pier, lighthouse and moving boats), rounded Art Deco corner towers, spire / fin crowns, porthole windows, decorative traffic on overpasses, lower helicopter in the chase frame, much denser drift smoke, stronger wet reflections, brighter water, combo bursts and FOV kick.

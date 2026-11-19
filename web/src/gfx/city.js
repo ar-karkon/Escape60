@@ -178,7 +178,7 @@ function storefront(b, g, f, rand, y0 = 0.2, h = GROUND - 0.2, signs = true, inn
       else r(b, name, x, y0 + h + 0.95, z, w, hh, 0.2, f.bit, { flicker: rand() < 0.15 ? 3 : 0 });
       if (g) {
         const [sx, sz] = onFace(f, s, 2.6);
-        g.add(GLOW.STREAK, sx, 0.05, sz, 0.8, 7, 0, NEONS[k % NEONS.length], 0.3);
+        g.add(GLOW.STREAK, sx, 0.05, sz, 0.9, 9, 0, NEONS[k % NEONS.length], 0.5);
       }
     }
     if (g && !inner) {
@@ -209,12 +209,12 @@ function decoHotel(b, g, lot, rand, floors) {
   body(b, x0, z0, x1, z1, GROUND, H, color, lot.street, P.WIN, (rand() < 0.5 ? 0 : 2) + 4 * Math.floor(rand() * 60), { v0: 0 }, arc ? 0 : SKIP.NY);
   if (!arc) for (const f of faces) storefront(b, g, f, rand);
   ledges(b, lot, faces, GROUND, H - FLOOR, FLOOR, trim);
-  // vertical corner fins with neon
+  // rounded Art Deco corner towers with neon rings on street corners
   for (const [cx, cz] of [[x0, z0], [x1, z0], [x0, z1], [x1, z1]]) {
-    const st = (cx === x0 ? lot.street.nx : lot.street.px) || (cz === z0 ? lot.street.nz : lot.street.pz);
+    const sx = cx === x0 ? -1 : 1, sz = cz === z0 ? -1 : 1;
+    const st = (sx < 0 ? lot.street.nx : lot.street.px) || (sz < 0 ? lot.street.nz : lot.street.pz);
     if (!st) continue;
-    b.box(cx, (GROUND + H) / 2, cz, 0.7, H - GROUND, 0.7, trim, { n: 0.15 });
-    b.box(cx + (cx === x0 ? -0.37 : 0.37), (GROUND + H) / 2 + 0.5, cz + (cz === z0 ? -0.37 : 0.37), 0.12, H - GROUND - 1, 0.12, accent, { p: P.NEON, e: 3.4, n: 0 });
+    roundCorner(b, cx, cz, sx, sz, GROUND, H + 0.6, shade(color, 1.06), accent);
   }
   // balconies on the main facade centre
   const main = faces[0];
@@ -227,7 +227,7 @@ function decoHotel(b, g, lot, rand, floors) {
     if (main.axis === "z") prop.signBox(b, name, x, GROUND + 1 + h / 2, z, 1.4, h, 0.35, [16, 32], {});
     else prop.signBox(b, name, x, GROUND + 1 + h / 2, z, 0.35, h, 1.4, [1, 2], {});
     // also visible from the street axis: emit a streak
-    if (g) { const [sx, sz] = onFace(main, main.len * 0.3, 4); g.add(GLOW.STREAK, sx, 0.05, sz, 1, 12, 0, accent, 0.45); }
+    if (g) { const [sx, sz] = onFace(main, main.len * 0.3, 4); g.add(GLOW.STREAK, sx, 0.05, sz, 1.1, 14, 0, accent, 0.7); }
   }
   // stepped crown
   const ix0 = x0 + 1.4, iz0 = z0 + 1.4, ix1 = x1 - 1.4, iz1 = z1 - 1.4;
@@ -243,7 +243,34 @@ function decoHotel(b, g, lot, rand, floors) {
     if (main && main.axis === "z") prop.signBox(b, sname, main.nx < 0 ? ix0 - 0.2 : ix1 + 0.2, H + crownH + 1.1, r2.z, 0.3, w / 3, w, main.bit, {});
     else if (main) prop.signBox(b, sname, r2.x, H + crownH + 1.1, main.nz < 0 ? iz0 - 0.2 : iz1 + 0.2, w, w / 3, 0.3, main.bit, {});
   }
-  rooftopClutter(b, ix0, iz0, ix1, iz1, H + crownH, rand, 2);
+  const ccx = (ix0 + ix1) / 2, ccz = (iz0 + iz1) / 2, top = H + crownH;
+  const crown = rand();
+  if (crown < 0.4) {
+    // stepped spire with neon rings and a blinking tip
+    for (let k = 0; k < 3; k++) {
+      const w2 = 3.2 - k * 0.9, y2 = top + k * 1.6;
+      b.box(ccx, y2 + 0.8, ccz, w2, 1.6, w2, trim, { n: 0.15 });
+      b.box(ccx, y2 + 1.62, ccz, w2 + 0.12, 0.12, w2 + 0.12, accent, { p: P.NEON, e: 3.4, n: 0 });
+    }
+    b.box(ccx, top + 7, ccz, 0.3, 3.6, 0.3, 0xe8e2ee);
+    b.box(ccx, top + 9, ccz, 0.4, 0.4, 0.4, 0xff2d4a, { p: P.NEON, q: 24, e: 6 });
+  } else if (crown < 0.75 && main) {
+    // Deco fin: tall vertical slab with neon edges facing the main street
+    const along = main.axis === "z";
+    const fw = Math.min(5, (along ? iz1 - iz0 : ix1 - ix0) - 1), fh = 6 + rand() * 4;
+    b.box(ccx, top + fh / 2, ccz, along ? 0.5 : fw, fh, along ? fw : 0.5, trim, { n: 0.15 });
+    for (const sgn of [-1, 1]) b.box(along ? ccx : ccx + sgn * fw / 2, top + fh / 2, along ? ccz + sgn * fw / 2 : ccz, 0.16, fh, 0.16, accent, { p: P.NEON, e: 3.6, n: 0 });
+    b.box(ccx, top + fh + 0.08, ccz, along ? 0.6 : fw + 0.16, 0.16, along ? fw + 0.16 : 0.6, accent, { p: P.NEON, e: 3.6, n: 0 });
+  }
+  rooftopClutter(b, ix0, iz0, ix1, iz1, top, rand, 2);
+}
+function roundCorner(b, cx, cz, sx, sz, y0, y1, color, accent) {
+  const r = 1.8, x = cx - sx * 0.8, z = cz - sz * 0.8, h = y1 - y0;
+  for (const ry of [0, Math.PI / 4]) {
+    b.box(x, (y0 + y1) / 2, z, r, h, r, color, { n: 0.2, ry, ao: true });
+    for (let y = y0 + FLOOR; y < y1 - 0.5; y += FLOOR * 2) b.box(x, y, z, r + 0.14, 0.14, r + 0.14, accent, { p: P.NEON, e: 3, n: 0, ry });
+    b.box(x, y1 + 0.1, z, r + 0.3, 0.2, r + 0.3, 0xfff4e6, { ry, n: 0.1 });
+  }
 }
 
 /* Glass tower with podium, curtain wall, crown lights and antenna. */
@@ -432,6 +459,29 @@ function rooftopClutter(b, x0, z0, x1, z1, y, rand, n) {
   }
 }
 
+/* ---------------- Ambient movers (never interact with the simulation) ---------------- */
+function moverCar(color) {
+  const b = new VoxelBuilder(256);
+  b.box(0, 0.62, 0, 2.3, 0.7, 4.6, color, { p: P.PAINT, n: 0.3 });
+  b.box(0, 1.25, 0.3, 1.9, 0.6, 2.4, color, { faces: { 1: { p: P.GLASS }, 2: { p: P.GLASS }, 16: { p: P.GLASS }, 32: { p: P.GLASS } } });
+  for (const s of [-1, 1]) {
+    b.box(s * 0.75, 0.68, -2.32, 0.5, 0.2, 0.06, 0xfff3d6, { p: P.LIGHT, e: 5, n: 0 });
+    b.box(s * 0.8, 0.7, 2.32, 0.5, 0.18, 0.06, 0xff2d4a, { p: P.LIGHT, e: 4, n: 0 });
+    for (const z of [-1.5, 1.5]) b.box(s * 1.1, 0.42, z, 0.3, 0.84, 0.84, 0x15131c);
+  }
+  return new T.Mesh(b.geometry(), null);
+}
+function moverBoat(rand) {
+  const b = new VoxelBuilder(512);
+  const hull = pick(rand, [0xf4f1ec, 0xffe37c, 0xff5d95, 0x3dd8e7]);
+  b.hexa([[-0.2, -0.3, -3], [0.2, -0.3, -3], [-0.3, 0.7, -3.6], [0.3, 0.7, -3.6], [-1.2, -0.4, 2.6], [1.2, -0.4, 2.6], [-1.4, 0.7, 2.6], [1.4, 0.7, 2.6]], hull, { n: 0.15 });
+  b.box(0, 1.1, 0.6, 1.6, 0.8, 2.2, 0xf4f1ec, { faces: { 1: { p: P.GLASS }, 2: { p: P.GLASS }, 32: { p: P.GLASS } } });
+  b.box(0, 1.65, 0.6, 0.15, 0.6, 0.15, 0xe8e6ee);
+  b.box(0, 2.0, 0.6, 0.25, 0.25, 0.25, 0xffe0a0, { p: P.LIGHT, e: 5 });
+  b.box(0, 0.35, 2.75, 1.0, 0.2, 0.3, 0xfff1d0, { p: P.LIGHT, e: 2 });
+  return new T.Mesh(b.geometry(), null);
+}
+
 /* ---------------- District 0: waterfront ---------------- */
 function yacht(b, x, z, yaw, len, rand) {
   const prevYaw = b.oyaw, pox = b.ox, poz = b.oz;
@@ -448,8 +498,9 @@ function yacht(b, x, z, yaw, len, rand) {
   b.box(0, 4.15, L * 0.3, 0.2, 0.2, 0.2, 0x5dffb0, { p: P.NEON, e: 4, q: 24 });
   b.frame(pox, b.oy, poz, prevYaw);
 }
-function waterfront(b, g, rand, i, j, animated) {
-  const variant = Math.floor(rand() * 4);
+function waterfront(b, g, rand, i, j, animated, coast = false) {
+  const vr = rand();
+  const variant = coast ? (vr < 0.45 ? 4 : vr < 0.75 ? 0 : vr < 0.88 ? 1 : 3) : Math.floor(vr * 5);
   const water = 0x0f5f78;
   const inner0 = CB, inner1 = CE;
   // railings + bollards + lamps along the promenade (sea wall at collider edge)
@@ -458,8 +509,32 @@ function waterfront(b, g, rand, i, j, animated) {
   ];
   for (const [ax, az, bx, bz] of edges) prop.railing(b, ax, az, bx, bz, 0.2, 0xf4ece4);
   const fill = (y, color, p) => b.flat(MID, y, MID, inner1 - inner0, inner1 - inner0, color, { p, n: 0.2 });
-  if (variant === 0 || variant === 3) {
-    fill(-0.75, water, P.WATER);
+  if (variant === 4) {
+    // open bay: clear water view, a pier with a striped lighthouse and boats cruising
+    fill(-0.32, water, P.WATER);
+    const pz = MID + (rand() - 0.5) * 10;
+    b.box(MID + 4, -0.2, pz, 18, 0.25, 2.4, 0xa0663f, { p: P.WOOD, n: 0.3 });
+    for (let x = MID - 4; x <= MID + 12; x += 3) for (const s of [-1, 1]) b.box(x, -0.6, pz + s * 1.15, 0.3, 1.0, 0.3, 0x6b4a3a);
+    for (const s of [-1, 1]) prop.railing(b, MID - 5, pz + s * 1.15, MID + 13, pz + s * 1.15, -0.1, 0xf4ece4);
+    const lx = CE - 3.2, lz = pz;
+    for (let k = 0; k < 6; k++) b.box(lx, 0.2 + k * 1.1 + 0.55, lz, 2 - k * 0.12, 1.1, 2 - k * 0.12, k % 2 ? 0xfff4e6 : 0xe23b4c, { n: 0.2, ao: k === 0 });
+    b.box(lx, 7.4, lz, 1.4, 1.2, 1.4, 0xfff1c0, { p: P.LIGHT, e: 6 });
+    b.box(lx, 8.2, lz, 1.7, 0.4, 1.7, 0x2a2340);
+    if (g) { g.add(GLOW.HALO, lx, 7.4, lz, 4, 0, 0, 0xfff1c0, 0.35); g.add(GLOW.STREAK, lx - 6, 0.05, lz, 2, 14, 0, 0xfff1c0, 0.4); }
+    for (let k = 0; k < 3; k++) {
+      const boat = moverBoat(rand);
+      const lane = inner0 + 4 + k * 8 + rand() * 2, phase = rand() * 6, spd = 0.12 + rand() * 0.1, dir = k % 2 ? 1 : -1;
+      boat.userData.update = (t) => {
+        const u = Math.sin(t * spd + phase);
+        boat.position.set(MID + u * 9, -0.2 + Math.sin(t * 1.7 + phase) * 0.08, lane);
+        boat.rotation.y = (Math.cos(t * spd + phase) * dir > 0 ? Math.PI / 2 : -Math.PI / 2) + Math.sin(t * 1.3 + phase) * 0.04;
+      };
+      boat.userData.update(0);
+      animated.push(boat);
+    }
+    for (let k = 0; k < 4; k++) b.box(inner0 + 2 + rand() * 25, -0.55, inner0 + 2 + rand() * 25, 0.45, 0.45, 0.45, k % 2 ? 0xff6b2c : 0xfff4e6);
+  } else if (variant === 0 || variant === 3) {
+    fill(-0.32, water, P.WATER);
     // docks
     const dz = MID + (rand() - 0.5) * 6;
     b.box(MID - 2, -0.2, dz, inner1 - inner0 - 6, 0.25, 2.2, 0xa0663f, { p: P.WOOD, n: 0.3 });
@@ -472,7 +547,7 @@ function waterfront(b, g, rand, i, j, animated) {
   } else if (variant === 1) {
     // beach + shallow water
     const split = MID + 2;
-    b.flat(MID, -0.75, (split + inner1) / 2, inner1 - inner0, inner1 - split, water, { p: P.WATER });
+    b.flat(MID, -0.32, (split + inner1) / 2, inner1 - inner0, inner1 - split, water, { p: P.WATER });
     b.box(MID, -0.25, (inner0 + split) / 2, inner1 - inner0, 1.0, split - inner0, 0xf3cf9b, { topP: P.SAND, n: 0.4, skip: SKIP.NY });
     b.box(MID, -0.62, split + 1, inner1 - inner0, 0.3, 2, 0xd8b383, { p: P.SAND });
     for (let k = 0; k < 5; k++) {
@@ -550,7 +625,7 @@ function ferrisWheel(b, g, rand, animated) {
 }
 
 /* ---------------- District 2 extra: elevated highway overpass ---------------- */
-function overpass(b, g, rand) {
+function overpass(b, g, rand, animated) {
   const z = MID + (rand() < 0.5 ? -4 : 4), y = 12.6, w = 7;
   // abutment towers inside both footprints
   for (const s of [-1, 1]) {
@@ -565,6 +640,19 @@ function overpass(b, g, rand) {
   for (let x = -7.5; x <= 7.5; x += 5) {
     b.box(x, y - 0.75, z, 0.8, 0.1, 0.8, 0xfff1d0, { p: P.LIGHT, e: 4 });
     if (g) g.add(GLOW.POOL, x, 0.06, z, 3.2, 3.2, 0, 0xffe0b0, 0.25);
+  }
+  // ambient traffic crossing the deck (purely decorative, high above the playable road)
+  for (let k = 0; k < 3; k++) {
+    const car = moverCar(pick(rand, [0x19b8bc, 0xffe37c, 0xff5d95, 0xf2f0ea, 0x8d54e9]));
+    const dir = k % 2 ? 1 : -1, lane = z + (dir > 0 ? 1.6 : -1.6), off = rand() * 30, spd = 9 + rand() * 4;
+    car.userData.update = (t) => {
+      const u = ((t * spd + off) % 34) - 17;
+      car.position.set(u * dir, y + 0.7, lane);
+      car.rotation.y = dir > 0 ? -Math.PI / 2 : Math.PI / 2;
+      car.visible = Math.abs(u) < 15.5;
+    };
+    car.userData.update(0);
+    animated.push(car);
   }
   // highway sign hanging under deck facing both ways
   prop.signBox(b, "exit", -3.5, y - 1.7, z - w / 2 - 0.1, 5.2, 1.7, 0.2, 32, { frame: 0x0f6b4d, e: 1.6 });
@@ -691,7 +779,11 @@ function infill(b, lot) {
 /** Build one city tile. Returns { object, animated }. */
 export function buildChunk(seed, i, j, mats) {
   const rand = rng(seed + "/" + i + "/" + j);
-  const area = district(i, j);
+  const simArea = district(i, j);
+  // Visual theme. Footprints of districts 0-2 are identical in the simulation, so the east side of
+  // the starting boulevard becomes a continuous coastline (Ocean Drive) and the west side hotels.
+  const coast = simArea !== 3 && i === 0 && j <= 0;
+  const area = coast ? 0 : simArea === 0 && i === -1 && j <= 0 ? 1 : simArea;
   const b = new VoxelBuilder(16384);
   const g = new GlowBuilder(220);
   const animated = [];
@@ -702,7 +794,7 @@ export function buildChunk(seed, i, j, mats) {
     else if (rand() < 0.5) for (const at of [16, 36]) overheadLights(b, true, at);
     if (rand() < 0.35) for (const at of [16, 36]) overheadLights(b, false, at);
   }
-  if (area === 0) waterfront(b, g, rand, i, j, animated);
+  if (area === 0) waterfront(b, g, rand, i, j, animated, coast);
   else if (area === 3) {
     const lo = [CB, MID + 4], size = 10.6;
     for (const x0 of lo) for (const z0 of lo) shopHouse(b, g, { x0, z0, x1: x0 + size, z1: z0 + size, street: { px: 1, nx: 1, pz: 1, nz: 1 } }, rand);
@@ -729,7 +821,7 @@ export function buildChunk(seed, i, j, mats) {
       }
       if (lot.x1 - lot.x0 < 29 || lot.z1 - lot.z0 < 29) infill(b, { x0: lot.x0 + 0.5, z0: lot.z0 + 0.5, x1: lot.x1 - 0.5, z1: lot.z1 - 0.5 });
     }
-    if (area === 2) overpass(b, g, rand);
+    if (area === 2) overpass(b, g, rand, animated);
     else if (rand() < 0.5) prop.billboard(b, g, CB + 2, 0.1, CB + 2, Math.PI * 1.25, pick(rand, ADS), 6, 3);
   }
   const object = new T.Group();

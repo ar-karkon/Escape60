@@ -34,3 +34,39 @@ test('old town alleys are passable between solid storefronts',()=>{
  assert.equal(circleHitsBuilding(districtStart+260,167,16),false);
  assert.equal(circleHitsBuilding(districtStart+167,167,16),true);
 });
+
+test('near-miss chain multiplies skill points and a hit resets it', async () => {
+  const { comboMult, COMBO_WINDOW } = await import('../web/src/simulation.js');
+  const game = createGame('combo', { noPolice: true });
+  game.nextTraffic = 1e9;
+  game.traffic.push({ x: 45, y: -10, angle: 0, speed: 0, passed: false, color: 0 });
+  stepGame(game);
+  assert.equal(game.points, 55);
+  assert.equal(comboMult(game), 1);
+  game.traffic.push({ x: -45, y: -20, angle: 0, speed: 0, passed: false, color: 1 });
+  stepGame(game);
+  assert.equal(game.points, 55 + 110);
+  assert.equal(comboMult(game), 2);
+  assert.equal(game.events.filter((e) => e.type === 'near').at(-1).mult, 2);
+  game.traffic.push({ x: 0, y: game.player.y - 5, angle: 0, speed: 0, passed: false, color: 2 });
+  stepGame(game);
+  assert.equal(game.hits, 1);
+  assert.equal(comboMult(game), 1);
+  assert.equal(game.bestChain, 2);
+  // the chain also expires on its own
+  const g2 = createGame('combo-expire', { noPolice: true });
+  g2.nextTraffic = 1e9;
+  g2.traffic.push({ x: 45, y: -10, angle: 0, speed: 0, passed: false, color: 0 });
+  stepGame(g2);
+  for (let i = 0; i < Math.ceil(COMBO_WINDOW * 60) + 2; i++) stepGame(g2);
+  assert.equal(g2.chain, 0);
+});
+test('a close roadblock dodge scores and counts once', () => {
+  const game = createGame('dodge', { noPolice: true });
+  game.nextTraffic = 1e9;
+  game.marks.push({ x: 55, y: -20, ttl: 5, angle: 0 });
+  stepGame(game); stepGame(game);
+  assert.equal(game.dodges, 1);
+  assert.equal(game.points, 120);
+  assert.equal(game.health, 3);
+});

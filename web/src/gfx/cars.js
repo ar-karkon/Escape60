@@ -43,9 +43,9 @@ function cabin(b, hw, yb, yt, zfB, zfT, zbT, zbB, topInset, color, glassOpts = {
 }
 
 /** Orange hero muscle coupe with cream racing stripes. */
-export function heroBody() {
+export function heroBody(body = C.hero, stripe = 0xfff1de) {
   const b = new VoxelBuilder(2048);
-  const body = C.hero, low = shade(C.hero, 0.86), stripe = 0xfff1de;
+  const low = shade(body, 0.86);
   const paint = { p: P.PAINT, n: 0.3 };
   // chassis + lower body
   b.box(0, 0.62, 0.05, 2.62, 0.62, 5.3, body, paint);

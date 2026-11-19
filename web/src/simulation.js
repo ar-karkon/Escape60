@@ -1,7 +1,11 @@
 /** Deterministic 60 FPS game simulation. Shared by browser and authoritative Node replay. */
 export const TICK_RATE = 60;
 export const MAX_TICKS = 60 * TICK_RATE;
-export const SIM_VERSION = '1.1.0';
+export const SIM_VERSION = '1.2.0';
+// Skill chain: each near miss / roadblock dodge inside COMBO_WINDOW raises the multiplier (x1..x5);
+// hard drifting keeps the chain alive; any hit resets it.
+export const COMBO_WINDOW = 3.5;
+export const COMBO_MAX = 5;
 const TAU = Math.PI * 2;
 const BLOCK = 520;
 const ROAD = 184;
@@ -71,7 +75,7 @@ export function createGame(seed = 'daily', opts = {}) {
   const random = rng(seed);
   const s = {seed:String(seed), version:SIM_VERSION, ticks:0, random,
     state:'playing', win:false, health:3, invuln:0, points:0, closeCalls:0,
-    hits:0, police:[], traffic:[], marks:[], particles:[],
+    hits:0, police:[], traffic:[], marks:[], particles:[], chain:0, comboTimer:0, bestChain:0, dodges:0,
     player:{x:0,y:0,angle:-Math.PI / 2,speed:250,drift:0},
     events:[], nextPolice:0, nextTraffic:0, nextRoadblock:0};
   s.player.x=0; s.player.y=0;
@@ -80,7 +84,7 @@ export function createGame(seed = 'daily', opts = {}) {
 }
 function damage(s, type) {
   if (s.invuln>0 || s.state!=='playing') return;
-  s.player.speed=205;s.health--; s.hits++; s.points=Math.max(0,s.points-150); s.invuln=0.95;
+  s.player.speed=205;s.health--; s.hits++; s.points=Math.max(0,s.points-150); s.invuln=0.95; s.chain=0; s.comboTimer=0;
   s.events.push({type:'hit',kind:type,tick:s.ticks});
   if (s.health<=0) {s.state='ended';s.events.push({type:'end',tick:s.ticks});}
 }
@@ -112,11 +116,18 @@ function spawnRoadblock(s) {
     s.marks.push({angle:0,x:Math.round(tx/BLOCK)*BLOCK +(Math.cos(p.angle)>0?-190:190),y,ttl:13});
   }
 }
+export function comboMult(s){return s.comboTimer>0?Math.min(COMBO_MAX,Math.max(1,s.chain)):1;}
+function skill(s, base, type){
+  s.chain=s.comboTimer>0?s.chain+1:1; s.comboTimer=COMBO_WINDOW; s.bestChain=Math.max(s.bestChain,s.chain);
+  const mult=comboMult(s), pts=base*mult; s.points+=pts;
+  s.events.push({type, tick:s.ticks, mult, pts});
+}
 export function stepGame(s, steer=0) {
   if(s.state!=='playing') return s;
   const dt=1/TICK_RATE; s.ticks++;
   steer=clamp(Number.isFinite(steer)?steer:0,-1,1);
   if(s.invuln>0) s.invuln=Math.max(0,s.invuln-dt);
+  if(s.comboTimer>0){ s.comboTimer=Math.max(0,s.comboTimer-dt); if(s.comboTimer===0) s.chain=0; }
   const p=s.player;
   // Readable, high-grip arcade controls. Speed continues without input.
   const intensity= Math.abs(steer);
@@ -134,7 +145,7 @@ export function stepGame(s, steer=0) {
     p.x=ox;p.y=oy;p.angle=normAngle(p.angle+Math.PI*0.13*(steer>=0?1:-1));p.speed=205;
     if(s.ticks%55===0){s.events.push({type:'scrape',tick:s.ticks});}
   }
-  if(intensity>0.82 && s.ticks%24===0) s.points+=8;
+  if(intensity>0.82 && s.ticks%24===0){ s.points+=8*comboMult(s); if(s.comboTimer>0) s.comboTimer=Math.max(s.comboTimer,1.2); }
   const elapsed=s.ticks/TICK_RATE;
   if(s.ticks>=s.nextPolice && s.police.length<(elapsed<10?1:elapsed<25?2:elapsed<40?3:elapsed<55?5:6)) {
     s.police.push(newPolice(s,s.police.length));s.nextPolice=s.ticks+5*TICK_RATE;
@@ -157,7 +168,7 @@ export function stepGame(s, steer=0) {
     if(circleHitsBuilding(car.x,car.y,16)) {car.x=px;car.y=py;car.angle=normAngle(car.angle + (car.id%2?1:-1)*0.24);car.stun=.1;}
     const d=dist(p,car);
     if(d<34){damage(s,'police');car.stun=0.65;car.x-=Math.cos(car.angle)*35;car.y-=Math.sin(car.angle)*35;}
-    if(d<77 && d>38 && !car.close && s.invuln===0) {car.close=true;s.points+=90;s.closeCalls++;s.events.push({type:'near',tick:s.ticks});}
+    if(d<77 && d>38 && !car.close && s.invuln===0) {car.close=true;s.closeCalls++;skill(s,90,'near');}
     if(d>110) car.close=false;
     if(d>1250){Object.assign(car,newPolice(s,car.id));}
   }
@@ -166,15 +177,19 @@ export function stepGame(s, steer=0) {
     car.y+=Math.sin(car.angle)*car.speed*dt;
     const d=dist(p,car);
     if(d<31)damage(s,'traffic');
-    else if(d<64&&!car.passed&&s.invuln===0){car.passed=true;s.points+=55;s.closeCalls++;s.events.push({type:'near',tick:s.ticks});}
+    else if(d<64&&!car.passed&&s.invuln===0){car.passed=true;s.closeCalls++;skill(s,55,'near');}
   }
   s.traffic=s.traffic.filter(car=>dist(p,car)<1050);
-  for(const mark of s.marks){mark.ttl-=dt;if(dist(p,mark)<38) damage(s,'roadblock');}
+  for(const mark of s.marks){
+    mark.ttl-=dt;const d=dist(p,mark);
+    if(d<38) {damage(s,'roadblock');mark.passed=true;}
+    else if(d<72&&!mark.passed&&s.invuln===0){mark.passed=true;s.dodges++;skill(s,120,'dodge');}
+  }
   s.marks=s.marks.filter(mark=>mark.ttl>0&&dist(p,mark)<1100);
   if(s.ticks>=MAX_TICKS && s.state==='playing'){s.state='ended';s.win=true;s.events.push({type:'win',tick:s.ticks});}
   return s;
 }
-export function gameResult(s){return {version:SIM_VERSION,seed:s.seed,timeMs:Math.min(60000,Math.round(s.ticks*1000/TICK_RATE)),points:s.points,health:s.health,win:s.win,closeCalls:s.closeCalls,hits:s.hits};}
+export function gameResult(s){return {version:SIM_VERSION,seed:s.seed,timeMs:Math.min(60000,Math.round(s.ticks*1000/TICK_RATE)),points:s.points,health:s.health,win:s.win,closeCalls:s.closeCalls,hits:s.hits,bestChain:s.bestChain,dodges:s.dodges};}
 export function compareResult(a,b){return (b.timeMs-a.timeMs)||(b.points-a.points);}
 export function encodeTrace(values){
   if(!values.length)return [];
