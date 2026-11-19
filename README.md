@@ -16,6 +16,7 @@ npm run check          # tests + syntax check of every module
 npm run build          # deployable static site + edge worker in dist/
 npm run test:browser   # mobile smoke test incl. a real verified run (needs npm start)
 npm run capture        # real screenshots into docs/screenshots (needs npm start)
+npm run deploy         # release to Arvan from your computer (asks for the storage keys)
 ```
 
 **Controls** — touch: hold the left or right half of the screen to steer · BRAKE (drifts with the handbrake while you steer) · tap NITRO to boost (tap again to stop). Keyboard: ← → / A D steer · ↓ / S brake · Space handbrake · Shift / ↑ / W nitro · P pause · Enter retry. Gamepad: stick steer · A handbrake · RT / X nitro · LT / B brake · Start pause.
@@ -55,7 +56,7 @@ docs/                           design, decisions, deployment and status
 
 ## Deployment
 
-`npm run build` produces `dist/web/` (static site; works on any static host and on the edge proxy) and `dist/edge/worker.js` (API + static proxy). See `docs/22_DEPLOYMENT.md`. The game service needs only an S3-compatible bucket (`S3_ACCESS_KEY`, `S3_SECRET_KEY`); without it the leaderboard falls back to memory. Replays run in chunks (`REPLAY_CHUNK`, default 300 ticks) to fit small per-request CPU budgets.
+`npm run build` produces `dist/web/` (static site; works on any static host and on the edge proxy) and `dist/edge/worker.js` (API + static proxy). See `docs/22_DEPLOYMENT.md`. `npm run deploy` releases from your own computer without CI: it uploads only changed files, guides the one panel step (pasting the edge worker) and verifies the live URL. The game service needs only an S3-compatible bucket (`S3_ACCESS_KEY`, `S3_SECRET_KEY`); without it the leaderboard falls back to memory. Replays run in chunks (`REPLAY_CHUNK`, default 300 ticks) to fit small per-request CPU budgets.
 
 **Status:** see `docs/00_STATUS.md`. Real-device FPS and an audible mix check are still outstanding; the live deployment must be rebuilt and redeployed for this version.
 

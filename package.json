@@ -11,7 +11,8 @@
     "check": "npm test && node scripts/check-syntax.mjs",
     "build": "node scripts/build.mjs",
     "test:browser": "node scripts/browser-smoke.cjs",
-    "capture": "node scripts/capture-screens.cjs"
+    "capture": "node scripts/capture-screens.cjs",
+    "deploy": "node scripts/deploy-arvan.mjs"
   },
   "engines": {
     "node": ">=20"

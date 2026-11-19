@@ -17,6 +17,7 @@ Version 3.0 (2026-11-19): a full rebuild toward a stylised world-class street ra
 - `npm run check`: tests plus syntax checks
 - `npm run build`: create deployable static site at dist/
 - `npm run test:browser` / `npm run capture`: mobile smoke test and real screenshot capture (server must be running)
+- `npm run deploy`: release to Arvan from a machine that can reach it (uploads changed files, guides the edge paste, verifies); see docs/22_DEPLOYMENT.md
 
 ## Rules
 - Never change physics without syncing browser and `server` authoritative replay behavior; bump SIM_VERSION for breaking changes.

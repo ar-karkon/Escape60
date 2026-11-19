@@ -26,7 +26,27 @@ Values are JSON, so a string must be written **with double quotes**, e.g. `"abc1
 
 Without the S3 keys the edge falls back to per-isolate memory (leaderboard not durable) and a fixed dev ticket secret; `/api/v1/health` reports `storage: "memory"` and `secured: false`. The AIaaS key is no longer used (v3.0) and can be deleted from the edge settings.
 
-## Release steps
+## Release from your own computer — `npm run deploy` (no CI needed)
+Needs Node 20+, a clone of the repo and `npm install`. Run it from a network that reaches Arvan.
+
+```bash
+npm run deploy                  # tests + build, upload, guided edge step, live checks
+npm run deploy -- --dry-run     # list what would change, upload nothing
+```
+
+What it does (`scripts/deploy-arvan.mjs`, signing in `scripts/sigv4.mjs`, checked against AWS's published SigV4 examples in `tests/sigv4.test.mjs`):
+1. Runs the tests and `npm run build`.
+2. Asks for the Object Storage access / secret key (hidden input; or `S3_ACCESS_KEY` / `S3_SECRET_KEY` env vars). Keys are used only for this run and never written to disk.
+3. Compares every flat file in `dist/web/` with the bucket by MD5/ETag and uploads only what changed (public-read), **except `index.html`**.
+4. Copies `dist/edge/worker.js` to the clipboard and waits while you paste it into Edge → escape60 → ویرایش کد → انتشار; it then checks `/api/v1/health` for the new API and simulation version.
+5. Uploads `index.html` last, so players switch to the new client only once the matching edge is live.
+6. Verifies the bucket serves files publicly, the live URL serves the new `app-*.js`, and the API version and storage mode.
+
+Flags: `--skip-build`, `--skip-tests`, `--force` (upload everything), `--no-wait`. Env overrides: `S3_ENDPOINT`, `S3_REGION`, `STATIC_BUCKET`, `STATIC_ORIGIN`, `GAME_URL`. The edge code itself is replaced in the panel because no Edge Compute code API is documented/verified here.
+
+Rehearsed (2026-11-19) against a local fake S3 + edge that re-verifies every signature: first upload, unchanged-file skip, `index.html` held back until the edge reports the new version, re-run with nothing to do, dry run, wrong key (clear 403 message). Not yet run against the real Arvan endpoints (the cloud build session could not reach Arvan hosts).
+
+## Manual release steps (fallback)
 1. `npm run check && npm run build` → `dist/web/` (flat files for the edge proxy plus an `assets/` tree for ordinary static hosts, hashed `app-*.js`, `style-*.css`) and `dist/edge/worker.js`.
 2. Upload changed files from `dist/web/` to `escape60-game` (public toggle on). `index.html` last.
 3. Edge → escape60 → ویرایش کد → replace with `dist/edge/worker.js` → انتشار.

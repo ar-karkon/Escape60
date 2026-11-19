@@ -1,5 +1,9 @@
 # Changelog
 
+## 3.2.1 — slimmer bars, deploy without CI — 2026-11-19
+- Health and nitro side bars are slimmer and shorter (28 px column, 10 px track).
+- `npm run deploy`: one-command release to Arvan from your own computer — uploads only changed files to the bucket, guides the edge-worker paste, switches `index.html` last and verifies the live URL. SigV4 signing tested against AWS's published examples.
+
 ## 3.2 — mobile controls and HUD layout — 2026-11-19
 - Touch steering: hold the left / right half of the screen (edge glow shows the held side); the steering buttons are gone.
 - Vertical health (left edge, with the three repair icons) and nitro (right edge) bars.
