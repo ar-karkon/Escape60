@@ -1,5 +1,13 @@
 # Changelog
 
+## 3.0 — world-class rebuild — 2026-11-19
+- **Map v2**: hand-authored Sunset Bay with curved roads (warped downtown grid, roundabout, plaza, Ocean Boulevard, coastal highway with marina bridge, canyon hairpins, lake loop, Old Town, port) and five pit stops; smooth distance-field collision.
+- **Simulation 2.0.0** (browser + server replay + tests): drift physics, brake, handbrake, nitro; 14 car stat sets; damage limp + smoke/fire; 3 repairs; explosion at zero health; busted meter; takedowns; roadblocks with spike strips; heat 1–5; 60 s milestone then endless overtime (10 min cap); points-first ranking.
+- **Renderer rebuild**: PBR-ish city with procedural facades, buildings along every curved frontage, walls / rails traced on the exact collision boundary, lane markings and crosswalks, streamed instanced props with knock-over breakables, landmarks, sea and lake, three times of day, glossy procedural cars, contact shadows, particles, selectable effects, camera director (speed / nitro / brake / handbrake / drift / impact), zoom blur, chromatic aberration, graffiti wings, slow motion.
+- **UI**: new racing HUD (speedometer with gears, nitro and health bars, repairs, heat, chain), garage (cars / paint / effects), milestone overlay, results, pause, settings (language, time of day, graphics, shake), English + Persian, gamepad.
+- **Audio**: synthesised explosion, nitro, repair, backfire, wind; gear-shifted engine.
+- **Removed**: AI special event, AI radio, AI coach, `/edge` judges page, Arvan mentions in the product, pixel fonts, voxel renderer, pedestrians.
+
 ## 0.1.0-docs — 2026-11-19
 - Established full pre-production documentation baseline based on conversation and verified official sources.
 - Recorded unapproved UX/design decisions explicitly as proposals.

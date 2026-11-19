@@ -1,558 +1,537 @@
-import { createGame, stepGame, gameResult, encodeTrace, comboMult, TICK_RATE, MAX_TICKS, SIM_VERSION, COMBO_WINDOW } from './simulation.js';
+import { createGame, stepGame, gameResult, encodeTrace, encodeInput, comboMult, TICK_RATE, MILESTONE_TICKS, SIM_VERSION, COMBO_WINDOW, REPAIRS } from './simulation.js';
 import { createRenderer } from './render.js';
-import { AudioEngine } from './audio.js';
+import { AudioEngine, gearOf } from './audio.js';
 import { hydrateIcons, iconSVG } from './ui/icons.js';
 import { redrawAtlas } from './gfx/signs.js';
-import { loadProfile, saveProfile, applyRun, xpForLevel, missionInfo, PAINTS, paintById, parseChallenge, beats } from './meta.js';
+import { loadProfile, saveProfile, applyRun, xpForLevel, missionInfo, parseChallenge, beats, carUnlocked, carLook } from './meta.js';
+import { CARS, carById, ratings, PAINTS, LIVERIES } from './cars.js';
+import { EFFECTS, ACCENTS } from './gfx/effects.js';
+import { stations, sample, pointAt, edges } from './map.js';
+import { t, num, applyI18n, setLang, getLang } from './i18n.js';
 import * as api from './api.js';
 import { createMinimap } from './ui/minimap.js';
-import { fallbackMission, judgeMission, objectiveText, pickRadio } from './mission.js';
 
 const $ = (id) => document.getElementById(id);
+const VERSION = 'v3.0';
 hydrateIcons();
+applyI18n();
 const canvas = $('game'), render = createRenderer(canvas);
 const minimap = createMinimap($('minimap'));
-document.fonts?.ready.then(() => redrawAtlas()).catch(() => {});
-const els = {
-  overlay: $('overlay'), home: $('home'), results: $('results'), hud: $('hud'), controls: $('controls'), pause: $('pause'),
-  time: $('time'), score: $('score'), health: $('health'), power: $('power'), count: $('count'), pressure: $('pressure'),
-  resultTime: $('result-time'), resultScore: $('result-score'), resultNear: $('result-near'), resultChain: $('result-chain'),
-  resultTitle: $('result-title'), resultDetail: $('result-detail'), resultTag: $('result-tag'), resultStatus: $('result-status'),
-  daily: $('daily-label'), online: $('online-state'), rank: $('rank'), popups: $('popups'), banner: $('banner'),
-  countdown: $('countdown'), hurt: $('hurt'), combo: $('combo'), comboX: $('combo-x'), comboFill: $('combo-fill'),
-  markBest: $('mark-best'), markTarget: $('mark-target'), newBest: $('new-best'), challengeResult: $('challenge-result'),
-  xpGain: $('xp-gain'), xpFill2: $('xp-fill2'), lvl2: $('lvl2'), unlocks: $('result-unlocks'),
-};
-let game = null, paused = false, seed = '', runTicket = null, trace = [], last = 0, acc = 0, steer = 0;
-let pressedLeft = false, pressedRight = false, dragging = false, dragX = 0, finishQueued = false, lastEvent = -1, online = false;
-let countdown = 0, countStep = -1, shownHealth = -1, shownPolice = -1, heliShown = false, driftPts = 0, driftShownAt = 0;
-let shownMult = 1, bestPassed = false, targetPassed = false, lastResult = null, lastSecond = -1;
-let mission = null, radioAt = -1e9, radioTimer = 0, radioSalt = 0, chainSaid = false, finalSaid = false, lastTicket = null;
 const audio = new AudioEngine();
-let reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
-const daySeed = () => `daily-${new Date().toISOString().slice(0, 10)}`;
+const touch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
+document.body.classList.toggle('no-touch', !touch);
+document.fonts?.ready.then(() => redrawAtlas()).catch(() => {});
+
+/* ---------- settings ---------- */
+const SET_KEY = 'escape60-settings-v2';
+const settings = Object.assign({ shake: true, motion: matchMedia('(prefers-reduced-motion: reduce)').matches, tod: 'sunset', gfx: 'auto' }, (() => { try { return JSON.parse(localStorage.getItem(SET_KEY) || '{}'); } catch { return {}; } })());
+const saveSettings = () => { try { localStorage.setItem(SET_KEY, JSON.stringify(settings)); } catch {} };
 const qs = new URLSearchParams(location.search);
+if (qs.get('q') === 'high' || qs.get('q') === 'low') settings.gfx = qs.get('q');
+if (qs.get('tod')) settings.tod = qs.get('tod');
+render.setTOD(settings.tod);
+render.setQuality(settings.gfx);
+
+/* ---------- state ---------- */
+const profile = loadProfile();
+const daySeed = () => `daily-${new Date().toISOString().slice(0, 10)}`;
 const externalSeed = qs.get('seed');
 const sanitizedSeed = typeof externalSeed === 'string' && /^[a-zA-Z0-9_-]{2,64}$/.test(externalSeed) ? externalSeed : null;
 const initialSeed = sanitizedSeed || daySeed();
 const challenge = sanitizedSeed ? parseChallenge(qs) : null;
-// ?q=high pins full quality (benchmarks / screenshot capture); ?q=low forces the light renderer.
-const qualityLock = qs.get('q');
-if (qualityLock === 'low') $('quality').checked = true;
-// ?capture=1 exposes a freeze switch so screenshot scripts can hold an exact frame without UI.
+let seed = initialSeed, game = null, paused = false, runTicket = null, trace = [], last = 0, acc = 0, countdown = 0, countStep = -1;
+let lastEvent = -1, finishQueued = false, online = false, lastResult = null, view = 'loading', ready = false;
 let frozen = false;
-if (qs.has('capture')) window.__escape60 = { freeze: (v) => { frozen = !!v; }, clear: () => !!game && game.invuln === 0 && game.state === 'playing', audioState: () => ({ ctx: audio.ctx?.state ?? 'none', buffers: audio.buffers.size, tracks: [...audio.tracks.keys()], mode: audio.mode }) };
-const persisted = {};
-try { Object.assign(persisted, JSON.parse(localStorage.getItem('escape60-bests-' + SIM_VERSION) || '{}')); } catch {}
-const profile = loadProfile();
-const formatTime = (ms) => (ms / 1000).toFixed(2).padStart(5, '0');
-const fmt = (n) => Math.round(n).toLocaleString('en-US');
-const faNum = (n) => Number(n).toLocaleString('fa-IR');
-$('ver').textContent = `v2.3 · SIM ${SIM_VERSION}`;
+const persisted = (() => { try { return JSON.parse(localStorage.getItem('escape60-bests-' + SIM_VERSION) || '{}'); } catch { return {}; } })();
+const input = { left: false, right: false, tl: false, tr: false, brake: false, hand: false, nitro: false, kb: { brake: false, hand: false, nitro: false }, pad: { x: 0, brake: false, hand: false, nitro: false } };
+if (qs.has('capture')) window.__escape60 = { render, freeze: (v) => { frozen = !!v; }, state: () => game && { ticks: game.ticks, state: game.state, hp: game.health, repairs: game.repairs, points: game.points, end: game.end, view }, info: () => render.info(), input,
+  map: { sample, pointAt, edges, stations }, game: () => game, override: null,
+  /** run n simulation ticks immediately (test tooling) */ fast(n) { countdown = 0; for (let i = 0; i < n && game?.state === 'playing'; i++) tick(); updateHud(0); } };
+$('ver').textContent = `${VERSION} · SIM ${SIM_VERSION}`;
 
-function applyPaint() { const p = paintById(profile.paint); render.setPaint(p.body, p.stripe); }
-applyPaint();
+const fmtTime = (ms) => { const s = ms / 1000, m = Math.floor(s / 60); return `${m}:${(s - m * 60).toFixed(2).padStart(5, '0')}`; };
+const hex = (c) => '#' + c.toString(16).padStart(6, '0');
 
+function applyLook() {
+  const c = carById(profile.car), look = carLook(profile, profile.car);
+  const p = PAINTS.find((x) => x.id === look.paint);
+  render.setCar(c.id, p?.color ?? null, look.livery, null);
+  render.setEffects(profile.fx);
+}
+applyLook();
+
+/* ---------- views ---------- */
 function setView(name) {
-  els.overlay.classList.toggle('hidden', name === 'game');
-  els.home.classList.toggle('hidden', name !== 'home');
-  els.results.classList.toggle('hidden', name !== 'results');
-  els.hud.classList.toggle('hidden', name !== 'game');
-  els.controls.classList.toggle('hidden', name !== 'game');
-  els.pause.classList.add('hidden');
+  view = name;
   document.body.dataset.view = name;
-  if (name === 'home') { renderProfile(); audio.setMode('menu'); }
+  for (const id of ['loading', 'home', 'garage', 'results', 'hud']) $(id).classList.toggle('hidden', id !== name && !(id === 'hud' && name === 'game'));
+  $('controls').classList.toggle('hidden', name !== 'game');
+  $('pause').classList.add('hidden');
+  if (name === 'home') { renderHome(); audio.setMode('menu'); }
+  if (name === 'garage') { renderGarage(); audio.setMode('menu'); }
   if (name === 'results') audio.setMode('results');
 }
-async function checkOnline() {
-  try {
-    const res = await api.today();
-    online = !!res.seed;
-    els.online.textContent = '● رقابت آنلاین · تأیید روی لبه‌ی آروان';
-    els.online.className = 'chip chip-status online';
-    if (res.mission?.objectives) setMission(res.mission);
-  } catch {
-    online = false;
-    els.online.textContent = 'آفلاین · رکورد روی همین دستگاه';
-    els.online.className = 'chip chip-status offline';
-    setMission(fallbackMission(daySeed().slice(6), daySeed()));
-  }
-}
-/* ---------- AI special event + police radio ---------- */
-const eventKey = () => 'escape60-event-' + daySeed();
-function eventBest() { try { return JSON.parse(localStorage.getItem(eventKey()) || 'null'); } catch { return null; } }
-function goalChips(list) { return list.map((o) => `<span class="${o.done ? 'done' : ''}">${o.done ? '✓ ' : ''}${o.text || objectiveText(o)}</span>`).join(''); }
-function setMission(m) {
-  mission = m;
-  const ai = m.source === 'ai';
-  for (const id of ['ev-src', 'evd-src']) { $(id).textContent = ai ? 'AI' : 'BOT'; $(id).classList.toggle('fallback', !ai); $(id).title = ai ? `نوشته‌شده با ${m.model} روی AIaaS آروان` : 'نسخه‌ی آماده (هوش مصنوعی در دسترس نبود)'; }
-  $('ev-title').textContent = m.title; $('ev-brief').textContent = m.briefing;
-  $('evd-title').textContent = m.title; $('evd-brief').textContent = m.briefing;
-  renderEventGoals();
-  $('event-card').classList.remove('hidden'); $('ev-detail').classList.remove('hidden');
-}
-function renderEventGoals() {
-  if (!mission) return;
-  const best = eventBest();
-  const list = mission.objectives.map((o, i) => ({ ...o, text: objectiveText(o), done: !!best?.done?.[i] }));
-  $('ev-goals').innerHTML = goalChips(list);
-  $('evd-goals').innerHTML = list.map((o) => `<li class="${o.done ? 'done' : ''}"><span>${iconSVG(o.done ? 'check' : 'star')}</span><b>${o.text}</b><i><u style="width:${o.done ? 100 : 0}%"></u></i><small>${o.done ? 'انجام شد' : ''}</small></li>`).join('')
-    + `<li class="${best?.complete ? 'done' : ''}"><span>${iconSVG('trophy')}</span><b>همه در یک دور = نشان ★ در جدول</b><i><u style="width:${best?.complete ? 100 : 0}%"></u></i><small>${best?.complete ? '★' : ''}</small></li>`;
-}
-function radioSay(event, force = false) {
-  if (!mission || !game) return;
-  const t = performance.now();
-  if (!force && t - radioAt < 3800) return;
-  const line = pickRadio(mission, event, radioSalt++);
-  if (!line) return;
-  radioAt = t;
-  $('radio-text').textContent = line;
-  const box = $('radio'); box.classList.remove('hidden'); box.style.animation = 'none'; void box.offsetWidth; box.style.animation = '';
-  audio.radio();
-  clearTimeout(radioTimer); radioTimer = setTimeout(() => box.classList.add('hidden'), 3200);
-}
-checkOnline();
-$('event-card').addEventListener('click', () => { audio.play('click', { gain: 0.6 }); renderMissions(); $('missions').showModal(); });
-function updateMode() {
-  seed = initialSeed;
-  els.daily.textContent = sanitizedSeed ? 'چالش دوستانه · یک مسیر مشترک' : 'چالش امروز · مسیر مشترک برای همه';
-  const banner = $('challenge-banner');
-  if (challenge) {
-    banner.classList.remove('hidden');
-    banner.innerHTML = `<span>${iconSVG('flame')}</span><p><b>دوستت به چالشت کشیده!</b> رکورد ادعاشده در لینک: <b class="num">${formatTime(challenge.timeMs)}</b> ثانیه · <b class="num">${fmt(challenge.points)}</b> امتیاز. همین مسیر رو برو و بزنش!</p>`;
-  }
-}
-updateMode();
+render.init((p, label) => {
+  $('load-fill').style.width = Math.round(p * 100) + '%';
+  const map = { roads: 'loadRoads', textures: 'loadTextures', buildings: 'loadBuildings', streets: 'loadStreets', walls: 'loadWalls', props: 'loadProps', done: 'loadDone' };
+  $('load-text').textContent = t(map[label] || 'loading');
+}).then(() => { ready = true; setView('home'); });
 
-/* ---------- profile / missions / garage ---------- */
-function renderProfile() {
+function renderHome() {
+  const c = carById(profile.car);
   $('lvl').textContent = `LV ${profile.level}`;
   $('xp-fill').style.width = `${(100 * profile.xp) / xpForLevel(profile.level)}%`;
-  $('xp-text').textContent = `${fmt(profile.xp)} / ${fmt(xpForLevel(profile.level))} XP`;
   $('streak-n').textContent = profile.streak.days || 0;
   $('streak').classList.toggle('hot', profile.streak.days >= 2);
+  $('home-cls').textContent = c.cls; $('home-cls').dataset.c = c.cls;
+  $('home-car').textContent = c.name; $('home-tag').textContent = c.tag;
+  $('home-fx').innerHTML = ['smoke', 'nitro', 'trail'].map((k) => `<span>${t(k + '_' + profile.fx[k])}</span>`).join('');
+  $('mode-label').textContent = sanitizedSeed && seed === initialSeed ? t('friend') : seed.startsWith('daily-') ? t('daily') : t('random');
   const open = profile.missions.list.filter((m) => !m.done).length;
-  $('missions-badge').textContent = open;
-  $('missions-badge').classList.toggle('hidden', open === 0);
+  $('missions-badge').textContent = open; $('missions-badge').classList.toggle('hidden', open === 0);
+  if (challenge) { const b = $('challenge-banner'); b.classList.remove('hidden'); b.innerHTML = `${iconSVG('flame')}<span>${t('friendBanner', { score: num(challenge.points), time: fmtTime(challenge.timeMs) })}</span>`; }
 }
-function renderMissions() {
-  renderEventGoals();
-  $('mission-list').innerHTML = profile.missions.list.map((m) => {
-    const info = missionInfo(m);
-    const pct = Math.min(100, (100 * m.progress) / info.goal);
-    return `<li class="${m.done ? 'done' : ''}"><span>${iconSVG(m.done ? 'check' : 'star')}</span><b>${info.text}</b><i><u style="width:${pct}%"></u></i><small>${m.done ? 'انجام شد' : `${fmt(Math.min(m.progress, info.goal))}/${fmt(info.goal)}`}</small></li>`;
-  }).join('');
+
+/* ---------- online ---------- */
+async function checkOnline() {
+  try { const res = await api.today(); online = !!res.seed; $('online-state').textContent = t('online'); $('online-state').className = 'status online'; }
+  catch { online = false; $('online-state').textContent = t('offline'); $('online-state').className = 'status'; }
 }
+checkOnline();
+
+/* ---------- garage ---------- */
+let gTab = 'cars', gCar = profile.car;
 function renderGarage() {
-  $('paint-list').innerHTML = PAINTS.map((p) => {
-    const locked = p.level > profile.level;
-    const hex = (c) => '#' + c.toString(16).padStart(6, '0');
-    return `<button class="paint ${p.id === profile.paint ? 'active' : ''} ${locked ? 'locked' : ''}" data-paint="${p.id}" ${locked ? 'disabled' : ''} aria-label="${p.name}">
-      <span class="swatch" style="--b:${hex(p.body)};--s:${hex(p.stripe)}"></span><b>${p.name}</b><small>${locked ? `سطح ${faNum(p.level)}` : p.id === profile.paint ? 'انتخاب شده' : 'انتخاب'}</small></button>`;
+  $('lvl-g').textContent = `LV ${profile.level}`;
+  for (const b of document.querySelectorAll('.tab[data-tab]')) b.classList.toggle('active', b.dataset.tab === gTab);
+  for (const b of document.querySelectorAll('.tab-body')) b.classList.toggle('hidden', b.dataset.body !== gTab);
+  const c = carById(gCar), unlocked = carUnlocked(profile, c);
+  $('g-cls').textContent = c.cls; $('g-cls').dataset.c = c.cls; $('g-name').textContent = c.name; $('g-tag').textContent = c.tag;
+  $('g-lock').classList.toggle('hidden', unlocked); $('g-lock').innerHTML = `${iconSVG('lock')}${t('locked', { n: c.level })}`;
+  const r = ratings(c);
+  $('g-stats').innerHTML = [['statSpeed', r.speed], ['statAccel', r.accel], ['statHandling', r.handling], ['statDrift', r.drift], ['statNitro', r.nitro], ['statArmor', r.armor]]
+    .map(([k, v]) => `<div class="stat-row"><span>${t(k)}</span><i><u style="width:${v * 10}%"></u></i></div>`).join('');
+  $('car-list').innerHTML = CARS.map((x) => {
+    const lk = !carUnlocked(profile, x), look = carLook(profile, x.id), pc = PAINTS.find((p) => p.id === look.paint)?.color ?? x.paint;
+    return `<button class="car-card ${x.id === gCar ? 'active' : ''} ${lk ? 'locked' : ''}" data-car="${x.id}"><span class="mini-cls">${x.cls}</span><span class="sw" style="--c:${hex(pc)}"></span><b>${x.name}</b><small>${lk ? iconSVG('lock') + t('locked', { n: x.level }) : x.id === profile.car ? t('selected') : t('select')}</small></button>`;
   }).join('');
+  const look = carLook(profile, gCar);
+  $('paint-list').innerHTML = PAINTS.map((p) => {
+    const lk = p.level > profile.level, col = p.color ?? c.paint;
+    return `<button class="swatch ${p.id === 'stock' ? 'stock' : ''} ${look.paint === p.id ? 'active' : ''} ${lk ? 'locked' : ''}" data-paint="${p.id}" data-lvl="${p.level}" style="--c:${hex(col)}" aria-label="${p.id}"></button>`;
+  }).join('');
+  $('livery-list').innerHTML = LIVERIES.map((l) => `<button class="${look.livery === l.id ? 'active' : ''} ${l.level > profile.level ? 'locked' : ''}" data-livery="${l.id}">${t('liv_' + l.id)}${l.level > profile.level ? ' · ' + t('locked', { n: l.level }) : ''}</button>`).join('');
+  const names = { smoke: 'fxSmoke', nitro: 'fxNitro', trail: 'fxTrail', burst: 'fxBurst' };
+  $('fx-rows').innerHTML = Object.entries(EFFECTS).map(([cat, list]) => `<div class="fx-row"><p class="label">${t(names[cat])}</p><div class="chips">${list.map((e) => `<button class="${profile.fx[cat] === e.id ? 'active' : ''} ${e.level > profile.level ? 'locked' : ''}" data-fx="${cat}" data-v="${e.id}">${t(cat + '_' + e.id)}${e.level > profile.level ? ' · ' + t('locked', { n: e.level }) : ''}</button>`).join('')}</div></div>`).join('');
+  $('accent-list').innerHTML = ACCENTS.map((a) => `<button class="swatch ${profile.fx.accent === a ? 'active' : ''}" data-accent="${a}" style="--c:${hex(a)}"></button>`).join('');
+  previewCar();
 }
-$('paint-list').addEventListener('click', (e) => {
-  const b = e.target.closest('[data-paint]');
-  if (!b || b.disabled) return;
-  profile.paint = b.dataset.paint; saveProfile(profile); applyPaint(); renderGarage(); audio.play('levelup', { gain: 0.5 });
+function previewCar() {
+  const look = carLook(profile, gCar);
+  render.setCar(gCar, PAINTS.find((x) => x.id === look.paint)?.color ?? null, look.livery, null);
+}
+document.querySelector('.garage-panel').addEventListener('click', (e) => {
+  const tab = e.target.closest('.tab[data-tab]');
+  if (tab) { gTab = tab.dataset.tab; click(); renderGarage(); return; }
+  const card = e.target.closest('[data-car]');
+  if (card) {
+    gCar = card.dataset.car; click();
+    if (carUnlocked(profile, carById(gCar))) { profile.car = gCar; saveProfile(profile); }
+    renderGarage(); return;
+  }
+  const sw = e.target.closest('[data-paint]');
+  if (sw && !sw.classList.contains('locked')) { profile.paints[gCar] = { ...carLook(profile, gCar), paint: sw.dataset.paint }; saveProfile(profile); click(); renderGarage(); return; }
+  const lv = e.target.closest('[data-livery]');
+  if (lv && !lv.classList.contains('locked')) { profile.paints[gCar] = { ...carLook(profile, gCar), livery: lv.dataset.livery }; saveProfile(profile); click(); renderGarage(); return; }
+  const f = e.target.closest('[data-fx]');
+  if (f && !f.classList.contains('locked')) { profile.fx[f.dataset.fx] = f.dataset.v; saveProfile(profile); render.setEffects(profile.fx); click(); renderGarage(); return; }
+  const ac = e.target.closest('[data-accent]');
+  if (ac) { profile.fx.accent = Number(ac.dataset.accent); saveProfile(profile); render.setEffects(profile.fx); click(); renderGarage(); }
 });
+{ // drag to spin the car in the garage
+  let dx = null;
+  const el = $('garage-drag');
+  el.addEventListener('pointerdown', (e) => { dx = e.clientX; el.setPointerCapture(e.pointerId); });
+  el.addEventListener('pointermove', (e) => { if (dx === null) return; render.garageRotate((e.clientX - dx) * 0.012); dx = e.clientX; });
+  for (const ty of ['pointerup', 'pointercancel']) el.addEventListener(ty, () => { dx = null; });
+}
 
 /* ---------- HUD helpers ---------- */
-const SIREN = iconSVG('siren'), SIREN_OFF = iconSVG('sirenOff');
-let trailHp = 100, trailHold = 0;
-function renderHealth(hp, dt = 0) {
-  const v = Math.max(0, Math.min(100, hp));
-  $('hp-fill').style.width = v + '%';
-  // Damage trail: the lost chunk lingers, then drains (fighting-game style) so every hit reads.
-  if (v > trailHp) trailHp = v;
-  else if (trailHold > 0) trailHold -= dt;
-  else trailHp = Math.max(v, trailHp - dt * 45);
-  $('hp-trail').style.width = trailHp + '%';
-  $('hp-num').textContent = Math.ceil(v);
-  els.health.dataset.level = v > 60 ? 'ok' : v > 30 ? 'warn' : 'crit';
-  els.health.classList.toggle('regen', !!game && game.calm >= 5 && v < 100 && game.state === 'playing');
-  els.health.setAttribute('aria-valuenow', String(Math.ceil(v)));
-}
-function renderSirens(n) {
-  els.pressure.innerHTML = [0, 1, 2, 3, 4].map((i) => `<span class="${i < n ? 'on' : ''}">${i < n ? SIREN : SIREN_OFF}</span>`).join('');
-}
+let shownHp = 100, trailHp = 100, trailHold = 0, shownMult = 1, shownHeat = 0, lastSecond = -1, bestPassed = false, targetPassed = false, msTimer = 0, howtoTimer = 0;
+function renderHeat(n) { $('heat').innerHTML = [0, 1, 2, 3, 4].map((i) => `<span class="${i < n ? 'on' : ''}">${iconSVG('siren')}</span>`).join(''); }
+function renderRepairs(n) { $('repairs').innerHTML = Array.from({ length: REPAIRS }, (_, i) => `<span class="${i < n ? '' : 'used'}">${iconSVG('wrench')}</span>`).join(''); }
+const pops = $('popups');
 function popup(text, sub = '', cls = '') {
   const el = document.createElement('div');
   el.className = 'pop ' + cls;
-  const slot = els.popups.childElementCount % 4;
-  el.style.left = `${50 + (slot % 2 ? 14 : -14)}%`;
-  el.style.top = `${slot * 44}px`;
-  el.style.translate = '-50% 0';
+  const n = pops.childElementCount;
+  el.style.top = `${(n % 3) * 46}px`;
   el.innerHTML = `${text}${sub ? `<small>${sub}</small>` : ''}`;
-  els.popups.appendChild(el);
-  setTimeout(() => el.remove(), 1150);
+  pops.appendChild(el);
+  setTimeout(() => el.remove(), 1250);
 }
 let bannerTimer = 0;
-function banner(text, info = false, ms = 1600) {
-  els.banner.textContent = text;
-  els.banner.className = 'banner' + (info ? ' info' : '');
-  clearTimeout(bannerTimer);
-  bannerTimer = setTimeout(() => els.banner.classList.add('hidden'), ms);
-}
-function vibrate(ms) { try { if (!reducedMotion) navigator.vibrate?.(ms); } catch {} }
-function placeMark(el, ms) { if (!ms) { el.classList.add('hidden'); return; } el.classList.remove('hidden'); el.style.left = `${Math.min(100, ms / 600)}%`; }
+function banner(text, cls = '', ms = 1800) { const b = $('banner'); b.textContent = text; b.className = 'banner ' + cls; clearTimeout(bannerTimer); bannerTimer = setTimeout(() => b.classList.add('hidden'), ms); }
+function vibrate(ms) { try { if (!settings.motion) navigator.vibrate?.(ms); } catch {} }
+const click = () => audio.play('click', { gain: 0.5 });
 
-async function begin() {
-  audio.unlock();
-  game = createGame(seed); trace = []; steer = 0; pressedLeft = false; pressedRight = false; paused = false;
-  finishQueued = false; lastEvent = -1; runTicket = null; countdown = 1.8; countStep = -1;
-  shownHealth = 100; trailHp = 100; trailHold = 0; shownPolice = -1; heliShown = false; driftPts = 0; shownMult = 1; lastSecond = -1;
-  radioAt = -1e9; chainSaid = false; finalSaid = false; lastTicket = null; $('radio').classList.add('hidden');
-  const best = persisted[seed]?.timeMs;
-  bestPassed = !best; targetPassed = !challenge || seed !== initialSeed;
-  placeMark(els.markBest, best && best < 60000 ? best : 0);
-  placeMark(els.markTarget, !targetPassed ? challenge.timeMs : 0);
-  els.popups.textContent = ''; els.banner.classList.add('hidden');
-  setView('game'); updateHud();
-  // Play must remain responsive even when network is down.
-  if (online) { const started = game; api.startRun(seed).then((r) => { if (game === started && !finishQueued) runTicket = r; }).catch(() => {}); }
-  audio.nextChaseTrack();
-  audio.setMode('chase');
-  last = performance.now(); acc = 0;
+function renderHealth(hp, dt) {
+  const v = Math.max(0, Math.min(100, hp));
+  $('hp-fill').style.width = v + '%';
+  if (v > trailHp) trailHp = v; else if (trailHold > 0) trailHold -= dt; else trailHp = Math.max(v, trailHp - dt * 40);
+  $('hp-trail').style.width = trailHp + '%';
+  $('hp-num').textContent = Math.ceil(v);
+  $('health').dataset.level = v > 60 ? 'ok' : v > 30 ? 'warn' : 'crit';
+  $('hurt').classList.toggle('low', v < 30 && game?.state === 'playing');
 }
-function skipCountdown() { if (countdown > 0) { countdown = 0; showCount(3); } }
+function updateHud(dt) {
+  if (!game) return;
+  const ms = (game.ticks * 1000) / TICK_RATE, p = game.player;
+  $('time').textContent = fmtTime(ms);
+  $('score').textContent = num(game.points);
+  const over = game.ticks >= MILESTONE_TICKS;
+  $('hud').classList.toggle('overtime', over);
+  $('time-label').textContent = over ? t('overtime') : t('escapeIn', { n: Math.max(0, 60 - Math.floor(ms / 1000)) });
+  $('milestone-fill').style.width = `${Math.min(100, (100 * game.ticks) / MILESTONE_TICKS)}%`;
+  const kmh = p.v * 3.6, g = gearOf(kmh);
+  $('speed').textContent = Math.round(kmh);
+  $('gear').textContent = g.gear;
+  $('rpm-arc').style.strokeDashoffset = String(164 * (1 - g.rpm));
+  $('rpm-arc').style.stroke = p.boost ? '#b6ff2e' : g.rpm > 0.85 ? '#ff3b4e' : '#19e3ff';
+  $('nitro-fill').style.width = `${game.nitro * 100}%`;
+  document.querySelector('.bar.nitro').classList.toggle('full', game.nitro > 0.98);
+  $('nitro-ring').style.strokeDashoffset = String(283 * (1 - game.nitro));
+  $('nitro').classList.toggle('ready', game.nitro > 0.25);
+  if (game.health < shownHp - 0.5) { const h = $('health'); h.classList.remove('hit'); void h.offsetWidth; h.classList.add('hit'); trailHold = 0.4; }
+  shownHp = game.health;
+  renderHealth(game.health, dt);
+  if (game.heat !== shownHeat) { shownHeat = game.heat; renderHeat(game.heat); }
+  const mult = comboMult(game), m = $('mult');
+  m.classList.toggle('off', mult < 2); m.textContent = `×${mult}`;
+  $('chain-fill').style.width = `${(100 * game.comboTimer) / COMBO_WINDOW}%`;
+  if (mult > shownMult) { m.classList.remove('pump'); void m.offsetWidth; m.classList.add('pump'); }
+  shownMult = mult;
+  $('bust').classList.toggle('hidden', game.bust < 0.05 || game.state !== 'playing');
+  $('bust-fill').style.width = `${game.bust * 100}%`;
+  // nearest pit stop when damaged
+  const pa = $('pit-arrow');
+  if (game.health < 65 && game.repairs > 0 && game.state === 'playing') {
+    let best = null, bd = 1e9;
+    for (const s of stations) { const d = Math.hypot(s.x - p.x, s.y - p.y); if (d < bd) { bd = d; best = s; } }
+    pa.classList.remove('hidden');
+    $('pit-dist').textContent = `${t('pit')} ${Math.round(bd)} m`;
+    const rel = Math.atan2(best.y - p.y, best.x - p.x) - p.a;
+    pa.querySelector('.arw').style.transform = `rotate(${rel + Math.PI / 4}rad)`;
+  } else pa.classList.add('hidden');
+}
+
+/* ---------- run flow ---------- */
+function begin() {
+  if (!ready) return;
+  audio.unlock();
+  applyLook();
+  game = createGame(seed, { car: profile.car });
+  trace = []; paused = false; finishQueued = false; lastEvent = -1; runTicket = null; countdown = 3; countStep = -1; acc = 0;
+  shownHp = 100; trailHp = 100; trailHold = 0; shownMult = 1; shownHeat = 0; lastSecond = -1; msTimer = 0;
+  bestPassed = !persisted[seed]; targetPassed = !challenge || seed !== initialSeed;
+  pops.textContent = ''; $('banner').classList.add('hidden'); $('milestone').classList.add('hidden');
+  renderRepairs(REPAIRS); renderHeat(1);
+  setView('game');
+  updateHud(0);
+  if (online) { const started = game; api.startRun(seed, profile.car).then((r) => { if (game === started && !finishQueued) runTicket = r; }).catch(() => {}); }
+  audio.nextChaseTrack(); audio.setMode('chase');
+  if (profile.runs < 3) { const h = $('howto'); h.innerHTML = `<b>${t('howTo')}</b><br>${touch ? t('howTouch') : t('howKeys')}<br>${t('howGoal')}`; h.classList.remove('hidden'); clearTimeout(howtoTimer); howtoTimer = setTimeout(() => h.classList.add('hidden'), 6500); }
+  last = performance.now();
+}
+function skipCountdown() { if (countdown > 0.6) countdown = 0.6; }
 function showCount(step) {
   if (step === countStep) return;
   countStep = step;
-  els.countdown.classList.remove('hidden');
-  if (step < 3) { els.countdown.innerHTML = `<b>${3 - step}</b>`; audio.play('beep', { gain: 0.8 }); }
-  else { els.countdown.innerHTML = '<b class="go">برو!</b>'; audio.play('go'); setTimeout(() => radioSay('start', true), 700); setTimeout(() => { if (countStep === 3) els.countdown.classList.add('hidden'); }, 650); }
+  const el = $('countdown');
+  el.classList.remove('hidden');
+  if (step < 3) { el.innerHTML = `<b>${3 - step}</b>`; audio.play('beep', { gain: 0.8 }); }
+  else { el.innerHTML = `<b class="go">${t('go')}</b>`; audio.play('go'); setTimeout(() => { if (countStep === 3) el.classList.add('hidden'); }, 650); }
 }
-function quantizeSteer() { const v = pressedLeft ? -1 : pressedRight ? 1 : steer; return Math.max(-3, Math.min(3, Math.round(v * 3))); }
-function updateHud() {
-  if (!game) return;
-  els.time.textContent = formatTime(Math.min(60000, game.ticks * 1000 / TICK_RATE));
-  els.score.textContent = fmt(game.points);
-  const left = Math.max(0, 60 - Math.floor(game.ticks / TICK_RATE));
-  els.count.textContent = `${left}`;
-  els.power.style.width = `${100 * game.ticks / MAX_TICKS}%`;
-  if (game.health < shownHealth - 0.5) { els.health.classList.remove('hit'); void els.health.offsetWidth; els.health.classList.add('hit'); trailHold = 0.45; }
-  shownHealth = game.health;
-  if (game.police.length !== shownPolice) { shownPolice = game.police.length; renderSirens(Math.min(5, shownPolice)); }
-  els.hud.classList.toggle('final', game.ticks > 50 * TICK_RATE);
-  const mult = comboMult(game);
-  els.combo.classList.toggle('off', mult < 2);
-  els.combo.dataset.m = mult;
-  els.comboX.textContent = `×${mult}`;
-  els.comboFill.style.width = `${(100 * game.comboTimer) / COMBO_WINDOW}%`;
-  if (mult !== shownMult) { if (mult > shownMult) { els.combo.classList.remove('pump'); void els.combo.offsetWidth; els.combo.classList.add('pump'); } shownMult = mult; }
+function currentInput() {
+  if (window.__escape60?.override) return window.__escape60.override(game);
+  const steer = (input.left || input.tl ? -1 : 0) + (input.right || input.tr ? 1 : 0);
+  const s = Math.abs(input.pad.x) > 0.15 ? input.pad.x : steer;
+  return encodeInput(Math.round(s * 3), input.brake || input.kb.brake || input.pad.brake, input.hand || input.kb.hand || input.pad.hand, input.nitro || input.kb.nitro || input.pad.nitro);
+}
+let wasBoost = false;
+function tick() {
+  if (!game || paused || game.state !== 'playing') return;
+  const v = currentInput();
+  trace.push(v);
+  stepGame(game, v);
+  const p = game.player;
+  if (p.boost && !wasBoost) { audio.nitroBurst(); vibrate(15); }
+  wasBoost = p.boost;
+  const e = game.events;
+  for (let i = lastEvent + 1; i < e.length; i++) onEvent(e[i]);
+  lastEvent = e.length - 1;
+  if (e.length > 200) { e.splice(0, e.length - 50); lastEvent = e.length - 1; }
+  const ms = (game.ticks * 1000) / TICK_RATE;
+  if (!bestPassed && persisted[seed] && game.points > persisted[seed].points) { bestPassed = true; popup(t('newRecord'), '', 'good'); audio.play('levelup', { gain: 0.6 }); }
+  if (!targetPassed && game.points > challenge.points) { targetPassed = true; popup(t('friendWon'), '', 'hot'); audio.play('levelup'); }
+  const sec = Math.floor(ms / 1000);
+  if (sec !== lastSecond) { lastSecond = sec; if (sec >= 55 && sec < 60) audio.play('beep', { rate: 1 + (sec - 55) * 0.1, gain: 0.7 }); }
+  if (game.state === 'ended') finish();
+}
+function onEvent(ev) {
+  switch (ev.type) {
+    case 'near': case 'dodge': {
+      const m = ev.mult || 1;
+      popup(`+${num(ev.pts)}`, ev.type === 'dodge' ? t('dodge') : ev.cop ? t('nearCop') : t('near'), m >= 3 ? 'hot' : '');
+      audio.play('near', { rate: 1 + 0.08 * (m - 1), gain: 0.7 }); audio.play('whoosh', { gain: 0.6, rate: 0.9 + Math.random() * 0.2 });
+      if (m >= 2) audio.play('combo', { rate: 0.85 + 0.08 * m, gain: 0.55, delay: 0.05 });
+      vibrate(m >= 3 ? 25 : 12); break;
+    }
+    case 'drift': popup(`+${num(ev.pts)}`, `${t('drift')}${ev.mult > 1 ? ' ×' + ev.mult : ''}`, 'drift'); audio.play('coin', { gain: 0.4, rate: 1.1 }); break;
+    case 'driftLost': popup(t('driftLost'), `-${num(ev.pts)}`, 'bad'); break;
+    case 'takedown': popup(t('takedown'), `+${num(ev.pts)}`, 'take'); audio.play('crash', { gain: 0.8 }); audio.explosion(0.55); audio.play('combo', { delay: 0.15, gain: 0.6 }); vibrate(60); break;
+    case 'hit': {
+      popup(`-${ev.dmg}`, '', 'bad');
+      audio.play('crash', { gain: Math.min(1, 0.35 + ev.dmg / 40) }); audio.duckMusic(0.45, 400); vibrate(30 + ev.dmg * 2);
+      const h = $('hurt'); h.classList.remove('on'); void h.offsetWidth; h.classList.add('on'); break;
+    }
+    case 'scrape': audio.play('scrape', { gain: 0.5 }); vibrate(10); break;
+    case 'repair': popup(ev.left > 0 ? t('repaired', { n: ev.left }) : t('repairedLast'), `+${ev.gained}`, 'good'); renderRepairs(ev.left); audio.repairSound(); audio.play('levelup', { gain: 0.4, delay: 0.3 }); vibrate(30); break;
+    case 'repairEmpty': banner(t('noRepairs'), '', 1600); audio.play('beep', { rate: 0.6 }); break;
+    case 'roadblock': banner(t('roadblock') + (ev.spike ? ' · ' + t('spikes') : '')); for (let k = 0; k < 3; k++) audio.play('beep', { delay: k * 0.14, rate: 1.4 }); break;
+    case 'spikes': popup(t('spikes'), '', 'bad'); audio.play('scrape', { gain: 0.9, rate: 1.5 }); break;
+    case 'heat': if (ev.heat > 1) { banner(t('heatUp', { n: ev.heat }), 'info', 1400); audio.play('busted', { gain: 0.35, rate: 1.3 }); } break;
+    case 'milestone': {
+      const ms = $('milestone'); ms.classList.remove('hidden', 'out');
+      $('ms-score').textContent = num(ev.points);
+      const best = persisted[seed]; $('ms-best').textContent = best ? num(best.points) : '—';
+      audio.play('win'); audio.play('levelup', { delay: 0.4 }); audio.duckMusic(0.3, 1500); vibrate(80);
+      clearTimeout(msTimer); msTimer = setTimeout(() => { ms.classList.add('out'); setTimeout(() => ms.classList.add('hidden'), 600); }, 3200);
+      break;
+    }
+    case 'wrecked': audio.explosion(1.2); audio.duckMusic(0.15, 1800); vibrate(200); break;
+    case 'busted': audio.play('busted'); audio.duckMusic(0.2, 1200); break;
+    default: break;
+  }
+  if (ev.type === 'police' && ev.tick > 5) audio.play('horn', { gain: 0.25, rate: 0.8 });
 }
 function finish() {
   if (finishQueued) return;
   finishQueued = true;
-  const result = gameResult(game);
-  lastResult = result;
+  updateHud(0);
+  const r = gameResult(game);
+  lastResult = r;
   const prev = persisted[seed];
-  const newBest = !prev || result.timeMs > prev.timeMs || (result.timeMs === prev.timeMs && result.points > prev.points);
-  if (newBest) {
-    persisted[seed] = result;
-    try { localStorage.setItem('escape60-bests-' + SIM_VERSION, JSON.stringify(persisted)); } catch {}
-  }
-  const meta = applyRun(profile, result);
-  els.resultTime.textContent = formatTime(result.timeMs);
-  els.resultScore.textContent = fmt(result.points);
-  els.resultNear.textContent = fmt(result.closeCalls);
-  els.resultChain.textContent = fmt(result.bestChain);
-  els.results.classList.toggle('bust', !result.win);
-  els.resultTitle.textContent = result.win ? 'فرار کردی!' : 'گیر افتادی!';
-  els.resultTag.textContent = result.win ? 'RUN COMPLETE' : 'BUSTED';
-  els.resultTag.classList.toggle('bust', !result.win);
-  els.resultStatus.innerHTML = result.win ? `<span>${iconSVG('check')}</span><b>فرار موفق!</b>` : `<span>${iconSVG('siren')}</span><b>دستگیر شدی</b>`;
-  els.newBest.classList.toggle('hidden', !(newBest && prev));
-  els.resultDetail.textContent = `بهترین زمان این مسیر: ${formatTime(persisted[seed].timeMs)} · سلامت: ${faNum(result.health)}٪ · برخورد: ${faNum(result.hits)} · جاخالی از راه‌بند: ${faNum(result.dodges)}`;
-  els.rank.textContent = runTicket ? 'در حال بازپخش و تأیید روی لبه‌ی آروان…' : 'رکورد فقط روی این دستگاه ذخیره شد';
-  if (result.win) radioSay('escaped', true); else radioSay('busted', true);
-  const isEvent = mission && seed === daySeed();
-  showMission(isEvent ? judgeMission(mission, result) : null, runTicket ? 'pending' : 'local');
-  $('coach').classList.toggle('hidden', !runTicket);
-  $('coach-btn').classList.remove('hidden'); $('coach-text').classList.add('hidden');
-  lastTicket = runTicket;
-  // friend challenge outcome (target came from the link, so it is labelled unverified)
-  if (challenge && seed === initialSeed) {
-    const won = beats(result, challenge);
-    els.challengeResult.className = 'challenge-result ' + (won ? 'won' : 'lost');
-    els.challengeResult.textContent = won ? '🏆 رکورد دوستت رو زدی! حالا تو به چالشش بکش.' : `${formatTime(Math.max(0, challenge.timeMs - result.timeMs))} ثانیه تا رکورد دوستت مونده — یک دور دیگه!`;
-  } else els.challengeResult.className = 'challenge-result hidden';
-  // XP + unlocks
-  els.lvl2.textContent = `LV ${meta.level}`;
-  els.xpGain.textContent = `+${fmt(meta.gained)} XP`;
-  els.xpFill2.style.width = '0%';
-  setTimeout(() => (els.xpFill2.style.width = `${(100 * profile.xp) / xpForLevel(profile.level)}%`), 350);
+  const newBest = !prev || r.points > prev.points;
+  if (newBest) { persisted[seed] = r; try { localStorage.setItem('escape60-bests-' + SIM_VERSION, JSON.stringify(persisted)); } catch {} }
+  const meta = applyRun(profile, r);
+  const end = r.end || 'legend';
+  const res = $('results');
+  res.classList.remove('wrecked', 'busted', 'legend'); res.classList.add(end);
+  $('res-tag').textContent = t(end); $('res-title').textContent = t(end); $('res-sub').textContent = t(end + 'Sub');
+  $('res-score').textContent = num(r.points);
+  $('res-time').textContent = fmtTime(r.timeMs);
+  $('res-best').classList.toggle('hidden', !(newBest && prev));
+  $('res-escaped').classList.toggle('hidden', !r.escaped);
+  $('res-stats').innerHTML = [['topSpeed', `${num(r.topSpeed)} km/h`], ['driftPts', num(r.driftPts)], ['nearMisses', num(r.near)], ['takedowns', num(r.takedowns)], ['bestChain', `×${num(r.bestChain)}`], ['repairsUsed', `${num(r.repairs)}/${num(REPAIRS)}`]]
+    .map(([k, v]) => `<div class="rs"><small>${t(k)}</small><b>${v}</b></div>`).join('');
+  $('lvl2').textContent = `LV ${meta.level}`; $('xp-gain').textContent = `+${num(meta.gained)} XP`;
+  $('xp-fill2').style.width = '0%';
+  setTimeout(() => ($('xp-fill2').style.width = `${(100 * profile.xp) / xpForLevel(profile.level)}%`), 400);
   const notes = [];
-  if (meta.levelUp) notes.push(`⬆ سطح ${faNum(meta.level)}!`);
-  for (const u of meta.unlocks) notes.push(`🎨 رنگ تازه: ${u.name}`);
-  for (const m of meta.completed) notes.push(`✓ ${m}`);
-  if (meta.streakUp && meta.streak > 1) notes.push(`🔥 ${faNum(meta.streak)} روز پشت سر هم`);
-  els.unlocks.classList.toggle('hidden', !notes.length);
-  els.unlocks.textContent = notes.slice(0, 3).join('  ·  ') + (notes.length > 3 ? `  · +${faNum(notes.length - 3)}` : '');
-  if (result.win) audio.play('win'); else { audio.play('busted'); audio.duckMusic(0.2, 900); }
-  if (meta.levelUp) audio.play('levelup', { delay: 0.9 });
-  // Short beat so the crash / finish moment reads before the card slides in.
-  setTimeout(() => { if (game?.state === 'ended') setView('results'); }, result.win ? 450 : 650);
+  if (meta.levelUp) notes.push(t('levelUp', { n: meta.level }));
+  for (const c of meta.unlocks.cars) notes.push(t('newCar', { name: c.name }));
+  if (meta.unlocks.paints) notes.push(t('newPaint'));
+  for (const f of meta.unlocks.fx) notes.push(t('newFx', { name: t(f) }));
+  for (const m of meta.completed) notes.push('✓ ' + t('m_' + m));
+  $('res-unlocks').classList.toggle('hidden', !notes.length); $('res-unlocks').textContent = notes.join('  ·  ');
+  if (challenge && seed === initialSeed) { const won = beats(r, challenge), el = $('challenge-result'); el.className = 'challenge-result ' + (won ? 'won' : 'lost'); el.textContent = won ? t('friendWon') : t('friendLost', { n: num(challenge.points - r.points) }); }
+  else $('challenge-result').className = 'challenge-result hidden';
+  $('rank').textContent = runTicket ? t('rankPending') : t('rankLocal');
+  if (end === 'legend') audio.play('win'); else if (end === 'busted') audio.play('busted');
+  if (meta.levelUp) audio.play('levelup', { delay: 1.2 });
+  setTimeout(() => { if (game?.state === 'ended' && view === 'game') setView('results'); }, end === 'wrecked' ? 2600 : 1300);
   if (runTicket) {
     const finished = game;
-    api.finishRun(runTicket.runId, runTicket.token, encodeTrace(trace), result, (pct) => { if (game === finished) els.rank.textContent = `بازپخش و تأیید روی لبه‌ی آروان… ${faNum(pct)}٪`; }).then((r) => {
+    api.finishRun(runTicket.runId, runTicket.token, encodeTrace(trace), r).then((x) => {
       if (game !== finished) return;
-      els.rank.textContent = r.rank ? `تأیید شد روی لبه: رتبه #${faNum(r.rank)} از ${faNum(r.of)} · نام رمز: ${r.label}` : 'نتیجه روی لبه تأیید و ثبت شد';
-      if (r.mission) { showMission(r.mission, 'verified'); rememberEvent(r.mission); }
-    }).catch(() => { if (game === finished) { els.rank.textContent = 'تأیید آنلاین انجام نشد · رکورد روی همین دستگاه ذخیره شد'; $('coach').classList.add('hidden'); } });
+      $('rank').textContent = x.rank ? t('rankDone', { rank: num(x.rank), of: num(x.of) }) : t('rankSaved');
+    }).catch(() => { if (game === finished) $('rank').textContent = t('rankFail'); });
   }
 }
-function showMission(j, state) {
-  const box = $('result-mission');
-  if (!j) { box.classList.add('hidden'); return; }
-  box.classList.remove('hidden'); box.classList.toggle('complete', j.complete);
-  $('rm-title').textContent = mission.title;
-  $('rm-state').textContent = j.complete ? (state === 'verified' ? '★ کامل · تأیید لبه' : '★ کامل') : `${faNum(j.done)}/${faNum(j.list.length)}`;
-  $('rm-list').innerHTML = goalChips(j.list);
-  if (state === 'local') rememberEvent(j);
-}
-function rememberEvent(j) {
-  const prev = eventBest();
-  const next = { done: j.list.map((o, i) => o.done || !!prev?.done?.[i]), complete: j.complete || !!prev?.complete };
-  try { localStorage.setItem(eventKey(), JSON.stringify(next)); } catch {}
-}
-function tick() {
-  if (!game || paused || game.state !== 'playing') return;
-  const v = quantizeSteer();
-  trace.push(v);
-  const before = game.points;
-  stepGame(game, v / 3);
-  const gained = game.points - before;
-  const e = game.events;
-  let skillEvent = false;
-  for (let i = lastEvent + 1; i < e.length; i++) {
-    const event = e[i];
-    if (event.type === 'near' || event.type === 'dodge') {
-      skillEvent = true;
-      const m = event.mult || 1;
-      popup(`+${event.pts}`, event.type === 'dodge' ? 'جاخالی از راه‌بند!' : m > 1 ? `جاخالی ×${m}` : 'جاخالی!', m >= 3 ? 'hot' : '');
-      audio.play('near', { rate: 1 + 0.09 * (m - 1), gain: 0.8 });
-      audio.play('whoosh', { gain: 0.55, rate: 0.9 + Math.random() * 0.2 });
-      if (m >= 2) audio.play('combo', { rate: 0.85 + 0.1 * m, gain: 0.6, delay: 0.05 });
-      if (event.type === 'near' && Math.random() < 0.35) audio.play('horn', { delay: 0.12, gain: 0.5, rate: 0.9 + Math.random() * 0.25 });
-      if (m >= 3 && !chainSaid) { chainSaid = true; radioSay('chain', true); } else if (Math.random() < 0.3) radioSay('near');
-      vibrate(m >= 3 ? 25 : 12);
-    } else if (event.type === 'hit') {
-      popup(`-${event.dmg}`, event.kind === 'police' ? 'ضربه پلیس!' : event.kind === 'roadblock' ? 'راه‌بند!' : 'تصادف!', 'bad');
-      audio.play('crash', { gain: 0.5 + event.dmg / 60 }); audio.duckMusic(0.4, 500); vibrate(40 + event.dmg * 2);
-      els.hurt.classList.remove('on'); void els.hurt.offsetWidth; els.hurt.classList.add('on');
-      chainSaid = false; radioSay('hit');
-    } else if (event.type === 'roadblock') { banner('⚠ راه‌بند پلیس جلوتر — از کنارش جاخالی بده!'); for (let k = 0; k < 3; k++) audio.play('beep', { delay: k * 0.15, rate: 1.4 }); radioSay('roadblock', true); }
-    else if (event.type === 'police') { banner('🚨 پلیس تازه به تعقیب پیوست', true, 1200); if (event.tick > 0) radioSay('police'); }
-    else if (event.type === 'scrape') { audio.play('scrape', { gain: 0.6 }); vibrate(15); }
-  }
-  if (gained > 0 && !skillEvent) {
-    driftPts += gained;
-    if (performance.now() - driftShownAt > 500) { popup(`+${driftPts}`, 'دریفت', 'cyan'); audio.play('coin', { gain: 0.35, rate: 1.2 }); driftPts = 0; driftShownAt = performance.now(); }
-  }
-  lastEvent = e.length - 1;
-  const ms = (game.ticks * 1000) / TICK_RATE;
-  if (!heliShown && game.ticks >= 25 * TICK_RATE) { heliShown = true; banner('🚁 هلیکوپتر پلیس بالای سرت است!', true, 1500); radioSay('heli', true); }
-  if (!finalSaid && game.ticks >= 50 * TICK_RATE) { finalSaid = true; radioSay('final', true); }
-  if (!bestPassed && ms > persisted[seed].timeMs) { bestPassed = true; popup('رکورد شکست!', 'از بهترین زمانت جلو زدی', 'cyan'); audio.play('levelup'); }
-  if (!targetPassed && ms > challenge.timeMs) { targetPassed = true; popup('از دوستت جلو زدی!', 'فقط زنده بمون', 'hot'); audio.play('levelup'); }
-  const sec = Math.floor(ms / 1000);
-  if (sec !== lastSecond) { lastSecond = sec; if (sec >= 55 && sec < 60) audio.play('beep', { rate: 1 + (sec - 55) * 0.1, gain: 0.7 }); }
-  if (game.ticks % 3 === 0) updateHud();
-  if (game.state === 'ended') { updateHud(); finish(); }
-}
-function audioMix() {
-  const p = game?.player, playing = game?.state === 'playing' && !paused && countdown <= 0;
-  let siren = 0, pan = 0, close = false;
-  if (game && p) {
-    let best = Infinity, bx = 0, by = 0;
-    for (const c of game.police) { const d = Math.hypot(c.x - p.x, c.y - p.y); if (d < best) { best = d; bx = c.x - p.x; by = c.y - p.y; } }
-    if (best < Infinity) {
-      siren = Math.pow(Math.max(0, 1 - best / 750), 1.4);
-      const rel = Math.atan2(by, bx) - p.angle;
-      pan = Math.max(-0.85, Math.min(0.85, Math.sin(rel)));
-      close = best < 170;
-    }
-  }
-  audio.update({ active: playing, speed: p ? p.speed / 279 : 0, drift: p ? p.drift : 0, siren, sirenPan: pan, close, heli: game ? game.ticks >= 25 * TICK_RATE : false });
-}
-function frame(t) {
-  if (!last) last = t;
-  const dt = Math.min((t - last) / 1000, 0.25);
-  last = t;
-  if (!paused && !frozen && game?.state === 'playing') {
+
+/* ---------- main loop ---------- */
+let wasDown = false;
+function frame(now) {
+  if (!last) last = now;
+  const dt = Math.min((now - last) / 1000, 0.25);
+  last = now;
+  pollPad();
+  if (!paused && !frozen && game?.state === 'playing' && view === 'game') {
     if (countdown > 0) {
       countdown -= dt;
-      showCount(countdown > 1.2 ? 0 : countdown > 0.6 ? 1 : countdown > 0 ? 2 : 3);
+      showCount(countdown > 2 ? 0 : countdown > 1 ? 1 : countdown > 0 ? 2 : 3);
       acc = 0;
     } else {
       if (countStep < 3) showCount(3);
-      acc = Math.min(acc + dt, 0.25);
+      acc = Math.min(acc + dt * render.timeScale, 0.25);
       let steps = 0;
       while (acc >= 1 / TICK_RATE && steps < 15) { tick(); acc -= 1 / TICK_RATE; steps++; }
     }
+    if (game && game.ticks % 2 === 0) updateHud(dt);
   }
-  audioMix();
-  if (game) renderHealth(game.health, dt);
-  if (game && document.body.dataset.view === 'game') minimap.draw(game, game.map, t);
-  render(game, t, { reducedMotion, low: $('quality').checked, seed, alpha: acc * TICK_RATE, countdown: Math.max(0, countdown), lockHigh: qualityLock === 'high' });
+  // audio mix
+  const p = game?.player, playing = game?.state === 'playing' && !paused && countdown <= 0 && view === 'game';
+  let siren = 0, pan = 0, close = false;
+  if (game && p) {
+    let best = Infinity, bx = 0, by = 0;
+    for (const c of game.police) { if (c.wreck) continue; const d = Math.hypot(c.x - p.x, c.y - p.y); if (d < best) { best = d; bx = c.x - p.x; by = c.y - p.y; } }
+    if (best < Infinity) { siren = Math.pow(Math.max(0, 1 - best / 260), 1.3); pan = Math.max(-0.85, Math.min(0.85, Math.sin(Math.atan2(by, bx) - p.a))); close = best < 40; }
+    const down = p.brake && p.v > 30;
+    if (down && !wasDown) audio.backfire();
+    wasDown = down;
+  }
+  const kmh = p ? p.v * 3.6 : 0, g = gearOf(kmh);
+  audio.update({ active: playing, speed: p ? p.v / 70 : 0, rpm: g.rpm, gear: g.gear, drift: p ? Math.min(1, Math.abs(p.slip) * 1.6) * (p.v > 12 ? 1 : 0) : 0, brake: p && p.brake && p.v > 12 ? 1 : 0, nitro: !!p?.boost && playing, siren, sirenPan: pan, close, heli: game ? game.heat >= 4 : false });
+  if (game && view === 'game') minimap.draw(game, now);
+  const mode = view === 'garage' ? 'garage' : view === 'game' || view === 'results' ? 'game' : 'menu';
+  render.frame(view === 'game' || view === 'results' ? game : null, now, { mode, alpha: acc * TICK_RATE, countdown: Math.max(0, countdown), reduced: settings.motion, shakeOn: settings.shake });
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
-function togglePause() {
-  if (!game || game.state !== 'playing') return;
-  paused = !paused;
-  els.pause.classList.toggle('hidden', !paused);
-  els.hud.classList.toggle('hidden', paused);
-  els.controls.classList.toggle('hidden', paused);
+
+function togglePause(force) {
+  if (!game || game.state !== 'playing' || view !== 'game') return;
+  paused = force ?? !paused;
+  $('pause').classList.toggle('hidden', !paused);
   last = performance.now(); acc = 0;
   audio.pause(paused);
 }
-window.addEventListener('visibilitychange', () => { if (document.hidden && game?.state === 'playing' && !paused) togglePause(); });
-// Audio may only start after a gesture; the first tap anywhere unlocks it.
+window.addEventListener('visibilitychange', () => { if (document.hidden && game?.state === 'playing' && !paused) togglePause(true); });
 for (const type of ['pointerdown', 'keydown']) window.addEventListener(type, () => audio.unlock(), { capture: true, passive: true });
-function button(id, fn) { $(id).addEventListener('click', () => { audio.play('click', { gain: 0.6 }); fn(); }); }
-$('motion').checked = reducedMotion;
-$('motion').onchange = () => { reducedMotion = $('motion').checked; };
-$('music-toggle').checked = audio.musicOn;
-$('sfx-toggle').checked = audio.sfxOn;
-$('music-toggle').onchange = () => audio.setMusicEnabled($('music-toggle').checked);
-$('sfx-toggle').onchange = () => audio.setSfxEnabled($('sfx-toggle').checked);
-button('settings', () => $('config').showModal());
+
+/* ---------- buttons ---------- */
+function button(id, fn) { $(id).addEventListener('click', () => { click(); fn(); }); }
+button('play', begin);
+button('garage-race', () => { if (!carUnlocked(profile, carById(gCar))) { gCar = profile.car; } begin(); });
+button('replay', begin);
+button('garage-open', () => { gCar = profile.car; setView('garage'); });
+button('res-garage', () => { gCar = profile.car; game = null; setView('garage'); });
+button('garage-back', () => { applyLook(); setView('home'); });
+button('home-button', () => { game = null; applyLook(); setView('home'); });
+button('resume', () => togglePause(false));
+button('pause-btn', () => togglePause(true));
+button('restart', () => { togglePause(false); begin(); });
+button('quit', () => { paused = false; game = null; audio.pause(false); applyLook(); setView('home'); });
+button('pause-settings', () => openSettings());
+button('settings-open', () => openSettings());
 button('close-config', () => $('config').close());
 button('credits-open', () => $('credits').showModal());
 button('close-credits', () => $('credits').close());
 button('missions-open', () => { renderMissions(); $('missions').showModal(); });
 button('close-missions', () => $('missions').close());
 button('daily-play', () => { $('missions').close(); seed = daySeed(); begin(); });
-button('garage-open', () => { renderGarage(); $('garage').showModal(); });
-button('close-garage', () => $('garage').close());
-button('board', async () => {
+button('board-open', openBoard);
+button('close-board', () => $('records').close());
+
+function openSettings() {
+  const seg = (id, v) => { for (const b of $(id).querySelectorAll('button')) b.classList.toggle('active', b.dataset.v === v); };
+  seg('lang-seg', getLang()); seg('tod-seg', settings.tod); seg('gfx-seg', settings.gfx);
+  $('music-toggle').checked = audio.musicOn; $('sfx-toggle').checked = audio.sfxOn; $('shake-toggle').checked = settings.shake; $('motion').checked = settings.motion;
+  $('config').showModal();
+}
+$('lang-seg').addEventListener('click', (e) => { const b = e.target.closest('button'); if (!b) return; setLang(b.dataset.v); click(); openSettings(); if (view === 'home') renderHome(); if (view === 'garage') renderGarage(); checkOnline(); });
+$('tod-seg').addEventListener('click', (e) => { const b = e.target.closest('button'); if (!b) return; settings.tod = b.dataset.v; saveSettings(); render.setTOD(settings.tod); click(); openSettings(); });
+$('gfx-seg').addEventListener('click', (e) => { const b = e.target.closest('button'); if (!b) return; settings.gfx = b.dataset.v; saveSettings(); render.setQuality(settings.gfx); click(); openSettings(); });
+$('music-toggle').onchange = () => audio.setMusicEnabled($('music-toggle').checked);
+$('sfx-toggle').onchange = () => audio.setSfxEnabled($('sfx-toggle').checked);
+$('shake-toggle').onchange = () => { settings.shake = $('shake-toggle').checked; saveSettings(); };
+$('motion').onchange = () => { settings.motion = $('motion').checked; saveSettings(); };
+
+function renderMissions() {
+  $('mission-list').innerHTML = profile.missions.list.map((m) => {
+    const info = missionInfo(m), pct = Math.min(100, (100 * m.progress) / info.goal);
+    return `<li class="${m.done ? 'done' : ''}">${iconSVG(m.done ? 'check' : 'star')}<b>${t('m_' + m.id)}</b><small>${m.done ? t('done') : `${num(Math.min(m.progress, info.goal))}/${num(info.goal)}`}</small><i><u style="width:${pct}%"></u></i></li>`;
+  }).join('');
+}
+async function openBoard() {
   const list = $('entries');
-  list.textContent = 'در حال دریافت…';
+  list.textContent = '…';
   $('records').showModal();
   const mine = persisted[seed];
-  const own = mine ? `<p class="own">بهترین شما در این مسیر: <b class="num">${formatTime(mine.timeMs)}</b> ثانیه · <b class="num">${fmt(mine.points)}</b> امتیاز</p>` : '';
+  const own = mine ? `<p class="own">${t('lbYou', { score: num(mine.points), time: fmtTime(mine.timeMs) })}</p>` : '';
   try {
     const { entries } = await api.leaderboard(seed);
-    list.innerHTML = own + (entries.length
-      ? entries.map((r, i) => `<div class="row"><span>#${i + 1}</span><span class="who">${(r.label || '').replace(/[<>&"]/g, '')}${r.mission ? ' ★' : ''}</span><span>${formatTime(r.timeMs)}s</span><span>${fmt(r.points)}</span></div>`).join('') + '<p class="lb-note">★ = رویداد ویژه‌ی AI کامل شد · همه‌ی رکوردها با بازپخش روی لبه‌ی آروان تأیید شده‌اند</p>'
-      : 'هنوز رکوردی برای این مسیر ثبت نشده است.');
-  } catch {
-    list.innerHTML = own + '<p>جدول آنلاین در دسترس نیست.</p>';
-  }
-});
-button('close-board', () => $('records').close());
-button('coach-btn', async () => {
-  const t = lastTicket; if (!t) return;
-  const btn = $('coach-btn'), out = $('coach-text');
-  btn.disabled = true; btn.lastChild.textContent = 'مربی در حال تحلیل…';
-  try {
-    const r = await api.report(t.runId, t.token);
-    if (t !== lastTicket) return;
-    out.textContent = r.report;
-    const tag = document.createElement('small');
-    tag.textContent = r.source === 'ai' ? 'تحلیل هوش مصنوعی · AIaaS آروان (از آمار تأییدشده‌ی همین دور)' : 'تحلیل خودکار از آمار تأییدشده‌ی همین دور';
-    out.appendChild(tag);
-    out.classList.remove('hidden'); btn.classList.add('hidden');
-  } catch { btn.lastChild.textContent = 'تحلیل در دسترس نیست — دوباره تلاش کن'; }
-  finally { btn.disabled = false; }
-});
-button('home-button', () => { game = null; updateMode(); setView('home'); });
-button('play', begin);
-button('replay', begin);
-button('resume', togglePause);
-button('pause-button', togglePause);
-button('quit', () => { paused = false; game = null; audio.pause(false); setView('home'); });
-button('random', () => { seed = `challenge-${Math.random().toString(36).slice(2, 10)}`; els.daily.textContent = 'چالش تازه · مسیر مشترک'; begin(); });
+    list.innerHTML = own + (entries.length ? entries.map((r, i) => `<div class="row"><b>#${i + 1}</b><span class="who">${String(r.label || '').replace(/[<>&"]/g, '')} · ${String(carById(r.car).name)}</span><span>${fmtTime(r.timeMs)}</span><b>${num(r.points)}</b></div>`).join('') : `<p>${t('lbEmpty')}</p>`);
+  } catch { list.innerHTML = own + `<p>${t('lbOff')}</p>`; }
+}
 
-/* ---------- share sheet ---------- */
-let shareFormat = 'story', shareMod = null, shareCanvas = null, shareBlob = null, shareFrames = {};
+/* ---------- share ---------- */
+let shareFormat = 'story', shareMod = null, shareBlob = null, shareFrames = {};
 async function buildCard() {
   shareMod ??= await import('./share.js');
   const F = shareMod.FORMATS[shareFormat];
-  // Real in-engine frame of the current results scene at the card's aspect ratio.
-  const scale = shareFormat === 'wide' ? 0.6 : 0.62;
-  shareFrames[shareFormat] ??= render.snapshot(Math.round((shareFormat === 'wide' ? F.w * 0.56 : F.w) * scale), Math.round(F.h * scale));
-  const result = lastResult;
-  shareCanvas = await shareMod.drawCard(shareFormat, shareFrames[shareFormat], {
-    result, seed, title: result.win ? 'فرار کردی!' : 'گیر افتادی!', level: profile.level, chain: result.bestChain,
-    url: shareMod.challengeUrl(seed, result), daily: seed.startsWith('daily-'),
-  });
-  $('share-preview').src = shareCanvas.toDataURL('image/jpeg', 0.85);
-  $('share-hint').textContent = F.hint;
-  const text = shareMod.shareText(result), url = shareMod.challengeUrl(seed, result);
+  shareFrames[shareFormat] ??= render.snapshot(Math.round(F.w * 0.6), Math.round(F.h * 0.6));
+  const r = lastResult, car = carById(r.car);
+  const cv = await shareMod.drawCard(shareFormat, shareFrames[shareFormat], { result: r, car: car.name, title: t(r.end || 'legend'), level: profile.level, url: shareMod.challengeUrl(seed, r), labels: { score: t('score'), time: t('survived'), top: t('topSpeed'), td: t('takedowns') }, fa: getLang() === 'fa' });
+  $('share-preview').src = cv.toDataURL('image/jpeg', 0.85);
+  const text = t('shareText', { time: fmtTime(r.timeMs), score: num(r.points), car: car.name }), url = shareMod.challengeUrl(seed, r);
   $('net-telegram').href = shareMod.networkLink('telegram', text, url);
   $('net-x').href = shareMod.networkLink('x', text, url);
   $('net-whatsapp').href = shareMod.networkLink('whatsapp', text, url);
-  shareBlob = await shareMod.cardBlob(shareCanvas);
+  shareBlob = await shareMod.cardBlob(cv);
 }
-button('share', async () => {
-  if (!lastResult) return;
-  shareFrames = {};
-  $('share-sheet').showModal();
-  $('share-preview').removeAttribute('src');
-  await buildCard().catch(() => {});
+button('share', async () => { if (!lastResult) return; shareFrames = {}; $('share-sheet').showModal(); $('share-preview').removeAttribute('src'); await buildCard().catch(() => {}); });
+for (const tab of document.querySelectorAll('.tab.fmt')) tab.addEventListener('click', async () => {
+  for (const x of document.querySelectorAll('.tab.fmt')) x.classList.toggle('active', x === tab);
+  shareFormat = tab.dataset.format; click(); await buildCard().catch(() => {});
 });
-for (const tab of document.querySelectorAll('.tab')) tab.addEventListener('click', async () => {
-  for (const t of document.querySelectorAll('.tab')) t.classList.toggle('active', t === tab);
-  shareFormat = tab.dataset.format;
-  audio.play('click', { gain: 0.5 });
-  await buildCard().catch(() => {});
-});
-button('share-image', async () => {
-  if (!shareBlob) return;
-  try {
-    const how = await shareMod.shareImage(shareBlob, shareMod.shareText(lastResult), shareMod.challengeUrl(seed, lastResult), `escape60-${shareFormat}.png`);
-    if (how === 'downloaded') $('share-hint').textContent = 'تصویر ذخیره شد — در استوری یا پست بگذار و لینک چالش رو هم بفرست.';
-  } catch {}
-});
+button('share-image', async () => { if (!shareBlob) return; const car = carById(lastResult.car); try { await shareMod.shareImage(shareBlob, t('shareText', { time: fmtTime(lastResult.timeMs), score: num(lastResult.points), car: car.name }), shareMod.challengeUrl(seed, lastResult), `escape60-${shareFormat}.png`); } catch {} });
 button('save-image', () => { if (shareBlob) shareMod.downloadBlob(shareBlob, `escape60-${shareFormat}.png`); });
 button('copy-link', async () => {
   shareMod ??= await import('./share.js');
-  const url = shareMod.challengeUrl(seed, lastResult), text = shareMod.shareText(lastResult);
-  const label = $('copy-link').querySelector('b');
-  try { await navigator.clipboard.writeText(`${text}\n${url}`); label.textContent = 'لینک کپی شد ✓'; }
-  catch { label.textContent = url; }
-  setTimeout(() => (label.textContent = 'کپی لینک چالش'), 2200);
+  const url = shareMod.challengeUrl(seed, lastResult), label = $('copy-link').querySelector('b');
+  try { await navigator.clipboard.writeText(url); label.textContent = t('copied'); } catch { label.textContent = url; }
+  setTimeout(() => (label.textContent = t('copyLink')), 2200);
 });
 button('close-share', () => $('share-sheet').close());
 
 /* ---------- input ---------- */
-const left = $('left'), right = $('right');
-function bindHold(el, side) {
-  el.addEventListener('pointerdown', (e) => {
-    e.preventDefault();
-    el.setPointerCapture(e.pointerId);
-    skipCountdown();
-    if (side === 'left') pressedLeft = true; else pressedRight = true;
-    el.classList.add('down');
-  });
-  for (const type of ['pointerup', 'pointercancel', 'lostpointercapture']) el.addEventListener(type, () => {
-    if (side === 'left') pressedLeft = false; else pressedRight = false;
-    el.classList.remove('down');
-  });
+function hold(id, key) {
+  const el = $(id);
+  el.addEventListener('pointerdown', (e) => { e.preventDefault(); el.setPointerCapture(e.pointerId); skipCountdown(); input[key] = true; el.classList.add('down'); });
+  for (const ty of ['pointerup', 'pointercancel', 'lostpointercapture']) el.addEventListener(ty, () => { input[key] = false; el.classList.remove('down'); });
 }
-bindHold(left, 'left');
-bindHold(right, 'right');
-canvas.addEventListener('pointerdown', (e) => {
-  if (!game || game.state !== 'playing') return;
-  skipCountdown();
-  dragging = true; dragX = e.clientX;
-  canvas.setPointerCapture(e.pointerId);
-});
-canvas.addEventListener('pointermove', (e) => { if (!dragging) return; steer = Math.max(-1, Math.min(1, (e.clientX - dragX) / 90)); });
-for (const type of ['pointerup', 'pointercancel', 'lostpointercapture']) canvas.addEventListener(type, () => { dragging = false; steer = 0; });
+hold('left', 'tl'); hold('right', 'tr'); hold('brake', 'brake'); hold('hand', 'hand'); hold('nitro', 'nitro');
+const KEYS = { ArrowLeft: 'left', KeyA: 'left', ArrowRight: 'right', KeyD: 'right' };
 window.addEventListener('keydown', (e) => {
-  if (['ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) e.preventDefault();
-  if (e.code === 'ArrowLeft' || e.code === 'KeyA') { pressedLeft = true; skipCountdown(); }
-  if (e.code === 'ArrowRight' || e.code === 'KeyD') { pressedRight = true; skipCountdown(); }
-  if (e.code === 'KeyP' || e.code === 'Escape') { if (!e.repeat) togglePause(); }
-  if ((e.code === 'Space' || e.code === 'Enter') && game?.state === 'ended' && document.body.dataset.view === 'results' && !document.querySelector('dialog[open]')) begin();
+  if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Space'].includes(e.code)) e.preventDefault();
+  if (KEYS[e.code]) { input[KEYS[e.code]] = true; skipCountdown(); }
+  if (e.code === 'ArrowDown' || e.code === 'KeyS') input.kb.brake = true;
+  if (e.code === 'Space') input.kb.hand = true;
+  if (e.code === 'ShiftLeft' || e.code === 'ShiftRight' || e.code === 'ArrowUp' || e.code === 'KeyW' || e.code === 'KeyN') input.kb.nitro = true;
+  if ((e.code === 'KeyP' || e.code === 'Escape') && !e.repeat && view === 'game') togglePause();
+  if ((e.code === 'Enter' || e.code === 'KeyR') && view === 'results' && !document.querySelector('dialog[open]')) begin();
+  if (e.code === 'Enter' && view === 'home' && !document.querySelector('dialog[open]')) begin();
 });
 window.addEventListener('keyup', (e) => {
-  if (e.code === 'ArrowLeft' || e.code === 'KeyA') pressedLeft = false;
-  if (e.code === 'ArrowRight' || e.code === 'KeyD') pressedRight = false;
+  if (KEYS[e.code]) input[KEYS[e.code]] = false;
+  if (e.code === 'ArrowDown' || e.code === 'KeyS') input.kb.brake = false;
+  if (e.code === 'Space') input.kb.hand = false;
+  if (e.code === 'ShiftLeft' || e.code === 'ShiftRight' || e.code === 'ArrowUp' || e.code === 'KeyW' || e.code === 'KeyN') input.kb.nitro = false;
 });
-setView('home');
+window.addEventListener('blur', () => { for (const k of ['left', 'right', 'tl', 'tr', 'brake', 'hand', 'nitro']) input[k] = false; input.kb = { brake: false, hand: false, nitro: false }; });
+let padStart = false;
+function pollPad() {
+  const pads = navigator.getGamepads ? navigator.getGamepads() : [];
+  const gp = [...pads].find((x) => x && x.connected);
+  if (!gp) { input.pad.x = 0; input.pad.brake = input.pad.hand = input.pad.nitro = false; return; }
+  const b = (i) => !!gp.buttons[i]?.pressed || (gp.buttons[i]?.value || 0) > 0.4;
+  input.pad.x = Math.abs(gp.axes[0]) > 0.15 ? gp.axes[0] : b(14) ? -1 : b(15) ? 1 : 0;
+  input.pad.brake = b(6) || b(1); input.pad.hand = b(0); input.pad.nitro = b(7) || b(2) || b(5);
+  if (input.pad.x || input.pad.hand || input.pad.nitro) skipCountdown();
+  const st = b(9);
+  if (st && !padStart) { if (view === 'game') togglePause(); else if (view === 'home' || view === 'results') begin(); }
+  padStart = st;
+}
+setView('loading');

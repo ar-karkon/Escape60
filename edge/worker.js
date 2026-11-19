@@ -1,9 +1,8 @@
-/* Arvan Edge Computing entry point (Service Worker `fetch` interface, verified on Arvan).
-   Built by `npm run build` into dist/edge/worker.js and deployed as one edge compute.
-   Environment variables (Edge → Settings → variables; secrets encrypted, never committed):
-     S3_ACCESS_KEY, S3_SECRET_KEY  Arvan Object Storage key pair (leaderboard + runs + missions)
-     AI_API_KEY                    Arvan AIaaS gateway machine-user key
-   Optional: S3_BUCKET, S3_ENDPOINT, S3_REGION, STATIC_ORIGIN, AI_MODEL, AI_BASE, RUN_SECRET. */
+/* Edge entry point (Service Worker `fetch` interface). Built by `npm run build` into
+   dist/edge/worker.js and deployed as one edge compute.
+   Environment variables (secrets encrypted in the edge settings, never committed):
+     S3_ACCESS_KEY, S3_SECRET_KEY  S3-compatible object storage key pair (leaderboard + runs)
+   Optional: S3_BUCKET, S3_ENDPOINT, S3_REGION, STATIC_ORIGIN, RUN_SECRET. */
 import { createApp } from './app.mjs';
 import { s3Store, memoryStore } from './s3.mjs';
 
@@ -19,7 +18,7 @@ const store = E.S3_ACCESS_KEY && E.S3_SECRET_KEY
 const app = createApp({ env: E, store, log: (...a) => console.log(...a) });
 
 const TYPES = { html: 'text/html; charset=utf-8', js: 'text/javascript; charset=utf-8', css: 'text/css; charset=utf-8', svg: 'image/svg+xml', json: 'application/json', woff2: 'font/woff2', png: 'image/png', jpg: 'image/jpeg', mp3: 'audio/mpeg', wav: 'audio/wav', md: 'text/plain; charset=utf-8', txt: 'text/plain; charset=utf-8', webmanifest: 'application/manifest+json' };
-const ROUTES = { '/': 'index.html', '/edge': 'edge.html', '/edge/': 'edge.html' };
+const ROUTES = { '/': 'index.html' };
 /** Static game files live flat in a public bucket; the edge is the only public origin. */
 async function staticFile(req) {
   if (req.method !== 'GET' && req.method !== 'HEAD') return new Response('Method not allowed', { status: 405 });

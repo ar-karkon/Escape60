@@ -1,3 +1,5 @@
+> **SUPERSEDED (v3.0, 2026-11-19):** the voxel/pixel-art target was replaced by the stylised PBR street-racer direction — see D30 in `docs/13_DECISIONS.md`. Kept for history.
+
 # سند اجرایی کامل Escape 60 — نسخه سه‌بعدی پیکسل‌آرت / وکسلی
 **تاریخ:** ۲۸ آبان ۱۴۰۵ — ۱۹ نوامبر ۲۰۲۶  
 **مخزن:** https://github.com/ar-karkon/Escape60  

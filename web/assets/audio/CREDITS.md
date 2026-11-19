@@ -31,3 +31,6 @@ also shown in the in-game settings («سازندگان صدا»).
 
 License texts: CC0 1.0 https://creativecommons.org/publicdomain/zero/1.0/ ·
 CC-BY 3.0 https://creativecommons.org/licenses/by/3.0/ · CC-BY 4.0 https://creativecommons.org/licenses/by/4.0/
+
+## Synthesised in-game (original)
+Explosion, nitro burst and hiss, repair (impact wrench + chime), exhaust backfire and wind noise are generated at runtime with the Web Audio API (`web/src/audio.js`); no recorded asset is used for them.

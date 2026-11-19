@@ -1,93 +1,63 @@
-# ESCAPE 60 — فرار ۶۰
+# ESCAPE 60 — Street Pursuit
 
-**An original, fully playable, mobile-first 60-second arcade police chase game.** Built for ArvanCloud Edge Games. Sunset Bay is a 3D voxel / pixel-art tropical neon city built from original procedural models, rendered with a locally bundled Three.js r170 (MIT), HDR bloom and a pixel-art UI.
+**An original, free browser street-pursuit racing game.** Drift, boost and take down the police in Sunset Bay — an open coastal city with curved boulevards, a roundabout, canyon hairpins, a coastal highway and a port. Survive the first 60 seconds to "escape", then keep going in overtime while the heat rises, until your car is wrecked or busted. Runs on phones, tablets and desktops (touch, keyboard and gamepad), in English and Persian.
 
-**Status (2026-11-19):** deployed on Arvan Edge Computing at **https://escape60.lavanai2525-3qem7.arvanedge.ir** (no separate server). The edge serves the game, issues signed run tickets and replay-verifies every run (full 60 s runs verified live, in signed chunks). The durable leaderboard (Arvan Object Storage) and the AIaaS mission/coach features switch on once the `S3_*` and `AI_API_KEY` edge variables are set; until then the edge falls back to in-memory storage and a deterministic mission. The competition entry has not been submitted yet. Edge architecture page: `/edge`.
+![Gameplay](docs/screenshots/desktop-drive.png)
 
-## Run and play
+## Play locally
 
-Requires Node.js 20+; no `npm install` is necessary.
+Requires Node.js 20+.
 
 ```bash
-npm start
-# open http://localhost:4173
-npm test
+npm install            # dev tools only (esbuild); the game itself has no runtime dependencies
+npm start              # http://localhost:4173 — game + local game service (leaderboard, replay)
+npm test               # deterministic simulation + replay/anti-cheat tests
 npm run check          # tests + syntax check of every module
-npm run build
-npm run test:browser   # mobile smoke test (needs npm start)
-npm run capture        # real 390x780 screenshots into docs/screenshots (needs npm start)
+npm run build          # deployable static site + edge worker in dist/
+npm run test:browser   # mobile smoke test incl. a real verified run (needs npm start)
+npm run capture        # real screenshots into docs/screenshots (needs npm start)
 ```
 
-On mobile, drag across the screen or press the steering buttons (pressing during the 3-2-1 countdown starts immediately). On desktop, press Left/Right or A/D, and P/Esc to pause. Survive for 60 seconds. Each crash costs one of three lives. Avoid traffic, police cars, buildings, and roadblocks. Close calls and precise driving add skill points. Use **Replay**, **Share challenge**, or **New challenge** after each round.
+**Controls** — touch: ◀ ▶ steer · DRIFT (handbrake) · NITRO · BRAKE. Keyboard: ← → / A D steer · ↓ / S brake · Space handbrake · Shift / ↑ / W nitro · P pause · Enter retry. Gamepad: stick steer · A handbrake · RT / X nitro · LT / B brake · Start pause.
 
-## Sunset Bay
+## What's in the game
 
-The same 3D city renders the menu, race and finish. Each 520-unit simulation block maps to a 52-unit scene tile built as one merged voxel mesh; windows, road markings, wet puddles, water and neon signs are drawn procedurally in the shader. Every visible wall sits on the simulation footprint, so what you hit is what you see.
-
-- **Districts:** waterfront (marina with yachts, beach with umbrellas and lifeguard tower, palm park with fountain, pier ferris wheel), downtown (glass towers, Art Deco hotels with neon colonnades, apartments), boulevard/highway (overpass with highway signs, motels, gas stations, parking garages, billboards), Old Town (pastel shop houses, alleys with string lights, rooftop terraces).
-- **Vehicles:** detailed hero coupe with stripes and spoiler, police cruiser and SUV with strobing light bars, taxi/van/sedan/hatch traffic, a pursuit helicopter with searchlight after 25 s, striped roadblocks.
-- **Light & FX:** low magenta sunset with shadows, striped retro sun, pixel clouds, sea glitter, distant skyline and bay bridge, street-lamp pools, wet-road reflection streaks, police strobes on the asphalt, drift smoke, skid marks, sparks, confetti on a win.
-- **Camera:** close rear three-quarter chase (~9.4 up, 14 behind) with speed FOV, damping, steer roll and hit shake; buildings in front of the car dissolve. Off-screen police show as an edge arrow.
-- **Quality:** adaptive resolution / shadows / bloom; «گرافیک سبک» in settings; `?q=high` or `?q=low` pins a tier for benchmarks.
-
-The simulation (1.5.0; 1.4.0 rules with engine-independent trig) builds a real street network per seed (avenues every third street, T-junctions, dead ends, closed blocks that become parks, plazas, malls and car parks), drives traffic along it, adds patrols at 8, 18, 30, 42 and 52 seconds with roadblocks from 20 seconds, uses a 0–100 health bar where damage scales with how hard you hit (with slow regeneration), spawns traffic and police outside the visible range, and keeps the skill chain: near misses and roadblock dodges in quick succession multiply points up to ×5 (any hit resets it). Everything is verified by the same server replay. Downtown increases traffic frequency and highway driving has a higher speed cap. Local and server rankings use version-specific keys. The static bundle includes Three.js, the fonts (Rooyin Free, Jersey 10, Vazirmatn — SIL OFL) and their licenses, so gameplay needs no CDN requests.
-
-Real 390×780 engine screenshots: [Menu](docs/screenshots/menu.png) · [Driving](docs/screenshots/coastal.png) · [High-pressure chase](docs/screenshots/pursuit.png) · [Results](docs/screenshots/results.png) · [Share sheet](docs/screenshots/share-sheet.png) · share cards [Story](docs/screenshots/share-story.jpg) / [Post](docs/screenshots/share-post.jpg) / [Wide](docs/screenshots/share-wide.jpg) · [Side by side with the concept references](docs/screenshots/comparison.jpg). Concept references live in `design/references/`; the remaining visual gaps are listed in `docs/25_VISUAL_QUALITY_AUDIT_FA.md`.
-
-## Delivered
-
-- Deterministic seeded 60Hz game loop, escalating police AI (chasers from behind, head-on interceptors), busy traffic that enters out of view, buildings, roadblocks, impact-scaled health bar with regeneration, drift/near-miss/dodge scoring with a ×5 skill chain, 60-second win condition.
-- Real street network with dead ends and a heading-up minimap (streets, dead ends, police, roadblocks); automatic quality for weak phones.
-- Walking pedestrians that cross streets and leap clear of cars; softer rendering with comic ink outlines, halftone shading and graffiti-style drift effects; Persian UI in the Rooyin pixel font.
-- 3D voxel tropical neon city with HDR bloom, pixel UI, countdown, combo meter, event popups, pause on tab hide, touch and keyboard controls.
-- **Music & sound:** five synthwave/retrowave tracks (menu, three rotating chase tracks, results) and recorded SFX — engine, tyre squeal, police siren with stereo position, helicopter, crash, whooshes, horn, combo/level stingers — all CC0 / CC-BY from OpenGameArt, credited in-game and in `web/assets/audio/CREDITS.md`. Separate music / SFX switches.
-- **Keep-playing loop:** XP and levels, eight unlockable paint jobs in the garage, three daily missions, a day streak bonus, "new record" and friend-target markers on the timer, instant retry (Space / Enter).
-- **Share & challenge:** share sheet with real in-engine cards in three formats — Story 9:16 (Instagram / Telegram / WhatsApp status), Post 4:5 and Wide 16:9 (X / Telegram) — each with the run's real numbers and a QR code. Native share sends the image on phones; direct Telegram, X and WhatsApp links; download; copy link. Challenge links carry the seed and the friend's target (`?seed=…&c=time.points`), which the game shows as an unverified target and compares at the end.
-- Daily UTC seed and portable challenge URL, local best persistence, Open Graph / Twitter card meta.
-- **Arvan Edge game service** (`edge/app.mjs`): daily challenge, HMAC run tickets, authoritative 60 Hz replay of the steering trace *on the edge* (chunked with signed checkpoints to fit the per-request CPU budget), single-use runs, leaderboard and daily stats in Arvan Object Storage via a WebCrypto SigV4 client, call-sign labels instead of names, no personal data.
-- **AI Special Event (Arvan AIaaS, DeepSeek-V4-Flash):** once per UTC day the edge asks the model for a title, briefing, three objectives from a whitelist (goals clamped) and police-radio lines; output is schema-validated and frozen in storage with a conditional write so every player and every edge node gets the same event. Objectives are judged from the replayed result (★ in the leaderboard). Deterministic fallback when the model is unavailable.
-- **AI police radio** in the HUD (model-written lines triggered by real game events, synthesized squelch) and an **AI coach report** for verified runs (cached, daily budget).
-- Deterministic math (`web/src/dmath.js`): Arvan's runtime, Safari and Firefox return different last bits for `Math.sin/cos/pow` than Chrome/Node, so the simulation uses its own IEEE-exact trig.
-- Local dev server (`server/server.mjs`) runs the same edge app with a disk store.
-- Tests, CI, operational guide, pre-existing GDD and design rationale.
+- **Sunset Bay map** (`web/src/map.js`): ~24 km of hand-authored roads (Catmull-Rom curves) — warped downtown grid with a roundabout and a plaza, Ocean Boulevard, a sweeping coastal highway with a bridge over the marina, a winding canyon with hairpins, a lake loop, Old Town lanes, the port road and five **pit stops**. Drivable space is a smooth signed-distance field (filleted junction corners), shared bit-for-bit by the game, the server replay, the renderer and the minimap.
+- **Arcade drift physics** (`web/src/simulation.js`, SIM 2.0.0): automatic throttle, brake, handbrake slides, counter-steer, nitro, impact-scaled damage, a car that **limps and smokes when damaged**, **3 repairs** at pit stops, **explosion** at zero health, busted meter, takedowns (ram cops or make them crash), near misses, roadblock dodges, drift banking and a ×8 skill chain. Heat rises 1→5 over time with cruisers, interceptors, SUVs, roadblocks, spike strips and a helicopter. The 60 s mark is a milestone (+2,500, slow-motion celebration) — the run continues.
+- **14 cars** (`web/src/cars.js`), each inspired by a classic road car shape (JDM coupes, hot hatches, touring sedans, muscle cars, a rear-engine classic, wedge supercars) with fictional names, no badges, their own stats (speed, acceleration, handling, drift, nitro, armour) and procedural lofted 3D bodies (`web/src/gfx/carmodel.js`). 16 paints and 5 liveries.
+- **Selectable effects** in the garage: drift smoke (clean, comic, neon, rainbow, fire), nitro flame (blue jet, toxic, plasma, inferno), trails (light trails, neon tyres), combo bursts (graffiti, electric, minimal) and an accent colour.
+- **Feel**: camera director with speed FOV, acceleration lag, brake dive, handbrake roll, drift flank view, nitro punch with zoom blur, chromatic aberration and graffiti wings, trauma-based impact shake, hit-stop and slow motion on big moments; skid marks, sparks, backfires, damage smoke and fire, explosions with debris and shockwave, knock-over street furniture (lamps, hydrants with water jets, benches, palms…).
+- **Look** (`web/src/gfx/`): stylised PBR city with procedural facades and lit windows, glossy clear-coat car paint with sky reflections, wet-road sheen at night, sea and lake water, palms, pines, cliffs, landmarks (fountain roundabout, ferris wheel pier, lighthouse, port cranes, bridge, hillside letters), three times of day (sunset, night, day), HDR bloom and filmic grading. Adaptive quality for weak phones.
+- **Audio**: licensed music and SFX (CC0 / CC-BY, see `web/assets/audio/CREDITS.md`) plus synthesised explosion, nitro, repair, backfire, wind and gear-shifted engine pitch.
+- **Progression & sharing**: XP and levels unlock cars, paints and effects; three daily missions and a day streak; daily shared route and friend-challenge links; share cards (story / post / wide) from a real in-engine frame with a QR code.
+- **Fair leaderboard**: the browser records only the input trace. The game service (`edge/app.mjs`) re-simulates every run with the same simulation (signed tickets bind route and car, chunked replay with HMAC checkpoints, single-use runs) before it is ranked. `web/src/dmath.js` keeps trigonometry identical across engines.
 
 ## Project layout
 
 ```text
-web/                    static HTML/CSS/WebGL2 browser game
-web/src/simulation.js   deterministic rules imported by game AND Node score verifier
-web/src/map.js          seeded street network (shared by simulation, server replay, renderer, minimap)
-web/src/main.js         UI flow, controls, countdown, fixed-timestep loop, share and API handling
-web/src/render.js       camera director, tile streaming, actors, lights and FX orchestration
-web/src/gfx/            voxel builder + shader patterns, city kit, props, cars, sky, FX, HDR post
-web/src/ui/icons.js     original pixel icon set
-web/src/ui/minimap.js   heading-up minimap
-web/src/audio.js        music streaming, SFX buffers, engine/siren/squeal/heli mix, ducking
-web/src/meta.js         XP, levels, paints, daily missions, streak, friend-challenge parsing
-web/src/share.js        social share cards (story/post/wide) with QR, native share and network links
-web/assets/             logo, OFL fonts, licensed audio (see assets/audio/CREDITS.md)
-web/src/mission.js      AI special event: whitelist, validation, judging, radio lines, fallback
-web/src/dmath.js        engine-independent sin/cos/atan2/hypot for deterministic replay
-web/edge.html           /edge — live architecture and stats page for judges
-edge/app.mjs            game service (tickets, chunked replay, leaderboard, AI) — runs on Arvan Edge
-edge/s3.mjs             Arvan Object Storage client (SigV4 on WebCrypto) + memory store
-edge/worker.js          Arvan Edge entry: API + static proxy to the public bucket
-server/server.mjs       local dev server running the same edge app with a disk store
-scripts/                build, syntax check, browser smoke test, screenshot capture, comparison sheet
-design/references/      concept art-direction references (not shipped)
-docs/                   full design, rules, architecture, research and backlog
+web/index.html, web/style.css   UI shell (HUD, garage, results, dialogs)
+web/src/main.js                 game flow, input (touch / keyboard / gamepad), HUD, events, share
+web/src/simulation.js           deterministic 60 Hz rules (browser + server replay)
+web/src/map.js                  Sunset Bay road graph, distance field, pit stops, zones
+web/src/cars.js                 14 cars, police and traffic definitions
+web/src/render.js               renderer: camera director, actors, lights, effects, post
+web/src/gfx/                    materials, sky/TOD, city builder, props, car models, particles, effects, post
+web/src/ui/                     minimap and icons
+web/src/i18n.js                 English / Persian strings
+web/src/meta.js                 XP, unlocks, garage choices, missions, challenge links
+edge/                           game service (edge worker) + S3-compatible storage client
+server/server.mjs               local dev server running the same game service
+tests/                          simulation and API tests
+scripts/                        build, checks, smoke test, screenshot capture, map preview
+docs/                           design, decisions, deployment and status
 ```
 
-## Production deployment (Arvan, as deployed)
+## Deployment
 
-See `docs/22_DEPLOYMENT.md`. In short: `npm run check && npm run build`, upload every file in `dist/web/` to the public bucket `escape60-game`, paste `dist/edge/worker.js` into the `escape60` edge compute, and set the edge variables `S3_ACCESS_KEY`, `S3_SECRET_KEY` (private bucket `escape60-data`) and `AI_API_KEY` (AIaaS machine user). Values are JSON, so strings need double quotes.
+`npm run build` produces `dist/web/` (static site; works on any static host and on the edge proxy) and `dist/edge/worker.js` (API + static proxy). See `docs/22_DEPLOYMENT.md`. The game service needs only an S3-compatible bucket (`S3_ACCESS_KEY`, `S3_SECRET_KEY`); without it the leaderboard falls back to memory. Replays run in chunks (`REPLAY_CHUNK`, default 300 ticks) to fit small per-request CPU budgets.
 
-**Limitations:** deterministic replay proves a run is *possible*, not that a human played it (a bot could still submit a perfect trace). Rate limiting is per edge isolate. Real-device FPS and an audible mix check are still outstanding.
-
-## Competition and research
-
-The project was created for [Arvan Edge Games](https://try.arvancloud.ir/edge-games/). The original design research and decision records are under `docs/`. All historic external factual claims are source-labelled and should be verified before public marketing.
+**Status:** see `docs/00_STATUS.md`. Real-device FPS and an audible mix check are still outstanding; the live deployment must be rebuilt and redeployed for this version.
 
 ## License
 
-The repository is public but there is currently **no explicit open-source license**. All original game artwork is procedural code. Please do not use protected GTA or Rockstar assets or branding.
+The repository is public but there is currently **no explicit open-source license**. All game art is original procedural code; car shapes are inspired by real cars but carry no brands, names or logos. Fonts and audio keep their own licenses (OFL, CC0, CC-BY).

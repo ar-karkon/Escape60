@@ -47,3 +47,16 @@ Status: accepted. Context: Arvan's runtime returned different last bits for Math
 
 ## D-AI-CONTENT-ONLY — AI writes content, never rules (2026-11-19)
 Status: accepted. The model writes the daily event text, radio lines and coach text. Objectives come from a whitelist with clamped goals and are judged from the verified replay; one model call per day for the event, cached coach reports with a daily cap. Cheapest connected model (DeepSeek-V4-Flash).
+
+## v3.0 decisions (2026-11-19, owner request: "world-class" street racer)
+| ID | Topic | State | Direction | Why |
+|---|---|---|---|---|
+| D23 | Map | IMPLEMENTED | One fixed hand-authored city (map v2): Catmull-Rom roads through named junctions, angle-weighted smooth-min distance field (filleted corners), pit-stop pads; shared by sim, replay, renderer, minimap | Owner: "all the roads are square — I want a great map with curves" |
+| D24 | Run structure | IMPLEMENTED | 60 s is a milestone (+2,500, celebration), the run continues with rising heat until wrecked / busted / 10 min cap; ranking by points then time | Owner: the game must not stop at 60 s |
+| D25 | Damage & repair | IMPLEMENTED | Damage limps the car (top speed down to 66 %), smoke → fire as health drops, 3 repairs at 5 pit stops, explosion at 0 | Owner request |
+| D26 | Controls | IMPLEMENTED | Auto throttle + brake, handbrake drift, nitro (trace value = steer + flags, 0..63); touch buttons, keyboard, gamepad | Nitro / brake / handbrake effects were requested |
+| D27 | Cars | IMPLEMENTED | 14 cars inspired by real shapes with fictional names and own stats; lofted procedural bodies; level unlocks; paints + liveries | Owner: 14 cars inspired by real cars |
+| D28 | Effects | IMPLEMENTED | Garage-selectable drift smoke, nitro, trail, burst styles + accent colour; camera feel for throttle, nitro, brake, handbrake, drift, impacts | Owner: selectable effects, camera effects, blur |
+| D29 | Product scope | IMPLEMENTED | Removed AI special event, AI radio, AI coach and Arvan mentions from the product; English default + Persian | Owner: "world-class games don't have these"; global market |
+| D30 | Look | IMPLEMENTED (supersedes D06/D08/D20 visuals) | Clean stylised PBR (no global ink outlines / halftone / voxels), procedural facades, glossy clear-coat cars, three times of day, filmic grade; comic effects only as selectable layers | Owner: graphics looked dirty / jarring, people's black outlines artificial |
+| D31 | Fonts | IMPLEMENTED (supersedes D14) | Barlow Condensed (OFL) for the racing UI, Vazirmatn (OFL) for Persian | Pixel fonts clashed with the new direction |

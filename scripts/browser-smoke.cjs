@@ -1,111 +1,51 @@
+/* Mobile smoke test against a running server (npm start): menus, garage, a real autopiloted run that
+   ends naturally, server-side replay verification and the share sheet. */
 let chromium;
 try { ({ chromium } = require("playwright")); } catch { ({ chromium } = require("playwright-core")); }
 const assert = require("node:assert/strict");
 (async () => {
-  const browser = await chromium.launch({
-    executablePath: process.env.CHROME_BIN || undefined,
-    args: [
-      "--no-sandbox",
-      "--use-gl=angle",
-      "--use-angle=swiftshader",
-      "--enable-unsafe-swiftshader",
-    ],
-  });
+  const browser = await chromium.launch({ executablePath: process.env.CHROME_BIN || undefined, args: ["--no-sandbox", "--use-gl=angle", "--use-angle=swiftshader", "--enable-unsafe-swiftshader"] });
   try {
-    const ctx = await browser.newContext({
-      viewport: { width: 390, height: 780 },
-      hasTouch: true,
-      permissions: ["clipboard-read", "clipboard-write"],
-    });
-    const p = await ctx.newPage(),
-      errors = [];
+    const ctx = await browser.newContext({ viewport: { width: 390, height: 780 }, hasTouch: true, permissions: ["clipboard-read", "clipboard-write"] });
+    const p = await ctx.newPage(), errors = [];
     p.on("pageerror", (e) => errors.push(e.message));
-    p.on("console", (e) => {
-      if (e.type() === "error") errors.push(e.text());
-    });
-    const shot = (name) =>
-      process.env.SMOKE_SHOTS ? p.screenshot({ path: process.env.SMOKE_SHOTS + "/" + name + ".png" }) : null;
-    await p.goto(
-      new URL(
-        "/?seed=sunset-1",
-        process.env.GAME_URL || "http://localhost:4173",
-      ).href,
-    );
-    await p.waitForTimeout(900);
-    await shot("menu");
-    await p.locator("#settings").tap();
-    await p.locator("#motion").check();
-    await p.locator("#motion").uncheck();
-    await p.locator("#close-config").tap();
+    p.on("console", (e) => { if (e.type() === "error" && !/status of 4\d\d/.test(e.text())) errors.push(e.text()); });
+    await p.goto(new URL("/?seed=smoke-1&q=low&capture=1", process.env.GAME_URL || "http://localhost:4173").href);
+    await p.waitForFunction(() => document.body.dataset.view === "home", null, { timeout: 120000 });
+    await p.locator("#settings-open").tap(); await p.locator("#shake-toggle + .switch").tap(); await p.locator("#close-config").tap();
+    await p.locator("#missions-open").tap(); assert.equal(await p.locator("#mission-list li").count(), 3); await p.locator("#close-missions").tap();
+    await p.locator("#board-open").tap(); await p.locator("#close-board").tap();
     await p.locator("#garage-open").tap();
-    await p.locator("#close-garage").tap();
-    await p.locator("#missions-open").tap();
-    assert.equal(await p.locator("#mission-list li").count(), 3);
-    // AI special event (from the edge, or the deterministic fallback when offline) is listed too.
-    await p.waitForFunction(() => document.querySelectorAll("#evd-goals li").length >= 3, null, { timeout: 30000 });
-    await p.locator("#close-missions").tap();
-    await p.locator("#board").tap();
-    await p.locator("#close-board").tap();
+    assert.equal(await p.locator(".car-card").count(), 14);
+    await p.locator('.tab[data-tab="fx"]').tap(); await p.locator('[data-fx="smoke"][data-v="comic"]').tap();
+    await p.locator("#garage-back").tap();
+    // autopilot (input only: the run stays legitimate and must verify on the server)
+    await p.evaluate(() => {
+      const E = window.__escape60, M = E.map;
+      E.override = (g) => {
+        const q = g.player, r = M.sample(q.x, q.y, {});
+        if (r.e < 0) return 3;
+        const pt = M.pointAt(r.e, r.s, {}), f = pt.tx * Math.cos(q.h) + pt.ty * Math.sin(q.h) >= 0 ? 1 : -1, L = M.edges[r.e].len;
+        const t = M.pointAt(r.e, Math.max(0, Math.min(L, r.s + f * (12 + q.v * 0.45))), {});
+        let d = Math.atan2(t.y + t.tx * f * 2.5 - q.y, t.x - t.ty * f * 2.5 - q.x) - q.h; while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI;
+        return (Math.max(-3, Math.min(3, Math.round(d * 5))) + 3) | (Math.abs(d) > 0.4 && q.v > 28 ? 8 : 0);
+      };
+    });
     await p.locator("#play").tap();
-    await p.locator("#pause-button").tap();
-    await p.locator("#resume").tap();
-    const time = (t) =>
-      p.waitForFunction(
-        // Harder pursuit (SIM 1.4.0+): an unsteered run may be caught before t, which also ends the wait.
-        (t) => Number(document.querySelector("#time").textContent) >= t || document.body.dataset.view === "results",
-        t,
-        { timeout: 160000 },
-      );
-    await time(2.4);
-    await shot("coastal");
-    await time(52.15);
-    if ((await p.evaluate(() => document.body.dataset.view)) === "game") await shot("pursuit");
-    await p.locator("#results").waitFor({ timeout: 90000 });
-    await p.waitForFunction(() =>
-      document.querySelector("#rank").textContent.includes("تأیید شد"),
-    );
-    // AI coach report for the edge-verified run.
-    await p.locator("#coach-btn").tap();
-    await p.locator("#coach-text").waitFor({ timeout: 30000 });
-    console.log("coach:", await p.locator("#coach-text").innerText());
-    await p.waitForTimeout(600);
-    await shot("results");
-    console.log(await p.locator("#results").innerText());
+    await p.waitForFunction(() => window.__escape60.state()?.ticks > 120, null, { timeout: 60000 });
+    await p.locator("#pause-btn").tap(); await p.locator("#resume").tap();
+    await p.waitForFunction(() => document.body.dataset.view === "results", null, { timeout: 400000 });
+    console.log(await p.locator(".res-card").innerText());
+    await p.waitForFunction(() => /Global rank|Verified|verify/i.test(document.querySelector("#rank").textContent) && !/Verifying/.test(document.querySelector("#rank").textContent), null, { timeout: 60000 });
+    const rank = await p.locator("#rank").innerText();
+    console.log("rank:", rank);
+    if (!process.env.OFFLINE) assert.match(rank, /Global rank|Verified/);
     await p.locator("#share").tap();
-    await p.locator("#share-sheet").waitFor();
     await p.waitForFunction(() => document.querySelector("#share-preview").src.startsWith("data:image"), null, { timeout: 120000 });
     await p.locator("#copy-link").tap();
-    const copied = await p.evaluate(() => navigator.clipboard.readText());
-    assert.match(copied, /seed=sunset-1/);
-    assert.match(copied, /[?&]c=\d+\.\d+/);
-    assert.match(await p.locator("#net-telegram").getAttribute("href"), /^https:\/\/t\.me\/share\/url\?/);
-    assert.match(await p.locator("#net-x").getAttribute("href"), /^https:\/\/x\.com\/intent\/post\?/);
+    assert.match(await p.evaluate(() => navigator.clipboard.readText()), /seed=smoke-1&c=\d+\.\d+/);
     await p.locator("#close-share").tap();
-    await p.locator("#replay").tap();
-    await p.locator("#hud").waitFor();
-    const cdp = await ctx.newCDPSession(p),
-      rect = await p.locator("#left").boundingBox();
-    await cdp.send("Input.dispatchTouchEvent", {
-      type: "touchStart",
-      touchPoints: [{ x: rect.x + 20, y: rect.y + 20 }],
-    });
-    await p.waitForTimeout(1100);
-    await cdp.send("Input.dispatchTouchEvent", {
-      type: "touchEnd",
-      touchPoints: [],
-    });
-    assert.ok(Number((await p.locator("#score").innerText()).replace(/,/g, "")) > 0, "steering should earn drift points");
-    await p.locator("#pause-button").tap();
-    await p.locator("#quit").tap();
-    await p.locator("#home").waitFor();
     assert.deepEqual(errors, []);
-    console.log(
-      "Mobile controls, pause, board, settings, share, replay, quit and console checks passed.",
-    );
-  } finally {
-    await browser.close();
-  }
-})().catch((e) => {
-  console.error(e);
-  process.exitCode = 1;
-});
+    console.log("smoke OK");
+  } finally { await browser.close(); }
+})().catch((e) => { console.error(e); process.exit(1); });

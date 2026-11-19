@@ -1,0 +1,266 @@
+import * as T from "../../vendor/three.js";
+
+/* Shared materials. Everything is a patched MeshStandard/MeshPhysical material so the city gets the same
+   physically based light, sky reflections, fog and shadows, with per-vertex material data:
+   aMat = (roughness, metalness, emissive, kind). Night-only emissive (windows, lamps) is scaled by
+   U.uNight; neon is always on. */
+export const U = {
+  uTime: { value: 0 }, uNight: { value: 0.3 }, uHead: { value: 1 }, uWet: { value: 0.3 },
+  uField: { value: null }, uZone: { value: null }, uFieldMin: { value: new T.Vector2() }, uFieldSize: { value: new T.Vector2(1, 1) },
+  uSkyTop: { value: new T.Color() }, uSkyHorizon: { value: new T.Color() }, uSunDir: { value: new T.Vector3(0, 1, 0) }, uSunColor: { value: new T.Color() },
+  uFogColor: { value: new T.Color() },
+};
+export const GLSL_NOISE = `
+float h21(vec2 p){ p=fract(p*vec2(123.34,456.21)); p+=dot(p,p+45.32); return fract(p.x*p.y); }
+float vnoise(vec2 p){ vec2 i=floor(p), f=fract(p); f=f*f*(3.-2.*f);
+  return mix(mix(h21(i),h21(i+vec2(1,0)),f.x), mix(h21(i+vec2(0,1)),h21(i+vec2(1,1)),f.x), f.y); }
+float fbm(vec2 p){ float a=.5, s=0.; for(int i=0;i<4;i++){ s+=a*vnoise(p); p*=2.03; a*=.5; } return s; }
+`;
+const WORLD_VARY = `
+varying vec3 vWorld;
+`;
+const WORLD_POS = `
+  vec4 wpE = vec4(transformed, 1.0);
+  #ifdef USE_INSTANCING
+  wpE = instanceMatrix * wpE;
+  #endif
+  vWorld = (modelMatrix * wpE).xyz;
+`;
+
+let patchId = 0;
+function patch(mat, { vertexHead = "", vertexBody = "", fragHead = "", fragColor = "", fragRough = "", fragMetal = "", fragEmissive = "", fragLights = "", uniforms = {} }) {
+  // Three.js caches programs by the onBeforeCompile source text, which is identical for every patched
+  // material; give each patch its own key so the facade, ground, car and kit shaders stay distinct.
+  const key = "esc60-patch-" + (patchId++) + "-" + (vertexHead + fragHead + fragColor + fragEmissive + fragLights).length;
+  mat.customProgramCacheKey = () => key;
+  mat.onBeforeCompile = (sh) => {
+    Object.assign(sh.uniforms, U, uniforms);
+    sh.vertexShader = sh.vertexShader
+      .replace("#include <common>", `#include <common>\n${WORLD_VARY}\n${vertexHead}`)
+      .replace("#include <begin_vertex>", `#include <begin_vertex>\n${vertexBody}`)
+      .replace("#include <project_vertex>", `#include <project_vertex>\n${WORLD_POS}`);
+    sh.fragmentShader = sh.fragmentShader
+      .replace("#include <common>", `#include <common>\n${WORLD_VARY}\nuniform float uTime, uNight, uHead, uWet;\n${GLSL_NOISE}\n${fragHead}`)
+      .replace("#include <color_fragment>", `#include <color_fragment>\n${fragColor}`)
+      .replace("#include <roughnessmap_fragment>", `#include <roughnessmap_fragment>\n${fragRough}`)
+      .replace("#include <metalnessmap_fragment>", `#include <metalnessmap_fragment>\n${fragMetal}`)
+      .replace("#include <emissivemap_fragment>", `#include <emissivemap_fragment>\n${fragEmissive}`);
+    if (fragLights) sh.fragmentShader = sh.fragmentShader.replace("#include <lights_physical_fragment>", `#include <lights_physical_fragment>\n${fragLights}`);
+  };
+  return mat;
+}
+
+/** Car paint / glass / lights. Physical (clear coat) for the hero, standard for everyone else. */
+export function carMaterial(physical = false) {
+  const uniforms = { uBrake: { value: 0.2 }, uDamage: { value: 0 }, uSiren: { value: new T.Vector2(0, 0) }, uCharred: { value: 0 } };
+  const base = { vertexColors: true, roughness: 0.4, metalness: 0.2, envMapIntensity: 1.1 };
+  const mat = physical ? new T.MeshPhysicalMaterial({ ...base, clearcoat: 1, clearcoatRoughness: 0.06 }) : new T.MeshStandardMaterial(base);
+  patch(mat, {
+    uniforms,
+    vertexHead: `attribute vec4 aMat; varying vec4 vMat; varying vec3 vObj; varying float vPhase; uniform float uDamage;
+      float hv(vec3 p){ return fract(sin(dot(p, vec3(12.9898,78.233,45.164)))*43758.5453); }`,
+    vertexBody: `vMat = aMat; vObj = position;
+      #ifdef USE_INSTANCING
+      vPhase = fract((instanceMatrix[3].x + instanceMatrix[3].z) * 0.071);
+      #else
+      vPhase = fract((modelMatrix[3].x + modelMatrix[3].z) * 0.071);
+      #endif
+      if (aMat.w < 2.5 && uDamage > 0.01) { float k = hv(floor(position * 3.1)) * 2. - 1.; transformed += normal * k * uDamage * 0.07 + vec3(0., -uDamage * 0.03 * step(position.y, 0.6), 0.); }`,
+    fragHead: `varying vec4 vMat; varying vec3 vObj; varying float vPhase; uniform float uBrake, uDamage, uCharred; uniform vec2 uSiren;`,
+    fragColor: `float kind = vMat.w;
+      if (kind < 0.5 && uDamage > 0.02) {
+        float soot = fbm(vObj.xz * 3.1 + vObj.y * 2.3);
+        float scratch = step(0.86, vnoise(vec2(vObj.z * 22., vObj.y * 3.)));
+        diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.05), smoothstep(0.55, 0.9, soot + uDamage * 0.5) * uDamage);
+        diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.55), scratch * uDamage * 0.5);
+      }
+      diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.03, 0.028, 0.026), uCharred);`,
+    fragRough: `roughnessFactor = mix(vMat.x, 0.9, uCharred) + uDamage * 0.25 * step(vMat.w, 0.5);`,
+    fragMetal: `metalnessFactor = vMat.y * (1. - uCharred);`,
+    fragEmissive: `{
+      float k = vMat.w; vec3 em = vec3(0.);
+      if (k > 2.5 && k < 3.5) em = vColor * vMat.z * uHead * (1. - uCharred);
+      else if (k > 3.5 && k < 4.5) em = vColor * (0.5 + uBrake * 2.4) * (1. - uCharred);
+      else if (k > 5.5 && k < 6.5) em = vColor * 7. * step(0.5, fract(uTime * 2.6 + vPhase)) * uSiren.x;
+      else if (k > 6.5 && k < 7.5) em = vColor * 7. * step(0.5, fract(uTime * 2.6 + vPhase + 0.5)) * uSiren.x;
+      else if (k > 7.5 && k < 8.5) em = vColor * vMat.z;
+      else if (k > 8.5 && k < 9.5) em = vColor * vMat.z * uHead;
+      totalEmissiveRadiance += em;
+    }`,
+    fragLights: physical ? `material.clearcoat *= step(vMat.w, 0.5) * (1. - uDamage * 0.7) * (1. - uCharred);` : "",
+  });
+  mat.userData.u = uniforms;
+  return mat;
+}
+
+/** Props, landmarks, markings, fences: vertex colour + aMat. kind 1 = lamp/window (night), 2 = neon (always). */
+export function kitMaterial(opts = {}) {
+  const mat = new T.MeshStandardMaterial({ vertexColors: true, roughness: 0.8, metalness: 0, envMapIntensity: 0.8, ...opts });
+  patch(mat, {
+    vertexHead: `attribute vec4 aMat; varying vec4 vMat;`,
+    vertexBody: `vMat = aMat;`,
+    fragHead: `varying vec4 vMat;`,
+    fragRough: `roughnessFactor = vMat.x;`,
+    fragMetal: `metalnessFactor = vMat.y;`,
+    fragEmissive: `{ float k = vMat.w; float on = k < 0.5 ? 1. : k < 1.5 ? uNight : 1.; totalEmissiveRadiance += vColor * vMat.z * on; }`,
+  });
+  return mat;
+}
+
+/** Building facades: procedural windows / storefronts. aFac = (u, v metres, floor height, window width),
+ *  aBld = (style, seed, lit probability, glass). style: 0 glass tower, 1 office, 2 apartment, 3 shop,
+ *  4 warehouse, 5 house, 6 hotel, 7 roof/plain. */
+export function facadeMaterial() {
+  const mat = new T.MeshStandardMaterial({ vertexColors: true, roughness: 0.85, metalness: 0, envMapIntensity: 1 });
+  patch(mat, {
+    vertexHead: `attribute vec4 aFac; attribute vec4 aBld; varying vec4 vFac; varying vec4 vBld;`,
+    vertexBody: `vFac = aFac; vBld = aBld;`,
+    fragHead: `varying vec4 vFac; varying vec4 vBld; float winMask; float glassF; vec3 winEm;`,
+    fragColor: `{
+      float style = floor(vBld.x + 0.5), seed = floor(vBld.y + 0.5); // integers: interpolation noise must not reach the hash
+      vec2 cell = vec2(max(vFac.w, 0.5), max(vFac.z, 0.5));
+      vec2 id = floor(vFac.xy / cell), q = fract(vFac.xy / cell);
+      winMask = 0.; glassF = 0.; winEm = vec3(0.);
+      float rnd = h21(id + seed * 13.1);
+      if (style < 6.5 && vFac.y > -0.5) {
+        vec2 fr = style < 0.5 ? vec2(0.06, 0.08) : style < 1.5 ? vec2(0.12, 0.28) : style < 2.5 ? vec2(0.22, 0.26) : style < 3.5 ? vec2(0.16, 0.24) : style < 4.5 ? vec2(0.3, 0.35) : style < 5.5 ? vec2(0.3, 0.3) : vec2(0.2, 0.22);
+        winMask = step(fr.x, q.x) * step(q.x, 1. - fr.x) * step(fr.y, q.y) * step(q.y, 1. - fr.y);
+        if (style > 3.5 && style < 4.5) winMask *= step(0.55, q.y) * step(0.6, rnd);
+        // shop fronts on the ground floor
+        bool shopFloor = (style > 2.5 && style < 3.5 && vFac.y < cell.y) || (style > 5.5 && vFac.y < cell.y);
+        if (shopFloor) { winMask = step(0.05, q.x) * step(q.x, 0.95) * step(0.06, q.y) * step(q.y, 0.85); }
+        float lit = step(1. - vBld.z, rnd) ;
+        vec3 warm = mix(vec3(1., .72, .42), vec3(.65, .82, 1.), step(0.7, h21(id * 1.7 + seed)));
+        winEm = winMask * warm * lit * (0.5 + 0.6 * h21(id + 3.1));
+        if (shopFloor) winEm = winMask * mix(vec3(1.,.62,.38), vec3(.5,.85,1.), h21(id+seed)) * 0.55;
+        glassF = winMask * (style < 0.5 ? 1. : vBld.w);
+        vec3 glassCol = style < 0.5 ? mix(vec3(0.05, 0.12, 0.18), vec3(0.1, 0.2, 0.26), rnd) : vec3(0.05, 0.06, 0.08);
+        diffuseColor.rgb = mix(diffuseColor.rgb * (0.92 + 0.12 * h21(floor(vFac.xy * 0.5) + seed)), glassCol, winMask);
+        // floor slab lines
+        if (style < 0.5) diffuseColor.rgb *= 1. - 0.25 * step(q.y, 0.06);
+      }
+      // grime toward the ground, light at the top
+      diffuseColor.rgb *= 0.82 + 0.18 * smoothstep(0., 6., vFac.y);
+    }`,
+    fragRough: `roughnessFactor = mix(roughnessFactor, 0.08, glassF);`,
+    fragMetal: `metalnessFactor = mix(0., 0.75, glassF * step(vBld.x, 0.5)) + glassF * 0.2;`,
+    fragEmissive: `totalEmissiveRadiance += winEm * pow(uNight, 1.7) * 1.6;`,
+  });
+  return mat;
+}
+
+/** Ground: asphalt, curbs, sidewalks, shoulders, lots, grass, sand and rock from the road field. */
+export function groundMaterial() {
+  const mat = new T.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9, metalness: 0, envMapIntensity: 0.32 });
+  patch(mat, {
+    fragHead: `uniform sampler2D uField, uZone; uniform vec2 uFieldMin, uFieldSize; float gRough; float gWet;`,
+    fragColor: `{
+      vec2 fuv = (vWorld.xz - uFieldMin) / uFieldSize;
+      vec4 F = texture2D(uField, fuv);
+      vec4 Z = texture2D(uZone, fuv);
+      float f = F.r, g = F.g, town = F.b, wat = F.a;
+      if (wat > 0.5 && f > 1.6) discard;
+      vec2 p = vWorld.xz;
+      float n1 = vnoise(p * 0.21), n2 = vnoise(p * 1.7), n3 = fbm(p * 0.035);
+      // terrain
+      vec3 lot = mix(vec3(0.40, 0.39, 0.37), vec3(0.47, 0.45, 0.42), n1);
+      vec3 grass = mix(vec3(0.19, 0.30, 0.11), vec3(0.33, 0.40, 0.15), n3) * (0.85 + 0.25 * n2);
+      vec3 sand = mix(vec3(0.84, 0.72, 0.53), vec3(0.93, 0.83, 0.64), n1 * 0.6 + n2 * 0.4);
+      vec3 rock = mix(vec3(0.45, 0.35, 0.28), vec3(0.62, 0.50, 0.38), n3) * (0.85 + 0.2 * n2);
+      vec2 tile = abs(fract(p / 1.2) - 0.5);
+      vec3 paving = mix(vec3(0.58, 0.55, 0.52), vec3(0.66, 0.6, 0.55), h21(floor(p / 1.2))) * (1. - 0.25 * step(0.46, max(tile.x, tile.y)));
+      vec3 base = lot;
+      base = mix(base, grass, Z.r);
+      base = mix(base, rock, Z.b);
+      base = mix(base, sand, Z.g);
+      base = mix(base, paving, Z.a);
+      base = mix(base, base * vec3(0.62, 0.6, 0.58), smoothstep(-8., 0., wat) * Z.g);
+      gRough = mix(0.95, 0.75, Z.a);
+      // sidewalks + curbs in town, gravel shoulders outside
+      float aa = max(fwidth(f), 0.02);
+      float off = step(0., f);
+      vec2 st = abs(fract(p / 1.5) - 0.5);
+      vec3 walk = mix(vec3(0.62, 0.6, 0.57), vec3(0.7, 0.68, 0.64), h21(floor(p / 1.5))) * (1. - 0.18 * smoothstep(0.44, 0.5, max(st.x, st.y)));
+      float sideM = town * (1. - smoothstep(0.7, 1.3, g)) * smoothstep(-aa, aa, f);
+      base = mix(base, walk, sideM);
+      float curbTop = town * smoothstep(-aa, aa, f) * (1. - smoothstep(0.32 - aa, 0.32 + aa, f));
+      base = mix(base, vec3(0.78, 0.77, 0.74), curbTop);
+      base *= 1. - town * 0.45 * (smoothstep(-aa, aa, f) - smoothstep(0.05, 0.1, f)); // curb face
+      float shoulder = (1. - town) * smoothstep(-aa, aa, f) * (1. - smoothstep(0.9, 1.6, g));
+      base = mix(base, mix(vec3(0.36, 0.35, 0.34), vec3(0.45, 0.43, 0.4), n2), shoulder * 0.85);
+      // contact darkening at the foot of walls and buildings
+      base *= 1. - 0.28 * smoothstep(0.2, 1., g) * (1. - smoothstep(1., 2.6, g));
+      // asphalt
+      float asph = 1. - smoothstep(-aa, aa, f);
+      float patchy = smoothstep(0.55, 0.75, n3) * 0.5;
+      vec3 asphalt = mix(vec3(0.105, 0.105, 0.115), vec3(0.15, 0.148, 0.155), n2 * 0.7 + n1 * 0.3);
+      asphalt = mix(asphalt, asphalt * 1.35, patchy);
+      asphalt *= 0.92 + 0.16 * vnoise(p * 9.);
+      float nightWet = clamp((uWet - 0.45) * 2.2, 0., 1.);
+      float puddle = smoothstep(0.66, 0.8, fbm(p * 0.07 + 3.)) * nightWet;
+      gWet = asph * (0.3 * nightWet + 0.5 * puddle);
+      asphalt = mix(asphalt, asphalt * 0.7, puddle);
+      diffuseColor.rgb = mix(base, asphalt, asph);
+      gRough = mix(gRough, mix(0.86, 0.38, gWet), asph);
+    }`,
+    fragRough: `roughnessFactor = gRough;`,
+    fragMetal: `metalnessFactor = 0.;`,
+  });
+  return mat;
+}
+
+/** Sea and lake: sky-gradient reflection, sun glitter, swell and shore foam (unlit). */
+export function waterMaterial() {
+  return new T.ShaderMaterial({
+    uniforms: U,
+    fog: false,
+    vertexShader: `varying vec3 vWorld; void main(){ vec4 w = modelMatrix * vec4(position, 1.); vWorld = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }`,
+    fragmentShader: `varying vec3 vWorld; uniform float uTime, uNight; uniform sampler2D uField; uniform vec2 uFieldMin, uFieldSize;
+      uniform vec3 uSkyTop, uSkyHorizon, uSunDir, uSunColor, uFogColor;
+      ${GLSL_NOISE}
+      void main(){
+        vec2 p = vWorld.xz;
+        float t = uTime;
+        vec2 w1 = vec2(vnoise(p * 0.08 + t * 0.12), vnoise(p * 0.08 - t * 0.1 + 7.));
+        vec2 w2 = vec2(vnoise(p * 0.5 + t * 0.6), vnoise(p * 0.5 - t * 0.5 + 3.));
+        vec3 n = normalize(vec3((w1.x - .5) * 0.5 + (w2.x - .5) * 0.22, 1., (w1.y - .5) * 0.5 + (w2.y - .5) * 0.22));
+        vec3 v = normalize(cameraPosition - vWorld);
+        vec3 r = reflect(-v, n);
+        float fres = 0.04 + 0.96 * pow(1. - max(dot(n, v), 0.), 5.);
+        vec3 sky = mix(uSkyHorizon, uSkyTop, pow(max(r.y, 0.), 0.55));
+        vec3 deep = mix(vec3(0.02, 0.12, 0.17), vec3(0.01, 0.03, 0.06), uNight);
+        vec3 c = mix(deep, sky, fres);
+        float sp = pow(max(dot(r, uSunDir), 0.), 220.) * 6. + pow(max(dot(r, uSunDir), 0.), 18.) * 0.25;
+        c += uSunColor * sp * (1. - uNight * 0.7);
+        vec4 F = texture2D(uField, (p - uFieldMin) / uFieldSize);
+        float shore = 1. - smoothstep(0., 7., F.a);
+        float foam = shore * smoothstep(0.45, 0.75, vnoise(p * 0.7 + vec2(t * 0.4, 0.)) * (0.6 + 0.4 * sin(F.a * 2.2 - t * 2.)));
+        c = mix(c, vec3(0.9, 0.92, 0.95) * (1. - uNight * 0.6), foam * 0.8);
+        float d = length(cameraPosition - vWorld);
+        c = mix(c, uFogColor, 1. - exp(-d * d * 0.0000006));
+        gl_FragColor = vec4(c, 1.);
+        #include <tonemapping_fragment>
+        #include <colorspace_fragment>
+      }`,
+  });
+}
+
+/** Additive camera-facing or ground glow sprites (light pools, flares, halos) drawn as instanced quads. */
+export function glowMaterial() {
+  return new T.ShaderMaterial({
+    uniforms: { uTex: { value: glowTexture() } },
+    transparent: true, depthWrite: false, blending: T.AdditiveBlending,
+    vertexShader: `attribute vec4 aCol; varying vec4 vCol; varying vec2 vUv; void main(){ vCol = aCol; vUv = uv; gl_Position = projectionMatrix * viewMatrix * instanceMatrix * vec4(position, 1.); }`,
+    fragmentShader: `uniform sampler2D uTex; varying vec4 vCol; varying vec2 vUv; void main(){ float a = texture2D(uTex, vUv).a; gl_FragColor = vec4(vCol.rgb * a * vCol.a, 1.); }`,
+  });
+}
+let glowTex = null;
+export function glowTexture() {
+  if (glowTex) return glowTex;
+  const c = document.createElement("canvas"); c.width = c.height = 64;
+  const x = c.getContext("2d"), g = x.createRadialGradient(32, 32, 0, 32, 32, 32);
+  g.addColorStop(0, "#fff"); g.addColorStop(0.25, "rgba(255,255,255,0.55)"); g.addColorStop(0.6, "rgba(255,255,255,0.12)"); g.addColorStop(1, "rgba(255,255,255,0)");
+  x.fillStyle = g; x.fillRect(0, 0, 64, 64);
+  glowTex = new T.CanvasTexture(c);
+  return glowTex;
+}

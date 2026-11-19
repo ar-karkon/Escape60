@@ -1,5 +1,5 @@
-/** Local development server: serves web/ and runs the *same* edge application (edge/app.mjs) that is
-    deployed on Arvan Edge, with a small disk-backed store in place of Arvan Object Storage. */
+/** Local development server: serves web/ and runs the *same* game service (edge/app.mjs) that is
+    deployed on the edge, with a small disk-backed store in place of object storage. */
 import http from 'node:http';
 import { readFile, mkdir, writeFile, rename } from 'node:fs/promises';
 import path from 'node:path';
@@ -27,7 +27,7 @@ const app = createApp({ env: { ...process.env }, store, log: (...a) => console.l
 const mime = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.json': 'application/json', '.woff2': 'font/woff2', '.png': 'image/png', '.jpg': 'image/jpeg', '.mp3': 'audio/mpeg', '.wav': 'audio/wav', '.md': 'text/markdown; charset=utf-8', '.txt': 'text/plain; charset=utf-8' };
 async function staticFile(req, res) {
   const url = new URL(req.url, 'http://localhost');
-  const p = url.pathname === '/' ? '/index.html' : url.pathname === '/edge' ? '/edge.html' : decodeURIComponent(url.pathname);
+  const p = url.pathname === '/' ? '/index.html' : decodeURIComponent(url.pathname);
   const file = path.resolve(ROOT, 'web', '.' + p);
   if (!file.startsWith(path.resolve(ROOT, 'web') + path.sep)) { res.writeHead(403); res.end(); return; }
   try {
@@ -55,5 +55,5 @@ export function handler(req, res) {
   })().catch((err) => { console.error('request failure', err.message); if (!res.headersSent) { res.writeHead(500); } res.end(); });
 }
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  http.createServer(handler).listen(PORT, '0.0.0.0', () => console.log(`ESCAPE60 http://localhost:${PORT}  (storage: ${store.kind}, AI: ${process.env.AI_API_KEY ? 'on' : 'fallback'})`));
+  http.createServer(handler).listen(PORT, '0.0.0.0', () => console.log(`ESCAPE60 http://localhost:${PORT}  (storage: ${store.kind})`));
 }

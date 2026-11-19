@@ -1,7 +1,7 @@
-/* Production build for Arvan:
-   dist/web/   flat static site (bundled + minified JS) → upload every file to the public bucket
-   dist/edge/worker.js   single-file Arvan Edge Compute (API + static proxy)
-   Files are flat because the edge maps any request path to its basename in the bucket. */
+/* Production build:
+   dist/web/   static site (bundled + minified JS). Assets are copied both under assets/ (any static
+               host) and flat next to index.html (the edge proxy maps a request path to its basename).
+   dist/edge/worker.js   single-file edge compute (API + static proxy) */
 import { build } from 'esbuild';
 import { cp, mkdir, rm, readdir, readFile, writeFile, stat } from 'node:fs/promises';
 import path from 'node:path';
@@ -23,7 +23,6 @@ let html = await readFile(path.join(root, 'web/index.html'), 'utf8');
 html = html.replace('<script type="module" src="./src/main.js"></script>', `<script type="module" src="./${appFile}"></script>`).replace('href="./style.css"', `href="./${cssName}"`);
 if (!html.includes(appFile) || !html.includes(cssName)) throw Error('index.html rewrite failed');
 await writeFile(path.join(web, 'index.html'), html);
-await cp(path.join(root, 'web/edge.html'), path.join(web, 'edge.html'));
 async function flat(dir) {
   for (const e of await readdir(dir, { withFileTypes: true })) {
     const p = path.join(dir, e.name);
@@ -32,6 +31,7 @@ async function flat(dir) {
   }
 }
 await flat(path.join(root, 'web/assets'));
+await cp(path.join(root, 'web/assets'), path.join(web, 'assets'), { recursive: true });
 for (const f of ['three.LICENSE']) await cp(path.join(root, 'web/vendor', f), path.join(web, f));
 
 await build({ entryPoints: [path.join(root, 'edge/worker.js')], bundle: true, format: 'iife', minify: true, target: 'es2022', outfile: path.join(edge, 'worker.js'), legalComments: 'none', logLevel: 'warning' });

@@ -1,3 +1,5 @@
+> **SUPERSEDED (v3.0, 2026-11-19):** the voxel/pixel-art target was replaced by the stylised PBR street-racer direction — see D30 in `docs/13_DECISIONS.md`. Kept for history.
+
 # Escape 60 — Tropical Neon Voxel Art Direction (FA)
 **Status:** APPROVED creative direction for implementation; not evidence that visuals already exist in the running game.
 **Date:** 2026-11-19

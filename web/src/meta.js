@@ -1,40 +1,36 @@
-/* Client-side progression: XP, levels, cosmetic paint unlocks, daily missions, day streak and
-   friend-challenge targets. Cosmetic only — it never touches the simulation or ranking.
+/* Client-side progression: XP, levels, car / paint / effect unlocks, garage choices, daily missions,
+   day streak and friend-challenge targets. Cosmetic choices never touch the simulation; the car choice
+   does (its stats), and it is sent with the run for the authoritative replay.
    Stored in localStorage on this device; no accounts and no personal data. */
 import { hashSeed } from './simulation.js';
+import { CARS, PAINTS, LIVERIES } from './cars.js';
+import { EFFECTS, ACCENTS } from './gfx/effects.js';
 
-const KEY = 'escape60-profile-v1';
-export const PAINTS = [
-  { id: 'sunset', name: 'نارنجی غروب', body: 0xff873c, stripe: 0xfff1de, level: 1 },
-  { id: 'flamingo', name: 'صورتی فلامینگو', body: 0xff5d95, stripe: 0xfff1de, level: 2 },
-  { id: 'lagoon', name: 'فیروزه‌ای تالاب', body: 0x19b8bc, stripe: 0x111633, level: 3 },
-  { id: 'violet', name: 'بنفش نیمه‌شب', body: 0x7a3df0, stripe: 0x3dd8e7, level: 4 },
-  { id: 'gold', name: 'طلای ساحل', body: 0xffc93c, stripe: 0x2a1240, level: 5 },
-  { id: 'night', name: 'شب مخملی', body: 0x23203a, stripe: 0xff5d95, level: 6 },
-  { id: 'ice', name: 'یخ نئونی', body: 0xe9f4ff, stripe: 0x3f98ff, level: 8 },
-  { id: 'lava', name: 'گدازه', body: 0xe0221f, stripe: 0xffe37c, level: 10 },
-];
+const KEY = 'escape60-profile-v2';
 const MISSIONS = [
-  { id: 'near5', text: '۵ جاخالی در یک دور', goal: 5, stat: (r) => r.closeCalls },
-  { id: 'near10', text: '۱۰ جاخالی در یک دور', goal: 10, stat: (r) => r.closeCalls },
-  { id: 'chain3', text: 'ضریب ×۳ بگیر', goal: 3, stat: (r) => r.bestChain },
-  { id: 'chain5', text: 'ضریب ×۵ بگیر', goal: 5, stat: (r) => r.bestChain },
-  { id: 'survive40', text: '۴۰ ثانیه دوام بیاور', goal: 40, stat: (r) => Math.floor(r.timeMs / 1000) },
-  { id: 'win', text: '۶۰ ثانیه کامل فرار کن', goal: 1, stat: (r) => (r.win ? 1 : 0) },
-  { id: 'clean', text: 'با بیش از ۷۵٪ سلامت فرار کن', goal: 1, stat: (r) => (r.win && r.health >= 75 ? 1 : 0) },
-  { id: 'noscrape', text: 'یک دور بدون مالیدن به دیوار', goal: 1, stat: (r) => (r.timeMs >= 30000 && !r.scrapes ? 1 : 0) },
-  { id: 'dodge', text: 'از کنار یک راه‌بند جاخالی بده', goal: 1, stat: (r) => r.dodges || 0 },
-  { id: 'score600', text: '۶۰۰ امتیاز در یک دور', goal: 600, stat: (r) => r.points },
-  { id: 'runs3', text: '۳ دور بازی کن', goal: 3, stat: () => 1, sum: true },
+  { id: 'escape', goal: 1, stat: (r) => (r.escaped ? 1 : 0) },
+  { id: 'survive90', goal: 90, stat: (r) => Math.floor(r.timeMs / 1000) },
+  { id: 'near8', goal: 8, stat: (r) => r.near },
+  { id: 'drift3k', goal: 3000, stat: (r) => r.driftPts },
+  { id: 'takedown1', goal: 1, stat: (r) => r.takedowns },
+  { id: 'takedown3', goal: 3, stat: (r) => r.takedowns },
+  { id: 'chain5', goal: 5, stat: (r) => r.bestChain },
+  { id: 'speed250', goal: 250, stat: (r) => r.topSpeed },
+  { id: 'repair', goal: 1, stat: (r) => r.repairs },
+  { id: 'score10k', goal: 10000, stat: (r) => r.points },
+  { id: 'runs3', goal: 3, stat: () => 1, sum: true },
+  { id: 'dodge', goal: 1, stat: (r) => r.dodges },
 ];
 const today = () => new Date().toISOString().slice(0, 10);
-export const xpForLevel = (n) => 400 + 260 * (n - 1);
+export const xpForLevel = (n) => 600 + 300 * (n - 1);
 
 export function loadProfile() {
   let p = {};
   try { p = JSON.parse(localStorage.getItem(KEY) || '{}'); } catch {}
-  p.xp ??= 0; p.level ??= 1; p.runs ??= 0; p.wins ??= 0; p.paint ??= 'sunset';
-  p.bestChain ??= 0; p.streak ??= { last: '', days: 0 };
+  p.xp ??= 0; p.level ??= 1; p.runs ??= 0; p.car ??= 'kaze'; p.paints ??= {};
+  p.fx ??= { smoke: 'clean', nitro: 'blue', trail: 'tail', burst: 'graffiti', accent: ACCENTS[0] };
+  p.streak ??= { last: '', days: 0 }; p.best ??= { points: 0, timeMs: 0 };
+  if (!CARS.some((c) => c.id === p.car && c.level <= p.level)) p.car = 'kaze';
   refreshMissions(p);
   return p;
 }
@@ -44,59 +40,50 @@ function refreshMissions(p) {
   if (p.missions?.date === d) return;
   const h = hashSeed('missions-' + d);
   const picks = [];
-  for (let i = 0; picks.length < 3; i++) {
-    const m = MISSIONS[(h + i * 7 + (h >>> (i % 16))) % MISSIONS.length];
-    if (!picks.includes(m.id)) picks.push(m.id);
-  }
+  for (let i = 0; picks.length < 3; i++) { const m = MISSIONS[(h + i * 7 + (h >>> (i % 16))) % MISSIONS.length]; if (!picks.includes(m.id)) picks.push(m.id); }
   p.missions = { date: d, list: picks.map((id) => ({ id, progress: 0, done: false })) };
 }
-export function missionInfo(m) { const def = MISSIONS.find((x) => x.id === m.id); return { ...m, text: def.text, goal: def.goal }; }
-export const unlockedPaints = (p) => PAINTS.filter((x) => x.level <= p.level);
-export const paintById = (id) => PAINTS.find((x) => x.id === id) || PAINTS[0];
+export function missionInfo(m) { const def = MISSIONS.find((x) => x.id === m.id); return { ...m, goal: def.goal }; }
+export const carUnlocked = (p, c) => c.level <= p.level;
+export function carLook(p, id) { const l = p.paints[id] || {}; return { paint: l.paint ?? 'stock', livery: l.livery ?? 'clean' }; }
 
 /** Apply a finished run. Returns a summary for the results screen. */
 export function applyRun(p, r) {
   refreshMissions(p);
-  const d = today();
-  const yesterday = new Date(Date.now() - 864e5).toISOString().slice(0, 10);
+  const d = today(), yesterday = new Date(Date.now() - 864e5).toISOString().slice(0, 10);
   let streakUp = false;
-  if (p.streak.last !== d) {
-    p.streak.days = p.streak.last === yesterday ? p.streak.days + 1 : 1;
-    p.streak.last = d;
-    streakUp = true;
-  }
+  if (p.streak.last !== d) { p.streak.days = p.streak.last === yesterday ? p.streak.days + 1 : 1; p.streak.last = d; streakUp = true; }
   const completed = [];
   for (const m of p.missions.list) {
     if (m.done) continue;
-    const def = MISSIONS.find((x) => x.id === m.id);
-    const v = def.stat(r);
+    const def = MISSIONS.find((x) => x.id === m.id), v = def.stat(r);
     m.progress = def.sum ? m.progress + v : Math.max(m.progress, v);
-    if (m.progress >= def.goal) { m.done = true; completed.push(def.text); }
+    if (m.progress >= def.goal) { m.done = true; completed.push(m.id); }
   }
-  const base = Math.floor(r.timeMs / 100) + Math.floor(r.points / 4) + (r.win ? 250 : 0) + (r.bestChain || 0) * 15 + (r.dodges || 0) * 40;
+  const base = Math.floor(r.timeMs / 100) + Math.floor(r.points / 20) + r.takedowns * 60 + r.near * 10 + (r.escaped ? 300 : 0);
   const streakBonus = Math.min(0.5, (p.streak.days - 1) * 0.1);
-  const gained = Math.round(base * (1 + streakBonus)) + completed.length * 150;
-  const before = p.level;
-  const unlocks = [];
+  const gained = Math.round(base * (1 + streakBonus)) + completed.length * 300;
+  const before = p.level, unlocks = { cars: [], paints: false, fx: [] };
   p.xp += gained;
   while (p.xp >= xpForLevel(p.level)) {
-    p.xp -= xpForLevel(p.level);
-    p.level++;
-    for (const paint of PAINTS) if (paint.level === p.level) unlocks.push(paint);
+    p.xp -= xpForLevel(p.level); p.level++;
+    for (const c of CARS) if (c.level === p.level) unlocks.cars.push(c);
+    if (PAINTS.some((x) => x.level === p.level) || LIVERIES.some((x) => x.level === p.level)) unlocks.paints = true;
+    for (const [cat, list] of Object.entries(EFFECTS)) for (const e of list) if (e.level === p.level) unlocks.fx.push(cat + '_' + e.id);
   }
   p.runs++;
-  if (r.win) p.wins++;
-  p.bestChain = Math.max(p.bestChain, r.bestChain || 0);
+  const newBest = r.points > p.best.points;
+  if (newBest) p.best = { points: r.points, timeMs: r.timeMs };
   saveProfile(p);
-  return { gained, levelUp: p.level > before, level: p.level, unlocks, completed, streak: p.streak.days, streakUp, streakBonus };
+  return { gained, levelUp: p.level > before, level: p.level, unlocks, completed, streak: p.streak.days, streakUp };
 }
 
 /** Friend challenge carried in the link: ?seed=…&c=<timeMs>.<points>. Unverified by design. */
 export function parseChallenge(qs) {
   const c = qs.get('c');
-  if (!c || !/^\d{1,5}\.\d{1,6}$/.test(c)) return null;
+  if (!c || !/^\d{1,6}\.\d{1,7}$/.test(c)) return null;
   const [t, pts] = c.split('.').map(Number);
-  if (t > 60000) return null;
+  if (t > 600000) return null;
   return { timeMs: t, points: pts };
 }
-export function beats(r, target) { return r.timeMs > target.timeMs || (r.timeMs === target.timeMs && r.points > target.points); }
+export function beats(r, target) { return r.points > target.points || (r.points === target.points && r.timeMs > target.timeMs); }

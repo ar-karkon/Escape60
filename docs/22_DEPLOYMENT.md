@@ -1,12 +1,12 @@
 # Deployment runbook — Escape60 on Arvan (as deployed 2026-11-19)
 
-Live URL: **https://escape60.lavanai2525-3qem7.arvanedge.ir** · architecture/evidence page: `/edge`
+Live URL: **https://escape60.lavanai2525-3qem7.arvanedge.ir** (still serving v2.3 until v3.0 is rebuilt and redeployed). The `/edge` page and all AI variables were removed in v3.0.
 
 There is no separate server. One Arvan Edge Compute (`escape60`) serves the whole game:
 
 | Path | Handled by |
 |---|---|
-| `/api/v1/*` | `edge/app.mjs` inside the edge worker (tickets, chunked replay, leaderboard, AI) |
+| `/api/v1/*` | `edge/app.mjs` inside the edge worker (tickets, chunked replay, leaderboard) |
 | everything else | edge proxies the file's basename from the public bucket `escape60-game` and sets MIME / cache headers |
 
 ## Arvan resources
@@ -22,19 +22,18 @@ Values are JSON, so a string must be written **with double quotes**, e.g. `"abc1
 |---|---|
 | `S3_ACCESS_KEY` | Object Storage access key (Object Storage → مدیریت دسترسی) |
 | `S3_SECRET_KEY` | Object Storage secret key (also derives the run-ticket HMAC key) |
-| `AI_API_KEY` | AIaaS machine-user key for the gateway |
-| optional | `RUN_SECRET`, `AI_MODEL` (default `DeepSeek-V4-Flash`), `AI_DAILY_REPORT_CAP` (default 1500), `S3_BUCKET` (`escape60-data`), `S3_ENDPOINT` (`https://s3.ir-central1.arvanstorage.ir`), `S3_REGION` (`ir-central1`), `STATIC_ORIGIN`, `REPLAY_CHUNK` (720) |
+| optional | `RUN_SECRET`, `S3_BUCKET` (`escape60-data`), `S3_ENDPOINT` (`https://s3.ir-central1.arvanstorage.ir`), `S3_REGION` (`ir-central1`), `STATIC_ORIGIN`, `REPLAY_CHUNK` (default 300 ticks; SIM 2.0 costs ~20–40 µs per tick, tune to the edge CPU budget) |
 
-Without the S3 keys the edge falls back to per-isolate memory (leaderboard not durable) and a fixed dev ticket secret; `/api/v1/health` reports `storage: "memory"` and `secured: false`. Without `AI_API_KEY` the deterministic fallback mission and template coach report are used.
+Without the S3 keys the edge falls back to per-isolate memory (leaderboard not durable) and a fixed dev ticket secret; `/api/v1/health` reports `storage: "memory"` and `secured: false`. The AIaaS key is no longer used (v3.0) and can be deleted from the edge settings.
 
 ## Release steps
-1. `npm run check && npm run build` → `dist/web/` (42 flat files, hashed `app-*.js`, `style-*.css`) and `dist/edge/worker.js` (~40 KB).
+1. `npm run check && npm run build` → `dist/web/` (flat files for the edge proxy plus an `assets/` tree for ordinary static hosts, hashed `app-*.js`, `style-*.css`) and `dist/edge/worker.js`.
 2. Upload changed files from `dist/web/` to `escape60-game` (public toggle on). `index.html` last.
 3. Edge → escape60 → ویرایش کد → replace with `dist/edge/worker.js` → انتشار.
-4. Verify: `/api/v1/health` (version, storage, ai), a full run through `npm run test:browser` with `GAME_URL=<live url> CHROME_BIN=/usr/bin/google-chrome`, `/edge` stats.
+4. Verify: `/api/v1/health` (version 2.0.0, storage), a full verified run through `npm run test:browser` with `GAME_URL=<live url> CHROME_BIN=/usr/bin/google-chrome`.
 5. Any simulation change: bump `SIM_VERSION`; the edge replays with the bundled copy of the same `simulation.js`.
 
-## Verified on the live edge (2026-11-19)
+## Verified on the live edge (2026-11-19, v2.3 — re-verify after deploying v3.0)
 - With keys set: `/api/v1/health` reports `storage: arvan-object-storage`, `secured: true`, AI DeepSeek-V4-Flash; AI daily event generated and frozen; AI coach replies; leaderboard and stats persist.
 - Static: HTML, JS, CSS, fonts, audio served with correct MIME; Range requests return 206 (Safari audio).
 - Full 60 s run (seed `x2`, 3600 ticks) accepted after 5 chunked requests; total replay CPU 54.6 ms. Short runs accepted in one request.

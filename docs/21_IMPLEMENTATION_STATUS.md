@@ -1,5 +1,13 @@
 # Build progress (2026-11-19)
 
+## v3.0 (current)
+- `web/src/map.js` map v2 (curved road graph + distance field + pit stops), `web/src/simulation.js` SIM 2.0.0 (drift, nitro, brake, handbrake, 14 cars, damage limp, 3 repairs, wreck, busted, takedowns, milestone + overtime), `web/src/cars.js`.
+- `web/src/render.js` + `web/src/gfx/` rebuilt (stylised PBR city, procedural cars, effects, camera director, post); `web/index.html` / `style.css` / `main.js` new racing UI, garage, English + Persian.
+- `edge/app.mjs` API 3.0.0 without AI; `tests/` 14 Node tests; `scripts/browser-smoke.cjs` passes a real verified run; `npm run capture` real screenshots.
+- Not verified: real-device FPS, audio mix by ear, Safari, live redeploy of v3.0.
+
+## Earlier versions (history)
+
 ## Implemented and locally testable
 - `web/`: full mobile-first static browser game, original rendering and input.
 - `web/src/simulation.js`: seeded 60Hz physics, pursuit, collision, scoring, hazard director and replay.

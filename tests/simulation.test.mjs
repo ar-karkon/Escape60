@@ -1,135 +1,127 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {createGame,stepGame,gameResult,replayTrace,encodeTrace,MAX_TICKS,hashSeed,circleHitsBuilding,compareResult} from '../web/src/simulation.js';
-test('same seed and inputs are deterministic',()=>{const a=createGame('foo'),b=createGame('foo');for(let i=0;i<800;i++){const steer=(i%45<15?-1:i%45<30?0:1);stepGame(a,steer);stepGame(b,steer);}assert.deepEqual(gameResult(a),gameResult(b));});
-test('replay result matches gameplay',()=>{const s=createGame('run-1');const inputs=[];while(s.state==='playing'){const v=s.ticks%45<15?-3:s.ticks%45<30?0:3;inputs.push(v);stepGame(s,v/3);}assert.deepEqual(replayTrace('run-1',encodeTrace(inputs)),gameResult(s));});
-test('rejects malicious traces',()=>{assert.throws(()=>replayTrace('a',[[4,60]]));assert.throws(()=>replayTrace('a',[[0,MAX_TICKS+1]]));assert.throws(()=>replayTrace('a',[[0,10]]));});
-test('roads and buildings',()=>{assert.equal(circleHitsBuilding(0,0),false);assert.equal(circleHitsBuilding(260,260),true);});
-test('score sort',()=>{assert.ok(compareResult({timeMs:60000,points:1},{timeMs:59000,points:200})<0);});
+import { createGame, stepGame, gameResult, encodeTrace, encodeInput, decodeInput, traceTicks, replayTrace, replayChunk, snapshotGame, restoreGame, MAX_TICKS, MILESTONE_TICKS, SIM_VERSION, INPUT, heatAt } from '../web/src/simulation.js';
+import { sample, edges, nodes, stations, spawnPoint, pointAt } from '../web/src/map.js';
+import { CARS } from '../web/src/cars.js';
 
-test('pursuit director follows its schedule and only places barriers on open streets',async()=>{
- const { DIRECTOR } = await import('../web/src/simulation.js');
- const game=createGame('sunset-1');
- while(game.state==='playing'&&game.ticks<DIRECTOR.finalRoadblock*60+1){
-   stepGame(game);
-   for(const mark of game.marks){assert.ok(Number.isFinite(mark.angle));assert.ok(game.map.onStreet(mark.x,mark.y));}
- }
- const barriers=game.events.filter(e=>e.type==='roadblock');
- assert.ok(barriers.length>=1);
- assert.ok(barriers[0].tick>=DIRECTOR.roadblockFrom*60);
- assert.equal(game.events.find(e=>e.type==='police').tick,DIRECTOR.policeAt[1]*60);
-});
-test('the street network has avenues, dead ends and closed segments, deterministically per seed',async()=>{
- const { cityMap } = await import('../web/src/map.js');
- const a=cityMap('net-a'), b=cityMap('net-a'), c=cityMap('net-b');
- const counts=[0,0,0,0]; let differs=0;
- for(let i=-12;i<12;i++)for(let j=-12;j<12;j++)for(const ax of [0,1]){counts[a.seg(ax,i,j)]++; if(a.seg(ax,i,j)!==b.seg(ax,i,j))throw Error('not deterministic'); if(a.seg(ax,i,j)!==c.seg(ax,i,j))differs++;}
- assert.ok(counts[0]>20&&counts[2]>20&&counts[3]>20&&counts[1]>500, JSON.stringify(counts));
- assert.ok(differs>50);
- for(let j=-10;j<10;j++){assert.equal(a.seg(0,0,j),1);assert.equal(a.seg(1,j,0),1);} // avenues stay open
- let deadEnds=0; for(let i=-12;i<12;i++)for(let j=-12;j<12;j++)if(a.degree(i,j)===1)deadEnds++;
- assert.ok(deadEnds>5,'dead ends '+deadEnds);
-});
-test('traffic follows streets and never drives into buildings',()=>{
- for(const seed of ['street-a','street-b']){
-   const game=createGame(seed);
-   for(let i=0;i<40*60&&game.state==='playing';i++){
-     stepGame(game,0);
-     for(const c of game.traffic) assert.equal(game.map.circleHits(c.x,c.y,10),false);
-   }
- }
-});
-test('a barrier hit costs a fixed slice of the health bar and protects from repeat damage',()=>{
- const game=createGame('training',{noPolice:true,noTraffic:true});
- game.marks.push({x:0,y:-4,ttl:2});
- stepGame(game);
- assert.equal(game.player.speed,205);
- assert.equal(game.health,70);
- stepGame(game);
- assert.equal(game.health,70);
- assert.equal(game.hits,1);
-});
-test('damage scales with closing speed: head-on hurts more than a rear-end tap',()=>{
- const headOn=createGame('dmg-a',{noPolice:true,noTraffic:true}); headOn.nextTraffic=1e9;
- headOn.traffic.push({x:0,y:-10,angle:Math.PI/2,speed:80,passed:false,color:0,lane:1,nx:0,ny:0,plan:null});
- stepGame(headOn);
- const rear=createGame('dmg-b',{noPolice:true,noTraffic:true}); rear.nextTraffic=1e9;
- rear.traffic.push({x:0,y:-10,angle:-Math.PI/2,speed:80,passed:false,color:0,lane:1,nx:0,ny:-1,plan:null});
- stepGame(rear);
- const a=100-headOn.health, b=100-rear.health;
- assert.ok(a>b && b>=16 && a<=34, `head-on ${a} vs rear ${b}`);
-});
-test('health recovers slowly after a calm period, never above the maximum',async()=>{
- const { MAX_HEALTH, REGEN_DELAY } = await import('../web/src/simulation.js');
- const game=createGame('regen',{noPolice:true,noTraffic:true}); game.nextTraffic=1e9; game.nextPolice=1e9;
- game.marks.push({x:0,y:-4,ttl:2}); stepGame(game);
- const after=game.health;
- for(let i=0;i<Math.round(REGEN_DELAY*60)-5;i++)stepGame(game);
- assert.equal(game.health,after);
- for(let i=0;i<180;i++)stepGame(game);
- assert.ok(game.health>after && game.health<=MAX_HEALTH);
- for(let i=0;i<60*40;i++){ if(game.state!=='playing')break; stepGame(game); }
- assert.ok(game.health<=MAX_HEALTH);
-});
-test('wall bumps cost a little health with a cooldown and never a combo',()=>{
- const game=createGame('wall',{noPolice:true,noTraffic:true}); game.nextTraffic=1e9;
- game.player.x=100; game.player.y=-260; game.player.angle=0; // drive into the block face
- game.chain=2; game.comboTimer=2;
- for(let i=0;i<30;i++)stepGame(game);
- assert.ok(game.scrapes>=1 && game.scrapes<=2, 'scrapes '+game.scrapes);
- assert.equal(game.health,100-3*game.scrapes);
- assert.equal(game.hits,0);
-});
-test('traffic and police enter outside the forward view',()=>{
- for(const seed of ['view-a','view-b','view-c']){
-   const game=createGame(seed);
-   for(const c of game.traffic) assert.ok(Math.hypot(c.x,c.y)>=370, 'initial car too close');
-   const before=new Set(game.traffic);
-   for(let i=0;i<20*60&&game.state==='playing';i++){
-     stepGame(game);
-     const p=game.player;
-     for(const c of game.traffic) if(!before.has(c)){ before.add(c); assert.ok(Math.hypot(c.x-p.x,c.y-p.y)>=900, 'traffic spawned in view'); }
-   }
- }
-});
-test('old town alleys are passable between solid storefronts',()=>{
- const districtStart=3*520;
- assert.equal(circleHitsBuilding(districtStart+260,167,16),false);
- assert.equal(circleHitsBuilding(districtStart+167,167,16),true);
+/** Road-following autopilot used to drive realistic runs (no randomness: deterministic traces). */
+function autopilot(g) {
+  const p = g.player, r = sample(p.x, p.y, {});
+  if (r.e < 0) return encodeInput(0);
+  const pt = pointAt(r.e, r.s, {}), fwd = pt.tx * Math.cos(p.h) + pt.ty * Math.sin(p.h) >= 0 ? 1 : -1;
+  const E = edges[r.e], q = pointAt(r.e, Math.max(0, Math.min(E.len, r.s + fwd * (12 + p.v * 0.45))), {});
+  const tx = q.x - q.ty * fwd * 2.5, ty = q.y + q.tx * fwd * 2.5;
+  let d = Math.atan2(ty - p.y, tx - p.x) - p.h; while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI;
+  return encodeInput(Math.max(-3, Math.min(3, Math.round(d * 5))), Math.abs(d) > 0.4 && p.v > 28, false, Math.abs(d) < 0.1 && g.nitro > 0.2);
+}
+function drive(seed, car, maxTicks = MAX_TICKS, pilot = autopilot) {
+  const g = createGame(seed, { car }), inputs = [];
+  while (g.state === 'playing' && g.ticks < maxTicks) { const v = pilot(g); inputs.push(v); stepGame(g, v); g.events.length = 0; }
+  return { g, inputs };
+}
+
+test('map: connected road graph, smooth junctions, stations beside roads', () => {
+  assert.ok(edges.length > 100 && nodes.length > 60);
+  // every node reachable from node 0
+  const seen = new Set([0]), stack = [0];
+  while (stack.length) { const n = stack.pop(); for (const l of nodes[n].edges) { const e = edges[l.e], o = l.end === 0 ? e.b : e.a; if (!seen.has(o)) { seen.add(o); stack.push(o); } } }
+  assert.equal(seen.size, nodes.length, 'road network is connected');
+  for (const e of edges) { const m = pointAt(edges.indexOf(e), e.len / 2, {}); assert.ok(sample(m.x, m.y, {}).g < 0, 'road centre is drivable'); }
+  assert.equal(stations.length, 5);
+  for (const s of stations) assert.ok(sample(s.x, s.y, {}).g < 0, 'pit stop pad is drivable');
+  for (let k = 0; k < 6; k++) { const sp = spawnPoint(k); assert.ok(sample(sp.x, sp.y, {}).g < 0, 'spawn on road'); }
 });
 
-test('near-miss chain multiplies skill points and a hit resets it', async () => {
-  const { comboMult, COMBO_WINDOW } = await import('../web/src/simulation.js');
-  const game = createGame('combo', { noPolice: true, noTraffic: true });
-  game.nextTraffic = 1e9;
-  game.traffic.push({ x: 45, y: -10, angle: 0, speed: 0, passed: false, color: 0 });
-  stepGame(game);
-  assert.equal(game.points, 55);
-  assert.equal(comboMult(game), 1);
-  game.traffic.push({ x: -45, y: -20, angle: 0, speed: 0, passed: false, color: 1 });
-  stepGame(game);
-  assert.equal(game.points, 55 + 110);
-  assert.equal(comboMult(game), 2);
-  assert.equal(game.events.filter((e) => e.type === 'near').at(-1).mult, 2);
-  game.traffic.push({ x: 0, y: game.player.y - 5, angle: 0, speed: 0, passed: false, color: 2 });
-  stepGame(game);
-  assert.equal(game.hits, 1);
-  assert.equal(comboMult(game), 1);
-  assert.equal(game.bestChain, 2);
-  // the chain also expires on its own
-  const g2 = createGame('combo-expire', { noPolice: true, noTraffic: true });
-  g2.nextTraffic = 1e9;
-  g2.traffic.push({ x: 45, y: -10, angle: 0, speed: 0, passed: false, color: 0 });
-  stepGame(g2);
-  for (let i = 0; i < Math.ceil(COMBO_WINDOW * 60) + 2; i++) stepGame(g2);
-  assert.equal(g2.chain, 0);
+test('input encoding round-trips and invalid traces are rejected', () => {
+  const v = encodeInput(-3, true, false, true);
+  assert.deepEqual(decodeInput(v), { steer: -1, brake: true, hand: false, nitro: true });
+  assert.equal(encodeInput(3, false, true, false) & INPUT.HANDBRAKE, INPUT.HANDBRAKE);
+  assert.equal(traceTicks([[3, 10], [11, 5]]), 15);
+  assert.throws(() => traceTicks([[7, 1]]), /Invalid trace item/);
+  assert.throws(() => traceTicks([[64, 1]]), /Invalid trace item/);
+  assert.throws(() => traceTicks([[3, MAX_TICKS + 1]]), /Invalid trace item|too long/);
 });
-test('a close roadblock dodge scores and counts once', () => {
-  const game = createGame('dodge', { noPolice: true, noTraffic: true });
-  game.nextTraffic = 1e9;
-  game.marks.push({ x: 55, y: -20, ttl: 5, angle: 0 });
-  stepGame(game); stepGame(game);
-  assert.equal(game.dodges, 1);
-  assert.equal(game.points, 120);
-  assert.equal(game.health, 100);
+
+test('same seed + car + inputs = identical run (deterministic)', () => {
+  const a = drive('daily-2026-11-19', 'kaze', 2400), b = drive('daily-2026-11-19', 'kaze', 2400);
+  assert.deepEqual(gameResult(a.g), gameResult(b.g));
+  assert.equal(a.g.player.x, b.g.player.x);
+  const c = drive('daily-2026-11-19', 'toro', 2400);
+  assert.notEqual(c.g.player.x, a.g.player.x, 'car stats change the run');
+});
+
+test('replay of a recorded trace reproduces the browser result exactly', () => {
+  const { g, inputs } = drive('replay-check', 'raiden');
+  assert.equal(g.state, 'ended');
+  const replayed = replayTrace('replay-check', encodeTrace(inputs), 'raiden');
+  assert.deepEqual(replayed, gameResult(g));
+});
+
+test('chunked replay with checkpoints equals a single pass', () => {
+  const { g, inputs } = drive('chunks', 'volta');
+  const trace = encodeTrace(inputs);
+  let game = createGame('chunks', { car: 'volta' }), done = false, guard = 0;
+  while (!done && guard++ < 400) { done = replayChunk(game, trace, 500); if (!done) game = restoreGame(snapshotGame(game)); }
+  assert.deepEqual(gameResult(game), gameResult(g));
+});
+
+test('the run continues past 60 s: milestone bonus, then heat keeps rising', () => {
+  const g = createGame('milestone', { car: 'kaze' });
+  let milestone = null;
+  while (g.state === 'playing' && g.ticks < MILESTONE_TICKS + 600) { g.health = 100; stepGame(g, autopilot(g)); for (const e of g.events) if (e.type === 'milestone') milestone = e; g.events.length = 0; }
+  assert.ok(milestone, 'milestone event fired');
+  assert.equal(milestone.tick, MILESTONE_TICKS);
+  assert.equal(g.state, 'playing', 'game keeps going after 60 s');
+  assert.ok(gameResult(g).escaped);
+  assert.equal(heatAt(MILESTONE_TICKS + 1200), 5);
+});
+
+test('damage limps the car, pit stops repair up to three times, zero health wrecks', () => {
+  const g = createGame('pit', { car: 'kaze', noPolice: true, noTraffic: true });
+  const st = stations[0], p = g.player;
+  const place = () => { p.x = st.x - st.ca * 25; p.y = st.y - st.sa * 25; p.h = p.a = Math.atan2(st.sa, st.ca); p.v = 18; p.slip = 0; };
+  let repairs = 0;
+  for (let k = 0; k < 4; k++) {
+    g.health = 30; g.stationCd.fill(0); place();
+    for (let i = 0; i < 150 && g.state === 'playing'; i++) { stepGame(g, encodeInput(0)); for (const e of g.events) if (e.type === 'repair') repairs++; g.events.length = 0; }
+  }
+  assert.equal(repairs, 3);
+  assert.equal(g.repairs, 0);
+  assert.ok(g.health < 100, 'no fourth repair');
+  // limp: a damaged car is slower
+  const fast = createGame('limp', { car: 'kaze', noPolice: true, noTraffic: true }), slow = createGame('limp', { car: 'kaze', noPolice: true, noTraffic: true });
+  slow.health = 20;
+  for (let i = 0; i < 300; i++) { slow.health = 20; stepGame(fast, autopilot(fast)); stepGame(slow, autopilot(slow)); }
+  assert.ok(slow.stats.dist < fast.stats.dist, 'damaged car covers less distance');
+  // wreck
+  const w = createGame('wreck', { car: 'kaze', noTraffic: true, noPolice: true });
+  w.health = 1;
+  let ended = null;
+  for (let i = 0; i < 3000 && w.state === 'playing'; i++) { stepGame(w, encodeInput(3, false, false, true)); for (const e of w.events) if (e.type === 'wrecked') ended = e; w.events.length = 0; }
+  assert.equal(w.end, 'wrecked'); assert.ok(ended);
+});
+
+test('nitro boosts top speed and drains the tank; handbrake starts a drift', () => {
+  const a = createGame('nitro', { car: 'kaze', noPolice: true, noTraffic: true }), b = createGame('nitro', { car: 'kaze', noPolice: true, noTraffic: true });
+  a.nitro = b.nitro = 1;
+  let topA = 0, topB = 0;
+  for (let i = 0; i < 240; i++) { a.player.x = b.player.x = 0; a.player.y = b.player.y = 0; stepGame(a, encodeInput(0, false, false, true)); stepGame(b, encodeInput(0)); topA = Math.max(topA, a.player.v); topB = Math.max(topB, b.player.v); }
+  assert.ok(topA > topB + 5, 'nitro is faster');
+  assert.ok(a.nitro < 0.5, 'tank drains');
+  const d = createGame('drift', { car: 'hachi', noPolice: true, noTraffic: true });
+  d.player.v = 40;
+  let maxSlip = 0;
+  for (let i = 0; i < 40; i++) { d.player.x = 0; d.player.y = 0; stepGame(d, encodeInput(3, false, true, false)); maxSlip = Math.max(maxSlip, Math.abs(d.player.slip)); }
+  assert.ok(maxSlip > 0.3, 'handbrake slides the rear');
+});
+
+test('all 14 cars run deterministically under the autopilot', () => {
+  assert.equal(CARS.length, 14);
+  assert.equal(new Set(CARS.map((c) => c.id)).size, 14);
+  for (const c of CARS) {
+    const { g, inputs } = drive('cars-' + c.id, c.id, 1200);
+    assert.ok(g.ticks > 0);
+    if (g.state === 'ended') assert.deepEqual(replayTrace('cars-' + c.id, encodeTrace(inputs), c.id), gameResult(g));
+  }
+  assert.equal(SIM_VERSION, '2.0.0');
 });

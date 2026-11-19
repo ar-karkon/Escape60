@@ -1,72 +1,65 @@
-// Captures four REAL in-engine screenshots at 390x780 (menu, driving, high-pressure chase, results).
-// Usage: npm start (in another shell), then `node scripts/capture-screens.cjs` (GAME_URL / OUT_DIR optional).
-// Inputs are scripted key presses fed to the real game loop; nothing is composited or mocked.
-const { chromium } = require("playwright");
+/* Real in-engine screenshots for docs/screenshots (needs `npm start`). Uses the capture hooks
+   (?capture=1) to drive with an input-only autopilot and to jump to key moments. */
+let chromium;
+try { ({ chromium } = require("playwright")); } catch { ({ chromium } = require("playwright-core")); }
 const path = require("node:path");
-const OUT = process.env.OUT_DIR || path.join(__dirname, "..", "docs", "screenshots");
-const URL_BASE = process.env.GAME_URL || "http://localhost:4173";
-const SEED = process.env.SEED || "sunset-1";
-
-(async () => {
-  const browser = await chromium.launch({
-    executablePath: process.env.CHROME_BIN || undefined,
-    args: ["--use-gl=angle", "--use-angle=swiftshader", "--enable-unsafe-swiftshader", "--ignore-gpu-blocklist"],
-  });
-  const ctx = await browser.newContext({ viewport: { width: 390, height: 780 }, deviceScaleFactor: 1, hasTouch: true });
+const OUT = path.join(__dirname, "..", "docs", "screenshots");
+const URL0 = process.env.GAME_URL || "http://localhost:4173";
+const pilot = () => {
+  const E = window.__escape60, M = E.map;
+  E.override = (g) => {
+    const q = g.player, r = M.sample(q.x, q.y, {});
+    if (r.e < 0) return 3;
+    const pt = M.pointAt(r.e, r.s, {}), f = pt.tx * Math.cos(q.h) + pt.ty * Math.sin(q.h) >= 0 ? 1 : -1, L = M.edges[r.e].len;
+    const t = M.pointAt(r.e, Math.max(0, Math.min(L, r.s + f * (12 + q.v * 0.45))), {});
+    let d = Math.atan2(t.y + t.tx * f * 2.5 - q.y, t.x - t.ty * f * 2.5 - q.x) - q.h; while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI;
+    const nitro = window.__nitro && Math.abs(d) < 0.15, hand = window.__hand;
+    return (Math.max(-3, Math.min(3, Math.round(d * 5 + (hand ? 2 : 0)))) + 3) | (Math.abs(d) > 0.4 && q.v > 28 ? 8 : 0) | (hand ? 16 : 0) | (nitro ? 32 : 0);
+  };
+};
+async function open(browser, w, h, q = "", lang = "en") {
+  const ctx = await browser.newContext({ viewport: { width: w, height: h }, deviceScaleFactor: w < h ? 2 : 1, hasTouch: w < h });
   const p = await ctx.newPage();
-  const errors = [];
-  p.on("pageerror", (e) => errors.push(e.message));
-  p.on("console", (e) => { if (e.type() === "error") errors.push(e.text()); });
-  const shot = (name) => p.screenshot({ path: path.join(OUT, name + ".png") });
-  const time = () => p.evaluate(() => Number(document.querySelector("#time").textContent));
-  const waitTime = (t) => p.waitForFunction((t) => Number(document.querySelector("#time").textContent) >= t || document.body.dataset.view === "results", t, { timeout: 400000, polling: 50 });
-  await p.goto(new URL("/?capture=1&seed=" + SEED + "&q=" + (process.env.QUALITY || "high"), URL_BASE).href);
-  const freeze = (v) => p.evaluate((v) => window.__escape60.freeze(v), v);
-  await p.waitForTimeout(6000);
-  await shot("menu");
-  await p.locator("#play").click();
-  await waitTime(Number(process.env.DRIVE_AT || 7.4));
-  await freeze(true);
-  await shot("coastal");
-  await freeze(false);
-  // Weave between lanes to provoke drifts while the pursuit director escalates.
-  const weaveFrom = Number(process.env.WEAVE_FROM || 44);
-  const chaseAt = Number(process.env.CHASE_AT || 52.25);
-  await waitTime(weaveFrom);
-  let dir = "ArrowRight";
-  while ((await time()) < chaseAt - 0.6 && !(await p.locator("#results").isVisible())) {
-    await p.keyboard.down(dir);
-    const start = await time();
-    await p.waitForFunction(([s, h]) => Number(document.querySelector("#time").textContent) >= s + h || document.body.dataset.view !== "game", [start, Number(process.env.WEAVE_HOLD || 0.42)], { timeout: 60000, polling: 30 });
-    await p.keyboard.up(dir);
-    dir = dir === "ArrowRight" ? "ArrowLeft" : "ArrowRight";
-  }
-  await waitTime(chaseAt).catch(() => {});
-  // Avoid freezing on a damage-blink frame (the hero flickers while invulnerable).
-  await p.waitForFunction(() => window.__escape60.clear() || document.body.dataset.view !== "game", null, { timeout: 30000, polling: 20 }).catch(() => {});
-  if ((await p.evaluate(() => document.body.dataset.view)) === "game") {
-    await freeze(true);
-    await p.waitForTimeout(400);
-    await shot("pursuit");
-    await freeze(false);
-  } else console.log("Run ended before the pursuit capture time; no pursuit screenshot taken.");
-  await p.locator("#results").waitFor({ state: "visible", timeout: 400000 });
-  await p.waitForTimeout(Number(process.env.RESULT_WAIT || 2500));
-  await shot("results");
-  console.log((await p.locator("#results").innerText()).replace(/\n+/g, " | "));
-  console.log("audio:", JSON.stringify(await p.evaluate(() => window.__escape60.audioState())));
-  // Share sheet + the three social card formats (rendered from the real results scene).
-  const fs = require("node:fs");
-  await p.locator("#share").click();
-  for (const fmt of ["story", "post", "wide"]) {
-    await p.locator(`.tab[data-format="${fmt}"]`).click();
-    await p.waitForFunction(() => document.querySelector("#share-preview").src.startsWith("data:"), null, { timeout: 120000 });
-    await p.waitForTimeout(400);
-    if (fmt === "story") await shot("share-sheet");
-    const data = await p.evaluate(() => document.querySelector("#share-preview").src);
-    fs.writeFileSync(path.join(OUT, `share-${fmt}.jpg`), Buffer.from(data.split(",")[1], "base64"));
-    await p.evaluate(() => document.querySelector("#share-preview").removeAttribute("src"));
-  }
-  console.log(errors.length ? "Console errors:\n" + errors.join("\n") : "No console errors.");
-  await browser.close();
+  await p.addInitScript((l) => { try { localStorage.setItem("escape60-lang", l); localStorage.setItem("escape60-profile-v2", JSON.stringify({ level: 18, xp: 0, runs: 5 })); } catch {} }, lang);
+  await p.goto(`${URL0}/?capture=1&q=high&seed=capture-3${q}`);
+  await p.waitForFunction(() => document.body.dataset.view === "home", null, { timeout: 180000 });
+  await p.evaluate(pilot);
+  await p.waitForTimeout(1500);
+  return p;
+}
+const shot = (p, name) => p.screenshot({ path: path.join(OUT, name) });
+(async () => {
+  const browser = await chromium.launch({ args: ["--no-sandbox", "--use-gl=angle", "--use-angle=swiftshader", "--enable-unsafe-swiftshader"] });
+  try {
+    let p = await open(browser, 390, 780);
+    await shot(p, "menu.png");
+    await p.click("#garage-open"); await p.waitForTimeout(1200); await shot(p, "garage.png");
+    await p.click('.tab[data-tab="fx"]'); await p.waitForTimeout(600); await shot(p, "effects.png");
+    await p.click("#garage-back"); await p.click("#play");
+    await p.waitForTimeout(6000); await shot(p, "drive.png");
+    await p.evaluate(() => { window.__nitro = true; window.__escape60.game().nitro = 1; }); await p.waitForTimeout(2200); await shot(p, "nitro.png");
+    await p.evaluate(() => { window.__nitro = false; window.__hand = true; }); await p.waitForTimeout(900); await shot(p, "drift.png");
+    await p.evaluate(() => { window.__hand = false; const E = window.__escape60; while (E.game().ticks < 3560 && E.game().state === "playing") { E.game().health = 100; E.fast(Math.min(300, 3560 - E.game().ticks)); } });
+    await p.waitForTimeout(2600); await shot(p, "milestone.png");
+    await p.evaluate(() => { const g = window.__escape60.game(); g.health = 28; });
+    await p.waitForTimeout(2500); await shot(p, "damage.png");
+    await p.evaluate(() => { const g = window.__escape60.game(); g.health = 2; g.repairs = 0; g.invuln = 0; window.__escape60.override = () => 6 | 32; });
+    await p.waitForFunction(() => window.__escape60.state().state === "ended", null, { timeout: 90000 });
+    await p.waitForTimeout(700); await shot(p, "explosion.png");
+    await p.waitForFunction(() => document.body.dataset.view === "results", null, { timeout: 30000 });
+    await p.waitForTimeout(1500); await shot(p, "results.png");
+    await p.context().close();
+    p = await open(browser, 390, 780, "&tod=night", "fa");
+    await shot(p, "menu-fa-night.png");
+    await p.click("#play"); await p.waitForTimeout(6500); await shot(p, "night.png");
+    await p.context().close();
+    p = await open(browser, 1280, 720, "&tod=sunset");
+    await shot(p, "desktop-menu.png");
+    await p.click("#play"); await p.waitForTimeout(6500); await shot(p, "desktop-drive.png");
+    await p.screenshot({ path: path.join(__dirname, "..", "web", "assets", "og-card.jpg"), type: "jpeg", quality: 82, clip: { x: 40, y: 45, width: 1200, height: 630 } });
+    await p.context().close();
+    p = await open(browser, 1280, 720, "&tod=day");
+    await p.click("#play"); await p.waitForTimeout(6500); await shot(p, "desktop-day.png");
+    console.log("screenshots written to", OUT);
+  } finally { await browser.close(); }
 })().catch((e) => { console.error(e); process.exit(1); });

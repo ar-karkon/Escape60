@@ -1,270 +1,127 @@
-import { P, SKIP, GLOW, shade } from "./voxel.js";
-import { atlasRects } from "./signs.js";
+import { Kit } from "./kit.js";
 
-/* Reusable street furniture and vegetation. All functions draw into a VoxelBuilder `b`
-   in its current frame and optionally register light emitters into glow builder `g`. */
+/* Street furniture, vegetation and set dressing. Each prop's origin is its base centre; +z faces the
+   road. `hit` = radius for knock-over checks (breakables only); `shadow` = casts shadows. */
+const C = {
+  metal: 0x3a3e46, darkMetal: 0x23262c, concrete: 0xb9b5ad, wood: 0x7a5236, bark: 0x6b4a32, palmBark: 0x8a6a48,
+  leaf: 0x3f7a2c, leafDark: 0x2c5a24, pine: 0x24452a, red: 0xc8202a, orange: 0xff6a12, white: 0xf2f2ee, yellow: 0xffc21a,
+};
+export const PROP_TYPES = {};
+function def(name, meta, build) { PROP_TYPES[name] = { name, ...meta, build }; }
 
-const WARM = 0xffc27a;
-export const TOP_ONLY = SKIP.NY | SKIP.PX | SKIP.NX | SKIP.PZ | SKIP.NZ;
+def("lamp", { hit: 0.6, breakable: true, shadow: false, light: [0, 7.15, 2.3] }, (k) => {
+  k.set(C.darkMetal, 0.5, 0.6).cyl(0, 0, 0, 0.2, 0.2, 0.5, 6).cyl(0, 0.5, 0, 0.11, 0.08, 7.4, 6);
+  k.cbox(0, 7.32, 1.1, 0.1, 0.1, 2.3);
+  k.cbox(0, 7.25, 2.25, 0.36, 0.14, 0.8);
+  k.set(0xfff0d0, 0.3, 0, 1.7, 1).cbox(0, 7.17, 2.25, 0.28, 0.02, 0.66);
+});
+def("hwlamp", { shadow: false, light: [0, 10.6, 3.6] }, (k) => {
+  k.set(0x80868f, 0.45, 0.7).cyl(0, 0, 0, 0.25, 0.14, 11, 6);
+  k.cbox(0, 10.85, 1.8, 0.12, 0.12, 3.8);
+  k.cbox(0, 10.75, 3.7, 0.5, 0.18, 1.0);
+  k.set(0xffe2b8, 0.3, 0, 1.8, 1).cbox(0, 10.65, 3.7, 0.38, 0.02, 0.82);
+});
+def("palm", { hit: 0.5, breakable: true, shadow: true }, (k) => {
+  let x = 0, y = 0, z = 0;
+  for (let i = 0; i < 7; i++) {
+    const nx = x + 0.08 + i * 0.03, ny = y + 1.35, r0 = 0.24 - i * 0.015, r1 = r0 - 0.015;
+    k.set(i % 2 ? C.palmBark : 0x7a5c3e, 0.95).at(x, y, z).cyl(0, 0, 0, r0, r1, 1.36, 7, false);
+    x = nx; y = ny;
+  }
+  k.reset();
+  for (let f = 0; f < 8; f++) {
+    const a = (f / 8) * Math.PI * 2 + 0.3, ca = Math.cos(a), sa = Math.sin(a), L = 3.4 + (f % 3) * 0.4;
+    const base = [x, y, z], mid = [x + ca * L * 0.55, y + 0.55, z + sa * L * 0.55], tip = [x + ca * L, y - 1.2, z + sa * L];
+    const w = 0.6, px = -sa * w, pz = ca * w;
+    k.set(f % 2 ? C.leaf : C.leafDark, 0.9);
+    k.tri(base, [mid[0] + px, mid[1], mid[2] + pz], mid); k.tri(base, mid, [mid[0] - px, mid[1], mid[2] - pz]);
+    k.tri(mid, [mid[0] + px, mid[1], mid[2] + pz], tip); k.tri(mid, tip, [mid[0] - px, mid[1], mid[2] - pz]);
+    k.tri(base, mid, [mid[0] + px, mid[1], mid[2] + pz]); k.tri(base, [mid[0] - px, mid[1], mid[2] - pz], mid);
+    k.tri(mid, tip, [mid[0] + px, mid[1], mid[2] + pz]); k.tri(mid, [mid[0] - px, mid[1], mid[2] - pz], tip);
+  }
+  k.set(0x5a3d22, 0.9).blob(x, y - 0.2, z, 0.35, 0.3, 0.35, 0);
+});
+def("tree", { shadow: true }, (k) => {
+  k.set(C.bark, 0.95).cyl(0, 0, 0, 0.3, 0.2, 2.6, 6);
+  k.set(C.leaf, 0.9).blob(0, 4.2, 0, 2.4, 2.1, 2.4, 0).set(C.leafDark, 0.9).blob(0.9, 3.4, 0.6, 1.6, 1.4, 1.6, 0).blob(-0.8, 3.6, -0.5, 1.5, 1.3, 1.5, 0);
+});
+def("streettree", { hit: 0.45, breakable: true, shadow: true }, (k) => {
+  k.set(0x6a6660, 0.9).cbox(0, 0.06, 0, 1.3, 0.12, 1.3);
+  k.set(C.bark, 0.95).cyl(0, 0, 0, 0.14, 0.1, 2.3, 6);
+  k.set(C.leaf, 0.9).blob(0, 3.3, 0, 1.4, 1.5, 1.4, 0).set(C.leafDark, 0.9).blob(0.4, 2.9, 0.3, 0.9, 0.8, 0.9, 0);
+});
+def("pine", { shadow: true }, (k) => {
+  k.set(C.bark, 0.95).cyl(0, 0, 0, 0.28, 0.2, 1.8, 6);
+  k.set(C.pine, 0.92).cyl(0, 1.4, 0, 2.2, 0.1, 5.2, 6, false).cyl(0, 3.6, 0, 1.7, 0.05, 7.4, 6, false).cyl(0, 5.8, 0, 1.1, 0, 9.0, 6, false);
+});
+def("bush", { shadow: false }, (k) => { k.set(C.leaf, 0.95).blob(0, 0.6, 0, 1.3, 0.8, 1.2, 0).set(C.leafDark, 0.95).blob(0.8, 0.5, 0.3, 0.8, 0.6, 0.8, 0); });
+def("rock", { shadow: true }, (k) => { k.set(0x8a7a6a, 0.95).blob(0, 0.5, 0, 1.6, 1.1, 1.3, 0).set(0x7a6a5c, 0.95).blob(0.9, 0.3, 0.6, 0.9, 0.7, 0.8, 0); });
+def("cliff", { shadow: true }, (k) => {
+  k.set(0x9a7a5e, 0.95).blob(0, 6, 0, 9, 9, 7, 0).set(0x8a6a50, 0.95).blob(5, 3, 3, 6, 6, 5, 0).blob(-5, 4, -2, 6, 7, 6, 0).set(0xa58a6a, 0.95).blob(1, 11, -1, 5, 4, 4, 0);
+});
+def("bench", { hit: 0.7, breakable: true }, (k) => {
+  k.set(C.darkMetal, 0.5, 0.5).cbox(-0.8, 0.22, 0, 0.08, 0.44, 0.45).cbox(0.8, 0.22, 0, 0.08, 0.44, 0.45);
+  k.set(C.wood, 0.8).cbox(0, 0.46, 0, 1.9, 0.07, 0.48).cbox(0, 0.78, -0.22, 1.9, 0.38, 0.06);
+});
+def("bin", { hit: 0.4, breakable: true }, (k) => { k.set(0x2d4a3a, 0.6, 0.3).cyl(0, 0, 0, 0.3, 0.32, 0.95, 8).set(0x1a1c20, 0.6).cyl(0, 0.95, 0, 0.34, 0.3, 1.02, 8); });
+def("hydrant", { hit: 0.35, breakable: true, water: true }, (k) => { k.set(C.red, 0.5, 0.2).cyl(0, 0, 0, 0.17, 0.15, 0.7, 8).cyl(0, 0.7, 0, 0.18, 0.08, 0.86, 8).cbox(0, 0.48, 0, 0.5, 0.1, 0.12); });
+def("cone", { hit: 0.35, breakable: true }, (k) => { k.set(0x1a1a1a, 0.8).cbox(0, 0.02, 0, 0.5, 0.04, 0.5); k.set(C.orange, 0.6).cyl(0, 0.04, 0, 0.2, 0.03, 0.75, 8); k.set(C.white, 0.5).cyl(0, 0.38, 0, 0.12, 0.09, 0.5, 8, false); });
+def("barrier", { hit: 0.9, breakable: true }, (k) => {
+  for (let i = 0; i < 4; i++) k.set(i % 2 ? C.white : C.red, 0.6).cbox(-0.75 + i * 0.5, 0.75, 0, 0.5, 0.25, 0.08);
+  k.set(C.darkMetal, 0.6, 0.4).cbox(-0.85, 0.4, 0, 0.06, 0.8, 0.5).cbox(0.85, 0.4, 0, 0.06, 0.8, 0.5);
+});
+def("tlight", { hit: 0.5, breakable: true }, (k) => {
+  k.set(C.darkMetal, 0.5, 0.5).cyl(0, 0, 0, 0.13, 0.11, 5.6, 6).cbox(0, 5.5, 2.4, 0.12, 0.12, 4.8);
+  k.set(0x16171a, 0.6).cbox(0, 4.95, 4.4, 0.42, 1.2, 0.32);
+  k.set(0xff2a2a, 0.3, 0, 0.6, 2).cbox(0, 5.32, 4.58, 0.22, 0.22, 0.04);
+  k.set(0xffaa22, 0.3, 0, 0.25, 2).cbox(0, 4.95, 4.58, 0.22, 0.22, 0.04);
+  k.set(0x3dff7a, 0.3, 0, 2.2, 2).cbox(0, 4.58, 4.58, 0.22, 0.22, 0.04);
+  k.set(0x16171a, 0.6).cbox(0, 2.6, 0.2, 0.3, 0.6, 0.25);
+  k.set(0xff3a2a, 0.3, 0, 1.2, 2).cbox(0, 2.68, 0.33, 0.18, 0.16, 0.02);
+});
+def("billboard", { shadow: true, board: [0, 7.5, 0.35, 11, 4.6] }, (k) => {
+  k.set(0x5a5f68, 0.5, 0.6).cyl(-3.2, 0, 0, 0.3, 0.26, 6, 6).cyl(3.2, 0, 0, 0.3, 0.26, 6, 6);
+  k.set(0x30333a, 0.6, 0.4).cbox(0, 7.5, 0, 11.6, 5.2, 0.5);
+  k.set(0x6a6f78, 0.5, 0.6).cbox(0, 5.0, 0.9, 11, 0.12, 1.2);
+});
+def("container", { shadow: true }, (k) => {
+  k.set(0xffffff, 0.7, 0.3).cbox(0, 1.3, 0, 2.44, 2.6, 6.06);
+  for (let i = 0; i < 9; i++) k.set(0xdddddd, 0.7, 0.3).cbox(1.24, 1.3, -2.7 + i * 0.68, 0.04, 2.3, 0.14).cbox(-1.24, 1.3, -2.7 + i * 0.68, 0.04, 2.3, 0.14);
+  k.set(0xbbbbbb, 0.7, 0.3).cbox(0, 1.3, 3.04, 2.3, 2.4, 0.04);
+});
+def("umbrella", { shadow: false }, (k) => {
+  k.set(C.white, 0.6).cyl(0, 0, 0, 0.04, 0.04, 2.3, 5);
+  k.set(0xffffff, 0.8).cyl(0, 2.0, 0, 1.6, 0, 2.6, 8);
+  k.set(0xf4f0e6, 0.8).cbox(1.3, 0.25, 0, 0.7, 0.1, 1.8);
+});
+def("boat", { shadow: false }, (k) => {
+  k.set(0xf6f6f2, 0.4).quad([-1.4, 0, -4], [1.4, 0, -4], [1.4, 1.2, -4], [-1.4, 1.2, -4]);
+  k.quad([-1.4, 0, -4], [-1.4, 1.2, -4], [0, 1.2, 4.5], [0, 0, 4.5]); k.quad([1.4, 0, -4], [0, 0, 4.5], [0, 1.2, 4.5], [1.4, 1.2, -4]);
+  k.tri([-1.4, 1.2, -4], [1.4, 1.2, -4], [0, 1.2, 4.5]);
+  k.set(0x1d4fd8, 0.5).cbox(0, 1.8, -1.2, 1.8, 1.2, 2.6).set(0x0c1220, 0.1, 0.4).cbox(0, 1.95, -0.1, 1.6, 0.6, 0.3);
+});
+def("pole", { shadow: false }, (k) => { k.set(0x6a4e36, 0.95).cyl(0, 0, 0, 0.16, 0.12, 9, 6); k.set(0x4a3a2a, 0.9).cbox(0, 8.4, 0, 2.4, 0.12, 0.12); k.set(0x9aa0a8, 0.4, 0.4).cbox(-1, 8.55, 0, 0.1, 0.2, 0.1).cbox(1, 8.55, 0, 0.1, 0.2, 0.1); });
+def("busstop", { hit: 1.2, breakable: true }, (k) => {
+  k.set(0x9aa3ad, 0.4, 0.6).cyl(-1.6, 0, -0.5, 0.06, 0.06, 2.5, 5).cyl(1.6, 0, -0.5, 0.06, 0.06, 2.5, 5).cbox(0, 2.55, 0, 3.6, 0.1, 1.5);
+  k.set(0x9fd8ff, 0.08, 0.2, 0.2, 2).cbox(0, 1.3, -0.62, 3.2, 2.2, 0.04);
+  k.set(C.wood, 0.8).cbox(0, 0.45, -0.35, 2.4, 0.06, 0.4);
+});
+def("planter", { hit: 0.8, breakable: true }, (k) => { k.set(0xa49d94, 0.9).cbox(0, 0.3, 0, 1.4, 0.6, 1.4); k.set(C.leaf, 0.95).blob(0, 0.9, 0, 0.8, 0.55, 0.8, 0); });
+def("lifeguard", { shadow: true }, (k) => {
+  for (const [x, z] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) k.set(C.white, 0.7).cyl(x, 0, z, 0.08, 0.08, 2.4, 5);
+  k.set(0xff5a3c, 0.7).cbox(0, 3.2, 0, 2.6, 1.6, 2.6).set(0xf6efe2, 0.7).cbox(0, 4.1, 0, 3, 0.2, 3).set(0x3a4a5a, 0.2).cbox(0, 3.3, 1.31, 1.8, 0.7, 0.02);
+});
+def("yacht", { shadow: false }, (k) => {
+  k.set(0xffffff, 0.35).at(0, 0, 0, 0, 1.6).quad([-1.4, 0, -4], [1.4, 0, -4], [1.4, 1.2, -4], [-1.4, 1.2, -4]);
+  k.quad([-1.4, 0, -4], [-1.4, 1.2, -4], [0, 1.2, 4.5], [0, 0, 4.5]); k.quad([1.4, 0, -4], [0, 0, 4.5], [0, 1.2, 4.5], [1.4, 1.2, -4]);
+  k.tri([-1.4, 1.2, -4], [1.4, 1.2, -4], [0, 1.2, 4.5]);
+  k.reset().set(0xf2f2f2, 0.3).cbox(0, 2.6, -1.5, 3.2, 1.0, 5).set(0x0c1220, 0.08, 0.5).cbox(0, 2.7, 1.05, 3.0, 0.6, 0.1).set(0xffffff, 0.3).cbox(0, 3.4, -2.2, 2.2, 0.7, 2.6);
+  k.set(0xe8eef4, 0.4, 0.6).cyl(0, 3.6, -1, 0.06, 0.04, 14, 5);
+});
 
-export function signBox(b, name, x, y, z, w, h, d, facing, o = {}) {
-  // facing: face bit (or list of bits) that shows the atlas image.
-  const r = atlasRects[name];
-  if (!r) return;
-  const faces = {};
-  for (const bit of [].concat(facing)) faces[bit] = { p: P.SIGN, e: o.e ?? 3.2, q: o.flicker ?? 0, uvr: [r.u0, r.v0, r.u1, r.v1], color: 0xffffff };
-  b.box(x, y, z, w, h, d, o.frame ?? 0x22183a, { n: 0.2, faces });
-}
-
-/* ---- Palms ---- */
-const TRUNK_A = 0x8a5a44, TRUNK_B = 0xb07a55;
-const LEAF_A = 0x2f8f4e, LEAF_B = 0x4fb35a, LEAF_C = 0x9bd35a;
-export function palm(b, x, z, rand, opt = {}) {
-  const kind = opt.kind ?? (rand() < 0.62 ? 0 : rand() < 0.5 ? 1 : 2);
-  const h = opt.h ?? (kind === 1 ? 2.2 + rand() * 1.2 : kind === 2 ? 9 + rand() * 3 : 6 + rand() * 4);
-  const lean = (opt.lean ?? (rand() - 0.5)) * (kind === 2 ? 0.25 : 1.2);
-  const la = rand() * Math.PI * 2;
-  const segs = Math.max(3, Math.round(h / 0.8));
-  let tx = x, tz = z, ty = opt.y ?? 0.2;
-  const tw = kind === 2 ? 0.42 : kind === 1 ? 0.95 : 0.55;
-  for (let s = 0; s < segs; s++) {
-    const t = s / segs;
-    const off = lean * t * t * h * 0.35;
-    tx = x + Math.cos(la) * off;
-    tz = z + Math.sin(la) * off;
-    b.box(tx, ty + (s + 0.5) * (h / segs), tz, tw * (1 - t * 0.18), (h / segs) * 1.02, tw * (1 - t * 0.18), s % 2 ? TRUNK_A : TRUNK_B, { n: 0.5, ao: true });
-    if (s % 2 === 0 && kind !== 1) b.box(tx, ty + (s + 0.05) * (h / segs), tz, tw * 1.15, 0.12, tw * 1.15, shade(TRUNK_A, 0.75), { n: 0.3 });
-  }
-  const top = ty + h;
-  // crown core
-  b.box(tx, top, tz, tw * 1.5, 0.6, tw * 1.5, LEAF_A, { p: P.LEAF, n: 0.6 });
-  const fronds = kind === 2 ? 7 : kind === 1 ? 9 : 8 + Math.floor(rand() * 3);
-  const flen = kind === 2 ? 3 : kind === 1 ? 4 : 4 + Math.floor(rand() * 2);
-  for (let f = 0; f < fronds; f++) {
-    const a = (f / fronds) * Math.PI * 2 + rand() * 0.4;
-    const ca = Math.cos(a), sa = Math.sin(a);
-    const lift = kind === 2 ? 0.25 : 0.55 + rand() * 0.3;
-    for (let k = 0; k < flen; k++) {
-      const dist = 0.55 + k * 0.82;
-      const yy = top + 0.2 + lift * k - 0.16 * k * k;
-      const w = (1.05 - k * 0.14) * (kind === 2 ? 0.8 : 1);
-      const tilt = (lift - 0.32 * k) * 0.55;
-      b.box(tx + ca * dist, yy, tz + sa * dist, 0.95, 0.16, w, k === flen - 1 ? LEAF_C : (f + k) % 2 ? LEAF_A : LEAF_B, {
-        p: P.LEAF, q: f * 7 + k, n: 0.7, ry: -a, rz: tilt, skip: 0,
-      });
-    }
-  }
-  if (kind === 0) for (let c = 0; c < 3; c++) {
-    const a = c * 2.1;
-    b.box(tx + Math.cos(a) * 0.38, top - 0.35, tz + Math.sin(a) * 0.38, 0.3, 0.3, 0.3, 0x6b4a2a, { n: 0.3 });
-  }
-  return { x: tx, y: top, z: tz };
-}
-
-export function planter(b, x, z, w = 1.6, d = 1.6, flowers = 0xff5d95) {
-  b.box(x, 0.45, z, w, 0.7, d, 0xd9c2b0, { ao: true, top: 0x4a3326 });
-  b.box(x, 0.86, z, w - 0.3, 0.25, d - 0.3, 0x3f9e4c, { p: P.GRASS, n: 0.6 });
-  if (flowers) for (let k = 0; k < 4; k++)
-    b.box(x + ((k & 1) - 0.5) * (w - 0.6) * 0.8, 1.05, z + ((k >> 1) - 0.5) * (d - 0.6) * 0.8, 0.28, 0.22, 0.28, flowers, { n: 0.3 });
-}
-
-export function bush(b, x, z, s = 1, color = 0x3f9e4c) {
-  b.box(x, 0.45 * s, z, 1.3 * s, 0.9 * s, 1.3 * s, color, { p: P.LEAF, n: 0.8, ao: true });
-  b.box(x + 0.2 * s, 0.95 * s, z - 0.1 * s, 0.8 * s, 0.5 * s, 0.8 * s, shade(color, 1.2), { p: P.LEAF, n: 0.8 });
-}
-
-/* ---- Lamps ---- */
-export function lampClassic(b, g, x, z, yaw = 0) {
-  b.box(x, 0.35, z, 0.55, 0.5, 0.55, 0x2c2440, { n: 0.2 });
-  b.box(x, 2.6, z, 0.18, 4.4, 0.18, 0x3a3150, { n: 0.2 });
-  b.box(x, 4.9, z, 0.7, 0.1, 0.7, 0x2c2440);
-  b.box(x, 5.3, z, 0.55, 0.7, 0.55, WARM, { p: P.LIGHT, e: 4.5, n: 0 });
-  b.box(x, 5.75, z, 0.75, 0.15, 0.75, 0x2c2440);
-  b.box(x, 5.95, z, 0.2, 0.25, 0.2, 0x2c2440);
-  if (g) {
-    g.add(GLOW.POOL, x, 0.24, z, 3.2, 3.2, 0, 0xff9a5a, 0.22);
-    g.add(GLOW.HALO, x, 5.3, z, 1.5, 0, 0, WARM, 0.45);
-    g.add(GLOW.STREAK, x, 0.05, z, 1, 13, 0, WARM, 0.8);
-  }
-}
-export function lampArm(b, g, x, z, dirX, dirZ) {
-  // Modern cobra-head lamp hanging over the road (dir points toward road centre).
-  b.box(x, 0.3, z, 0.5, 0.4, 0.5, 0x2c2440);
-  b.box(x, 3.6, z, 0.22, 6.6, 0.22, 0x4a4560, { n: 0.15 });
-  const ax = x + dirX * 1.6, az = z + dirZ * 1.6;
-  b.box((x + ax) / 2, 6.85, (z + az) / 2, Math.abs(dirX) * 3.3 + 0.16, 0.16, Math.abs(dirZ) * 3.3 + 0.16, 0x4a4560);
-  b.box(ax + dirX * 0.4, 6.75, az + dirZ * 0.4, Math.abs(dirX) * 1.2 + 0.5, 0.26, Math.abs(dirZ) * 1.2 + 0.5, 0x2c2440, {
-    faces: { 8: { p: P.LIGHT, e: 5, color: 0xffe1b0 } }, skip: 0,
-  });
-  if (g) {
-    const lx = ax + dirX * 0.4, lz = az + dirZ * 0.4;
-    g.add(GLOW.POOL, lx, 0.06, lz, 4, 4, 0, 0xffa060, 0.22);
-    g.add(GLOW.HALO, lx, 6.55, lz, 1.4, 0, 0, 0xffd9a0, 0.4);
-    g.add(GLOW.STREAK, lx, 0.05, lz, 1.1, 14, 0, 0xffd9a0, 0.75);
-  }
-}
-
-/* ---- Street furniture ---- */
-export function bench(b, x, z, yaw) {
-  const c = Math.cos(yaw), s = Math.sin(yaw);
-  const at = (lx, lz) => [x + lx * c + lz * s, z - lx * s + lz * c];
-  let [px, pz] = at(0, 0);
-  b.box(px, 0.62, pz, 2, 0.12, 0.6, 0xa0663f, { ry: yaw, p: P.WOOD, n: 0.3 });
-  [px, pz] = at(0, 0.28);
-  b.box(px, 1.0, pz, 2, 0.5, 0.1, 0xa0663f, { ry: yaw, p: P.WOOD, n: 0.3 });
-  for (const lx of [-0.8, 0.8]) {
-    [px, pz] = at(lx, 0);
-    b.box(px, 0.3, pz, 0.1, 0.6, 0.55, 0x2c2440, { ry: yaw });
-  }
-}
-export function bin(b, x, z) {
-  b.box(x, 0.5, z, 0.55, 0.85, 0.55, 0x3d7f6b, { n: 0.3, ao: true });
-  b.box(x, 0.97, z, 0.62, 0.1, 0.62, 0x2c2440);
-}
-export function hydrant(b, x, z) {
-  b.box(x, 0.38, z, 0.32, 0.6, 0.32, 0xe0453f, { n: 0.2 });
-  b.box(x, 0.72, z, 0.24, 0.12, 0.24, 0xffd25e);
-  b.box(x, 0.45, z, 0.5, 0.12, 0.12, 0xe0453f);
-}
-export function bollard(b, x, z) {
-  b.box(x, 0.45, z, 0.22, 0.75, 0.22, 0xe8dccf, { n: 0.1 });
-  b.box(x, 0.86, z, 0.26, 0.08, 0.26, 0xffe37c, { p: P.LIGHT, e: 1.5 });
-}
-export function umbrella(b, x, z, color, y = 0.2, size = 2.2) {
-  b.box(x, y + 1.2, z, 0.08, 2.4, 0.08, 0xe8dccf);
-  const h = size / 2, t = 0.12;
-  b.hexa(
-    [
-      [x - h, y + 2.2, z - h], [x + h, y + 2.2, z - h], [x - t, y + 2.75, z - t], [x + t, y + 2.75, z - t],
-      [x - h, y + 2.2, z + h], [x + h, y + 2.2, z + h], [x - t, y + 2.75, z + t], [x + t, y + 2.75, z + t],
-    ],
-    color,
-    { p: P.STRIPE, q: 6, n: 0.1, skip: 0 },
-  );
-}
-export function cafeSet(b, x, z, color, withUmbrella = true, rand = null) {
-  b.box(x, 0.85, z, 0.9, 0.08, 0.9, 0xf2e8dd);
-  b.box(x, 0.5, z, 0.1, 0.7, 0.1, 0x2c2440);
-  for (const [dx, dz] of [[-0.75, 0], [0.75, 0]]) {
-    b.box(x + dx, 0.52, z + dz, 0.45, 0.08, 0.45, 0x3a3150);
-    b.box(x + dx * 1.22, 0.85, z + dz, 0.08, 0.6, 0.45, 0x3a3150);
-  }
-  b.box(x, 0.98, z, 0.14, 0.18, 0.14, 0xffe0a0, { p: P.LIGHT, e: 3 });
-  if (withUmbrella) umbrella(b, x, z, color, 0.2, 2);
-  if (rand) {
-    if (rand() < 0.7) person(b, x - 0.72, z, Math.PI / 2, rand, true);
-    if (rand() < 0.5) person(b, x + 0.72, z, -Math.PI / 2, rand, true);
-  }
-}
-export function railing(b, x0, z0, x1, z1, y = 0.2, color = 0xf2e6dc) {
-  const len = Math.hypot(x1 - x0, z1 - z0);
-  const n = Math.max(1, Math.round(len / 1.4));
-  const yaw = -Math.atan2(z1 - z0, x1 - x0);
-  b.box((x0 + x1) / 2, y + 1.0, (z0 + z1) / 2, len, 0.14, 0.16, color, { ry: yaw, n: 0.1 });
-  b.box((x0 + x1) / 2, y + 0.5, (z0 + z1) / 2, len, 0.08, 0.08, shade(color, 0.85), { ry: yaw });
-  for (let k = 0; k <= n; k++) {
-    const t = k / n;
-    b.box(x0 + (x1 - x0) * t, y + 0.5, z0 + (z1 - z0) * t, 0.18, 1.0, 0.18, color, { n: 0.1 });
-  }
-}
-export function stringLights(b, x0, y0, z0, x1, y1, z1, sag = 0.8, colors = [0xffe37c, 0xff5d95, 0x3dd8e7]) {
-  const n = Math.max(4, Math.round(Math.hypot(x1 - x0, z1 - z0) / 0.9));
-  for (let k = 1; k < n; k++) {
-    const t = k / n;
-    const y = y0 + (y1 - y0) * t - Math.sin(t * Math.PI) * sag;
-    b.box(x0 + (x1 - x0) * t, y, z0 + (z1 - z0) * t, 0.18, 0.18, 0.18, colors[k % colors.length], { p: P.LIGHT, e: 4, n: 0 });
-  }
-}
-export function trafficLight(b, x, z, dirX, dirZ, axis) {
-  // pole on the corner, arm over the road toward (dirX, dirZ)
-  b.box(x, 2.7, z, 0.24, 5.4, 0.24, 0x3a3150);
-  const len = 4.2;
-  b.box(x + dirX * len / 2, 5.3, z + dirZ * len / 2, Math.abs(dirX) * len + 0.16, 0.16, Math.abs(dirZ) * len + 0.16, 0x3a3150);
-  const hx = x + dirX * len, hz = z + dirZ * len;
-  b.box(hx, 4.7, hz, 0.45, 1.25, 0.45, 0x231b33);
-  const ox = -dirZ, oz = dirX; // face oncoming traffic (perpendicular)
-  for (let k = 0; k < 3; k++) {
-    const col = [0x5dffb0, 0xffd25e, 0xff416a][k];
-    b.box(hx + ox * 0.24, 5.1 - k * 0.38, hz + oz * 0.24, 0.26, 0.26, 0.26, col, { p: P.NEON, q: 40 + axis * 3 + k, e: 4, n: 0 });
-  }
-  b.box(x + dirX * 1.2, 4.6, z + dirZ * 1.2, Math.abs(dirZ) * 1.1 + 0.06, 0.32, Math.abs(dirX) * 1.1 + 0.06, 0x1d7d55);
-}
-export function busStop(b, g, x, z, yaw, ad = "adCola") {
-  const c = Math.cos(yaw), s = Math.sin(yaw);
-  const at = (lx, lz) => [x + lx * c + lz * s, z - lx * s + lz * c];
-  let p = at(0, 0.5);
-  b.box(p[0], 2.6, p[1], 3.4, 0.12, 1.4, 0xe8dccf, { ry: yaw });
-  for (const lx of [-1.6, 1.6]) { p = at(lx, 0.9); b.box(p[0], 1.3, p[1], 0.1, 2.6, 0.1, 0x3a3150, { ry: yaw }); }
-  p = at(0, 1.1);
-  b.box(p[0], 1.4, p[1], 3.0, 2.0, 0.06, 0x8fd8e8, { ry: yaw, p: P.GLASS });
-  p = at(1.85, 0.5);
-  const r = atlasRects[ad];
-  b.box(p[0], 1.4, p[1], 0.14, 1.4, 1.2, 0x22183a, { ry: yaw, faces: { 1: { p: P.SIGN, e: 2.4, uvr: [r.u0, r.v0, r.u1, r.v1], color: 0xffffff }, 2: { p: P.SIGN, e: 2.4, uvr: [r.u0, r.v0, r.u1, r.v1], color: 0xffffff } } });
-  p = at(0, 0.8);
-  b.box(p[0], 0.55, p[1], 2.4, 0.1, 0.5, 0xa0663f, { ry: yaw, p: P.WOOD });
-  if (g) g.add(GLOW.POOL, p[0], 0.24, p[1], 2, 2, 0, 0x9fe8ff, 0.18);
-}
-export function billboard(b, g, x, y, z, yaw, ad, w = 7, h = 3.5, legs = true) {
-  const c = Math.cos(yaw), s = Math.sin(yaw);
-  if (legs) for (const lx of [-w * 0.3, w * 0.3]) {
-    const px = x + lx * c, pz = z - lx * s;
-    b.box(px, y / 2 + 0.6, pz, 0.35, y + 1.2, 0.35, 0x3a3150);
-  }
-  b.box(x, y + h / 2 + 0.6, z, w + 0.4, h + 0.4, 0.5, 0x2a2340, { ry: yaw, n: 0.2 });
-  const r = atlasRects[ad];
-  // front face is +z in local frame
-  b.box(x + s * 0.27, y + h / 2 + 0.6, z + c * 0.27, w, h, 0.06, 0xffffff, {
-    ry: yaw, faces: { 16: { p: P.SIGN, e: 2.6, uvr: [r.u0, r.v0, r.u1, r.v1], color: 0xffffff } }, skip: SKIP.NY | SKIP.NZ,
-  });
-  b.box(x + s * 0.3, y + 0.45, z + c * 0.3, w, 0.25, 0.6, 0x2a2340, { ry: yaw });
-  for (const lx of [-w * 0.33, 0, w * 0.33]) {
-    b.box(x + lx * c + s * 0.8, y + 0.55, z - lx * s + c * 0.8, 0.3, 0.2, 0.3, 0xfff1d0, { p: P.LIGHT, e: 4 });
-  }
-  if (g) g.add(GLOW.HALO, x + s * 0.6, y + h / 2 + 0.6, z + c * 0.6, w * 0.45, 0, 0, 0xff8fc0, 0.1);
-}
-export function acUnit(b, x, y, z) {
-  b.box(x, y + 0.4, z, 1.2, 0.8, 0.9, 0xd8d4dc, { n: 0.2 });
-  b.box(x, y + 0.45, z + 0.46, 0.6, 0.6, 0.04, 0x4a4560);
-}
-export function waterTank(b, x, y, z) {
-  for (const [dx, dz] of [[-0.6, -0.6], [0.6, -0.6], [-0.6, 0.6], [0.6, 0.6]]) b.box(x + dx, y + 0.8, z + dz, 0.16, 1.6, 0.16, 0x4a4560);
-  b.box(x, y + 2.3, z, 1.8, 1.6, 1.8, 0x8a6a5a, { p: P.WOOD, n: 0.4 });
-  b.box(x, y + 3.25, z, 2.0, 0.3, 2.0, 0x5b4a4a);
-}
-export function dish(b, x, y, z, yaw) {
-  b.box(x, y + 0.4, z, 0.12, 0.8, 0.12, 0x9a96a6);
-  b.box(x, y + 0.95, z, 1.0, 1.0, 0.12, 0xe8e6ee, { ry: yaw, rx: -0.5 });
-}
-export function antenna(b, x, y, z, h = 4) {
-  b.box(x, y + h / 2, z, 0.14, h, 0.14, 0xb9b4c4);
-  b.box(x, y + h * 0.6, z, 1.0, 0.08, 0.08, 0xb9b4c4);
-  b.box(x, y + h + 0.1, z, 0.28, 0.28, 0.28, 0xff2d4a, { p: P.NEON, q: 25, e: 6 });
-}
-export function cone(b, x, z) {
-  b.box(x, 0.06, z, 0.7, 0.12, 0.7, 0xff6b2c);
-  b.hexa(
-    [
-      [x - 0.3, 0.12, z - 0.3], [x + 0.3, 0.12, z - 0.3], [x - 0.08, 1.0, z - 0.08], [x + 0.08, 1.0, z - 0.08],
-      [x - 0.3, 0.12, z + 0.3], [x + 0.3, 0.12, z + 0.3], [x - 0.08, 1.0, z + 0.08], [x + 0.08, 1.0, z + 0.08],
-    ],
-    0xff6b2c,
-    { n: 0.2 },
-  );
-  b.box(x, 0.58, z, 0.38, 0.16, 0.38, 0xfff4e6, { p: P.LIGHT, e: 0.6 });
-}
-
-/* Static voxel pedestrians (only ever placed inside solid footprints). */
-const SKIN = [0xf1c7a5, 0xd9a27a, 0xb07a55, 0x8a5a3c];
-const CLOTH = [0xff5d95, 0x3dd8e7, 0xffe37c, 0xffffff, 0x8d54e9, 0xff8a3d, 0x5dffb0, 0x2a2a3a];
-export function person(b, x, z, yaw, rand, seated = false) {
-  const skin = SKIN[Math.floor(rand() * SKIN.length)], top = CLOTH[Math.floor(rand() * CLOTH.length)];
-  const legs = rand() < 0.5 ? 0x2b3a6a : rand() < 0.5 ? 0xe8e2d6 : 0x3a2a2a, hair = rand() < 0.5 ? 0x2a1a14 : rand() < 0.5 ? 0x7a4a2a : 0xe8c070;
-  const y0 = seated ? 0.62 : 0.2;
-  if (seated) b.box(x, 0.68, z, 0.36, 0.16, 0.5, legs, { ry: yaw });
-  else for (const s of [-0.1, 0.1]) b.box(x + s * Math.cos(yaw), y0 + 0.42, z - s * Math.sin(yaw), 0.16, 0.84, 0.18, legs, { ry: yaw });
-  const ty = seated ? 1.05 : y0 + 1.12;
-  b.box(x, ty, z, 0.42, 0.6, 0.26, top, { ry: yaw, n: 0.3 });
-  for (const s of [-0.27, 0.27]) b.box(x + s * Math.cos(yaw), ty - 0.05, z - s * Math.sin(yaw), 0.1, 0.5, 0.14, top, { ry: yaw });
-  b.box(x, ty + 0.46, z, 0.28, 0.3, 0.28, skin, { ry: yaw, n: 0.2 });
-  b.box(x, ty + 0.62, z, 0.3, 0.1, 0.3, hair, { ry: yaw });
+/** Build every prop geometry once. */
+export function buildProps() {
+  const out = {};
+  for (const [name, t] of Object.entries(PROP_TYPES)) { const k = new Kit(); t.build(k); out[name] = k.geometry(); }
+  return out;
 }

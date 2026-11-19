@@ -1,167 +1,126 @@
 import * as T from "../../vendor/three.js";
-import { SHARED, SKY_GLSL, FOG_GLSL, VoxelBuilder, P, shade } from "./voxel.js";
-import { rng } from "../simulation.js";
-import { C } from "./palette.js";
+import { U, GLSL_NOISE } from "./materials.js";
 
-const SKY_VERT = `varying vec3 vDir; void main(){ vDir=position; vec4 p=projectionMatrix*modelViewMatrix*vec4(position,1.); gl_Position=p.xyww; }`;
-const SKY_FRAG = /* glsl */ `
-varying vec3 vDir;
-${SKY_GLSL}
+/* Sky dome (gradient, sun, clouds, stars), distant mountains, time-of-day presets and the environment
+   map used for car paint, glass and wet-road reflections. */
+export const TOD = {
+  sunset: { top: 0x24356e, horizon: 0xff9c66, haze: 0xf2a37c, sun: 0xffb27a, sunI: 2.1, elev: 0.13, az: 2.55, hemiSky: 0xb9b2d6, hemiGround: 0x6a5048, hemiI: 0.95,
+    fog: 0xe0a184, fogD: 0.0017, exposure: 1.0, night: 0.4, head: 1.2, wet: 0.35, cloud: 0xffc2a0, stars: 0, sat: 1.12, mount: 0x5a4a74 },
+  night: { top: 0x040815, horizon: 0x1c2a5a, haze: 0x2a2f5e, sun: 0x9fb6ff, sunI: 0.45, elev: 0.55, az: 1.0, hemiSky: 0x3b4d8f, hemiGround: 0x150f1e, hemiI: 0.75,
+    fog: 0x161c38, fogD: 0.0022, exposure: 1.25, night: 1, head: 1.7, wet: 0.7, cloud: 0x2a3160, stars: 1, sat: 1.15, mount: 0x0e1226 },
+  day: { top: 0x2f6fd0, horizon: 0xc4dcf2, haze: 0xd7e4ee, sun: 0xfff2dd, sunI: 3.1, elev: 0.85, az: 2.2, hemiSky: 0xbcd4ff, hemiGround: 0x7d6e58, hemiI: 1.2,
+    fog: 0xc9d9e8, fogD: 0.0011, exposure: 0.95, night: 0, head: 0.6, wet: 0.08, cloud: 0xffffff, stars: 0, sat: 1.08, mount: 0x7d8fa8 },
+};
+
+const SKY_VERT = `varying vec3 vDir; void main(){ vDir = normalize(position); vec4 p = projectionMatrix * modelViewMatrix * vec4(position, 1.); gl_Position = vec4(p.xy, p.w * 0.99999, p.w); }`;
+const SKY_FRAG = `varying vec3 vDir; uniform vec3 uSkyTop, uSkyHorizon, uSunDir, uSunColor, uHaze, uCloud; uniform float uTime, uStars, uNight;
+${GLSL_NOISE}
 void main(){
-  vec3 d=normalize(vDir);
-  // pixel-snap the direction so clouds and the sun have crisp blocky edges
-  float az=atan(d.x,-d.z), el=asin(clamp(d.y,-1.,1.));
-  vec2 px=floor(vec2(az,el)*vec2(150.,150.));
-  vec3 c=skyCol(d);
-  // retro striped sun
-  vec3 s=normalize(uSunDir);
-  float saz=atan(s.x,-s.z), sel=asin(s.y);
-  vec2 sp=(floor(vec2(az,el)*150.)+.5)/150.-vec2(saz,sel);
-  sp.x*=cos(el);
-  float r=length(sp), R=.105;
-  if(r<R){
-    float t=clamp((sp.y+R)/(2.*R),0.,1.);
-    vec3 sc=mix(vec3(1.,.22,.32),vec3(1.,.86,.36),smoothstep(.0,.85,t))*3.2;
-    float gap=0.;
-    if(t<.55){float k=(.55-t)/.55;float band=fract(t*11.);gap=step(band,k*.55);}
-    c=mix(sc,c,gap);
+  vec3 d = normalize(vDir);
+  float y = d.y;
+  vec3 c = mix(uHaze, uSkyHorizon, smoothstep(-0.02, 0.06, y));
+  c = mix(c, uSkyTop, pow(smoothstep(0.02, 0.85, y), 0.65));
+  float sd = max(dot(d, uSunDir), 0.);
+  c += uSunColor * (pow(sd, 7.) * 0.45 + pow(sd, 60.) * 0.6) * (1. - uNight * 0.6);
+  c += uSunColor * smoothstep(0.9985, 0.9993, sd) * mix(8., 1.6, uNight);
+  // clouds on a high plane
+  if (y > 0.0) {
+    vec2 cp = d.xz / (y + 0.12) * 1.6 + vec2(uTime * 0.004, 0.);
+    float cl = smoothstep(0.52, 0.8, fbm(cp * 1.4)) * smoothstep(0.0, 0.18, y);
+    vec3 cc = uCloud * (0.7 + 0.5 * pow(sd, 3.)) ;
+    c = mix(c, cc, cl * 0.75);
+    // stars
+    vec2 sp = d.xz / (y + 0.35) * 90.;
+    float sh = h21(floor(sp));
+    float st = step(0.985, sh) * smoothstep(0.09, 0.0, length(fract(sp) - 0.5)) * smoothstep(0.12, 0.35, y) * uStars * (0.6 + 0.4 * sin(uTime * 3. + sh * 40.));
+    c += vec3(st);
   }
-  // soft halo
-  c+=vec3(1.,.4,.35)*.35*exp(-r*9.)*step(R,r);
-  // pixel clouds: two layers, lit pink/orange underneath
-  float cl=0.;
-  if(el>.03&&el<.42){
-    vec2 q=px*vec2(.035,.11)+vec2(uTime*.12,0.);
-    float n=vn(q)*.6+vn(q*2.03+7.)*.3+vn(q*4.1+3.)*.1;
-    float band=smoothstep(.03,.1,el)*(1.-smoothstep(.25,.42,el));
-    cl=step(.62,n*band+.18*band);
-    float under=step(.62,vn((px+vec2(0.,-2.))*vec2(.035,.11)+vec2(uTime*.12,0.))*.6+vn(((px+vec2(0.,-2.))*vec2(.035,.11)+vec2(uTime*.12,0.))*2.03+7.)*.3+.18*band);
-    vec3 top=mix(vec3(.22,.08,.32),vec3(.55,.18,.42),sunSide(d));
-    vec3 lit=mix(vec3(.85,.3,.55),vec3(1.,.55,.38),sunSide(d))*1.15;
-    vec3 cc=mix(lit,top,under*.75);
-    c=mix(c,cc,cl*.92);
-  }
-  // stars
-  if(el>.3){float h=h12(px);if(h>.992)c+=vec3(.9,.85,1.)*(.5+.5*sin(uTime*3.+h*90.))*smoothstep(.3,.6,el);}
-  float dith=(bayer4(gl_FragCoord.xy)-.5)/90.;
-  gl_FragColor=vec4(c+dith,1.);
+  gl_FragColor = vec4(c, 1.);
 }`;
 
-const SEA_FRAG = /* glsl */ `
-varying vec3 vW;
-${SKY_GLSL}
-${FOG_GLSL}
-void main(){
-  vec3 V=normalize(cameraPosition-vW);
-  vec2 p=vW.xz;
-  float row=floor(p.y*.9);
-  float w=sin(p.x*.35+uTime*1.2+row*1.7)*.5+.5;
-  vec3 N=normalize(vec3((w-.5)*.12,1.,sin(row*2.3+uTime)*.06));
-  vec3 R=reflect(-V,N); R.y=abs(R.y);
-  float fres=pow(1.-max(dot(N,V),0.),4.)*.7+.25;
-  vec3 col=mix(vec3(.01,.03,.07),vec3(.02,.1,.14),w);
-  col+=skyCol(normalize(R))*fres;
-  // sun glitter path
-  float g=max(dot(R,uSunDir),0.);
-  float sparkle=step(.55,fract(p.x*.13+row*.37+uTime*.4));
-  col+=uSunCol*pow(g,90.)*6.*sparkle+uSunCol*pow(g,14.)*.5;
-  float f=fogAmt(vW);
-  gl_FragColor=vec4(mix(col,fogCol(vW),f*.85),1.);
-}`;
-const SEA_VERT = `varying vec3 vW; void main(){ vec4 w=modelMatrix*vec4(position,1.); vW=w.xyz; gl_Position=projectionMatrix*viewMatrix*w; }`;
-
-export function createSky(voxelMat) {
+export function createSky(renderer) {
   const group = new T.Group();
-  const sky = new T.Mesh(
-    new T.SphereGeometry(900, 32, 16),
-    new T.ShaderMaterial({ vertexShader: SKY_VERT, fragmentShader: SKY_FRAG, uniforms: SHARED, side: T.BackSide, depthWrite: false }),
-  );
-  sky.renderOrder = -10;
-  sky.frustumCulled = false;
-  group.add(sky);
-  const sea = new T.Mesh(
-    new T.PlaneGeometry(1800, 1800, 1, 1).rotateX(-Math.PI / 2),
-    new T.ShaderMaterial({ vertexShader: SEA_VERT, fragmentShader: SEA_FRAG, uniforms: SHARED }),
-  );
-  sea.position.y = -0.9;
-  sea.frustumCulled = false;
-  sea.renderOrder = -5;
-  group.add(sea);
-  // Far skyline ring, kept around the camera like a backdrop.
-  const far = new T.Group();
-  const b = new VoxelBuilder(16384);
-  const rand = rng("skyline");
-  const sun = SHARED.uSunDir.value;
-  const sunAz = Math.atan2(sun.x, -sun.z);
-  for (let k = 0; k < 120; k++) {
-    const az = sunAz + 0.5 + rand() * (Math.PI * 2 - 1.0);
-    const rad = 330 + rand() * 160;
-    const x = Math.sin(az) * rad, z = -Math.cos(az) * rad;
-    const tall = rand();
-    const h = tall < 0.15 ? 70 + rand() * 50 : 18 + rand() * 45;
-    const w = 10 + rand() * 14, d = 10 + rand() * 14;
-    const col = [0x3b2a63, 0x4a3172, 0x2f2a5e, 0x5a3a78, 0x6b3f7a][Math.floor(rand() * 5)];
-    const pat = rand() < 0.5 ? P.CURTAIN : P.WIN;
-    b.box(x, h / 2, z, w, h, d, col, { p: pat, q: Math.floor(rand() * 200), n: 0.1, ry: az });
-    if (rand() < 0.4) b.box(x, h + 0.4, z, w + 0.4, 0.6, d + 0.4, [C.flamingo, C.cyan, 0xc77dff][k % 3], { p: P.NEON, e: 2.4, ry: az });
-    if (tall < 0.15) {
-      b.box(x, h + 6, z, 0.8, 12, 0.8, 0x8a86a0, { ry: az });
-      b.box(x, h + 12.4, z, 1.6, 1.6, 1.6, 0xff2d4a, { p: P.NEON, e: 6, q: 25 });
-    }
+  const skyU = { ...U, uHaze: { value: new T.Color() }, uCloud: { value: new T.Color() }, uStars: { value: 0 } };
+  const skyMat = new T.ShaderMaterial({ uniforms: skyU, vertexShader: SKY_VERT, fragmentShader: SKY_FRAG, side: T.BackSide, depthWrite: false, fog: false });
+  const dome = new T.Mesh(new T.SphereGeometry(1, 32, 16), skyMat);
+  dome.scale.setScalar(2500);
+  dome.frustumCulled = false;
+  dome.renderOrder = -10;
+  group.add(dome);
+  // distant mountains: a ring of low-poly ridges around the bay (north, west, east), seen through haze
+  const mount = mountains();
+  const mountMat = new T.MeshBasicMaterial({ vertexColors: true, fog: false });
+  const mountMesh = new T.Mesh(mount, mountMat);
+  group.add(mountMesh);
+
+  // environment map from the same sky plus a few warm "city light" panels for reflections
+  const pmrem = new T.PMREMGenerator(renderer);
+  const envScene = new T.Scene();
+  const envDome = new T.Mesh(new T.SphereGeometry(100, 24, 12), skyMat);
+  envScene.add(envDome);
+  const ground = new T.Mesh(new T.CircleGeometry(100, 16).rotateX(-Math.PI / 2), new T.MeshBasicMaterial({ color: 0x202024 }));
+  ground.position.y = -6;
+  envScene.add(ground);
+  const panels = [];
+  for (let i = 0; i < 10; i++) {
+    const m = new T.Mesh(new T.PlaneGeometry(12 + (i % 3) * 6, 2 + (i % 2) * 3), new T.MeshBasicMaterial({ color: 0xffffff }));
+    const a = (i / 10) * Math.PI * 2;
+    m.position.set(Math.cos(a) * 60, 3 + (i % 4) * 2.5, Math.sin(a) * 60);
+    m.lookAt(0, 4, 0);
+    envScene.add(m); panels.push(m);
   }
-  // Observation tower landmark
-  const ta = sunAz - 1.0, tr = 380;
-  const tx = Math.sin(ta) * tr, tz = -Math.cos(ta) * tr;
-  b.box(tx, 55, tz, 5, 110, 5, 0xb9b4d0, { n: 0.1 });
-  b.box(tx, 92, tz, 22, 6, 22, 0x3a2f63, { p: P.CURTAIN, q: 40 });
-  b.box(tx, 95.2, tz, 22.6, 0.6, 22.6, C.cyan, { p: P.NEON, e: 4 });
-  b.box(tx, 88.8, tz, 22.6, 0.6, 22.6, C.flamingo, { p: P.NEON, e: 4 });
-  b.box(tx, 102, tz, 12, 6, 12, 0x3a2f63, { p: P.CURTAIN, q: 41 });
-  b.box(tx, 120, tz, 1.4, 30, 1.4, 0xd6d2e6);
-  b.box(tx, 136, tz, 2.4, 2.4, 2.4, 0xff2d4a, { p: P.NEON, e: 6, q: 23 });
-  // Bridge across the bay in front of the sun
-  const bAz0 = sunAz - 0.38, bAz1 = sunAz + 0.22, br = 300;
-  const p0 = [Math.sin(bAz0) * br, -Math.cos(bAz0) * br], p1 = [Math.sin(bAz1) * (br + 60), -Math.cos(bAz1) * (br + 60)];
-  const len = Math.hypot(p1[0] - p0[0], p1[1] - p0[1]), yaw = -Math.atan2(p1[1] - p0[1], p1[0] - p0[0]);
-  const mx = (p0[0] + p1[0]) / 2, mz = (p0[1] + p1[1]) / 2;
-  b.box(mx, 9, mz, len, 1.6, 6, 0x4b3f78, { ry: yaw });
-  b.box(mx, 8.1, mz, len, 0.3, 6.2, C.cyan, { p: P.NEON, e: 2.2, ry: yaw });
-  const n = 14;
-  for (let k = 0; k <= n; k++) {
-    const t = k / n, x = p0[0] + (p1[0] - p0[0]) * t, z = p0[1] + (p1[1] - p0[1]) * t;
-    b.box(x, 4, z, 2, 9, 2, 0x3b2f63, { ry: yaw });
-    b.box(x, 10.3, z, 0.6, 0.6, 0.6, 0xffd9a0, { p: P.LIGHT, e: 5 });
+  let envRT = null;
+  let current = null;
+  function apply(name, scene, lights) {
+    const p = TOD[name] || TOD.sunset;
+    current = name;
+    U.uSkyTop.value.set(p.top); U.uSkyHorizon.value.set(p.horizon); U.uSunColor.value.set(p.sun);
+    skyU.uHaze.value.set(p.haze); skyU.uCloud.value.set(p.cloud); skyU.uStars.value = p.stars;
+    U.uSunDir.value.set(Math.cos(p.az) * Math.cos(p.elev), Math.sin(p.elev), Math.sin(p.az) * Math.cos(p.elev)).normalize();
+    U.uNight.value = p.night; U.uHead.value = p.head; U.uWet.value = p.wet;
+    U.uFogColor.value.set(p.fog);
+    scene.fog = new T.FogExp2(p.fog, p.fogD);
+    lights.hemi.color.set(p.hemiSky); lights.hemi.groundColor.set(p.hemiGround); lights.hemi.intensity = p.hemiI;
+    lights.sun.color.set(p.sun); lights.sun.intensity = p.sunI;
+    // mountains tinted to the haze
+    const col = mount.getAttribute("color"), base = mount.userData.shade;
+    const mc = new T.Color(p.mount), fc = new T.Color(p.haze);
+    for (let i = 0; i < base.length; i++) { const k = base[i]; const c = mc.clone().lerp(fc, 0.35 + 0.5 * (1 - k)).multiplyScalar(0.6 + 0.4 * k); col.setXYZ(i, c.r, c.g, c.b); }
+    col.needsUpdate = true;
+    for (const [i, m] of panels.entries()) m.material.color.set(p.night > 0.5 ? (i % 2 ? 0xffb070 : 0x80b8ff) : p.night > 0.2 ? 0xffc39a : 0xffffff).multiplyScalar(p.night > 0.5 ? 1.6 : p.night > 0.2 ? 0.7 : 0.35);
+    envRT?.dispose();
+    envRT = pmrem.fromScene(envScene, 0.02);
+    scene.environment = envRT.texture;
+    return p;
   }
-  for (const t of [0.3, 0.7]) {
-    const x = p0[0] + (p1[0] - p0[0]) * t, z = p0[1] + (p1[1] - p0[1]) * t;
-    b.box(x, 22, z, 2.6, 44, 2.6, 0x4b3f78, { ry: yaw });
-    b.box(x, 44.5, z, 1.2, 1.2, 1.2, 0xff2d4a, { p: P.NEON, e: 6, q: 22 });
-    for (let c = 1; c <= 6; c++) {
-      for (const s of [-1, 1]) {
-        const cx = x + Math.cos(yaw) * s * c * 3.4, cz = z - Math.sin(yaw) * s * c * 3.4;
-        b.box(cx, 44 - c * 5.5, cz, 0.4, 0.4, 0.4, 0xfff1d0, { p: P.LIGHT, e: 4 });
-      }
-    }
-  }
-  // Yachts on the bay
-  for (let k = 0; k < 7; k++) {
-    const az = sunAz + (rand() - 0.5) * 0.9, rad = 180 + rand() * 140;
-    const x = Math.sin(az) * rad, z = -Math.cos(az) * rad;
-    b.box(x, -0.2, z, 3.2, 1.6, 10, 0xf4f1ec, { ry: rand() * 3 });
-    b.box(x, 1.2, z, 2.4, 1.4, 5, 0xe9e6f2, { ry: rand() * 3 });
-    for (let l = -2; l <= 2; l++) b.box(x + l * 0.9, 1.0, z, 0.4, 0.3, 0.4, 0xffe0a0, { p: P.LIGHT, e: 5 });
-  }
-  const farMesh = new T.Mesh(b.geometry(), voxelMat);
-  farMesh.frustumCulled = false;
-  far.add(farMesh);
-  group.add(far);
   return {
     group,
-    update(camera) {
-      sky.position.copy(camera.position);
-      sea.position.x = camera.position.x;
-      sea.position.z = camera.position.z;
-      far.position.set(camera.position.x, 0, camera.position.z);
-    },
+    apply,
+    get current() { return current; },
+    update(camera) { dome.position.copy(camera.position); mountMesh.position.set(camera.position.x * 0.92, 0, camera.position.z * 0.92); },
   };
+}
+
+function mountains() {
+  const pos = [], col = [], shade = [];
+  const R = 1650, N = 96;
+  const ridge = (a) => {
+    // taller in the north and west (canyon hills), low toward the open sea in the south
+    const north = Math.max(0, -Math.sin(a));
+    const h = 60 + 190 * north + 40 * Math.sin(a * 7.3) + 30 * Math.sin(a * 13.1 + 1) + 18 * Math.sin(a * 29.7);
+    return Math.max(8, h * (Math.sin(a) > 0.35 ? 0.15 : 1));
+  };
+  for (let i = 0; i < N; i++) {
+    const a0 = (i / N) * Math.PI * 2, a1 = ((i + 1) / N) * Math.PI * 2;
+    const am = (a0 + a1) / 2;
+    const h0 = ridge(a0), h1 = ridge(a1), hm = ridge(am) * 1.12;
+    const p = (a, r, h) => [Math.cos(a) * r, h, Math.sin(a) * r];
+    const tris = [[p(a0, R, -20), p(a1, R, -20), p(am, R - 40, hm)], [p(a0, R, -20), p(am, R - 40, hm), p(a0, R - 20, h0)], [p(a1, R, -20), p(a1, R - 20, h1), p(am, R - 40, hm)]];
+    for (const t of tris) for (const v of t) { pos.push(...v); const k = Math.min(1, Math.max(0, v[1] / 240)); shade.push(0.55 + 0.45 * k * (0.7 + 0.3 * Math.sin(am * 5))); col.push(1, 1, 1); }
+  }
+  const g = new T.BufferGeometry();
+  g.setAttribute("position", new T.Float32BufferAttribute(pos, 3));
+  g.setAttribute("color", new T.Float32BufferAttribute(col, 3));
+  g.userData.shade = shade;
+  return g;
 }

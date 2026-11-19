@@ -1,153 +1,92 @@
 /* Share cards for social networks, drawn from a real in-engine frame plus the run's real numbers.
-   Formats: story 1080×1920 (Instagram / Telegram / WhatsApp status), post 1080×1350 (feed),
-   wide 1200×675 (X / Telegram link posts). Loaded lazily the first time the player shares. */
+   Formats: story 1080×1920, post 1080×1350, wide 1200×675. Loaded lazily the first time the player shares. */
 import qrcode from '../vendor/qrcode.js';
 
-export const FORMATS = {
-  story: { w: 1080, h: 1920, label: 'استوری', hint: 'اینستاگرام · تلگرام · واتساپ' },
-  post: { w: 1080, h: 1350, label: 'پست', hint: 'اینستاگرام · تلگرام' },
-  wide: { w: 1200, h: 675, label: 'افقی', hint: 'X · تلگرام · دیسکورد' },
-};
-const FA = 'Rooyin, Vazirmatn, Tahoma, sans-serif', PX = '"Jersey 10", monospace';
-let logoImg = null;
-function loadLogo() {
-  if (logoImg) return logoImg;
-  logoImg = new Promise((ok) => { const i = new Image(); i.onload = () => ok(i); i.onerror = () => ok(null); i.src = new URL('../assets/logo.svg', import.meta.url).href; });
-  return logoImg;
-}
-const fmtTime = (ms) => (ms / 1000).toFixed(2).padStart(5, '0');
+export const FORMATS = { story: { w: 1080, h: 1920 }, post: { w: 1080, h: 1350 }, wide: { w: 1200, h: 675 } };
+const DISPLAY = '"Barlow Condensed", "Vazirmatn", "Arial Narrow", sans-serif';
+const fmtTime = (ms) => { const s = ms / 1000, m = Math.floor(s / 60); return `${m}:${(s - m * 60).toFixed(2).padStart(5, '0')}`; };
 const fmt = (n) => Math.round(n).toLocaleString('en-US');
 
 export function challengeUrl(seed, result) {
   const u = new URL(location.href);
-  u.search = '';
-  u.hash = '';
+  u.search = ''; u.hash = '';
   u.searchParams.set('seed', seed);
   u.searchParams.set('c', `${result.timeMs}.${result.points}`);
   return u.toString();
 }
-export function shareText(result) {
-  return result.win
-    ? `🚨 ${fmtTime(result.timeMs)} ثانیه از دست پلیس‌های خلیج غروب فرار کردم و ${fmt(result.points)} امتیاز گرفتم! جرئت داری رکوردم رو بزنی؟ 🏁 #فرار۶۰ #Escape60`
-    : `🚔 ${fmtTime(result.timeMs)} ثانیه دوام آوردم و ${fmt(result.points)} امتیاز گرفتم… تو بیشتر دووم میاری؟ 🏁 #فرار۶۰ #Escape60`;
+function cover(ctx, img, x, y, w, h) {
+  const k = Math.max(w / img.width, h / img.height), iw = img.width * k, ih = img.height * k;
+  ctx.save(); ctx.beginPath(); ctx.rect(x, y, w, h); ctx.clip();
+  ctx.drawImage(img, x + (w - iw) / 2, y + (h - ih) / 2, iw, ih);
+  ctx.restore();
 }
-
-function pixelText(ctx, text, x, y, size, fill, { font = PX, outline = 0, shadow = null, align = 'center', dir = 'ltr' } = {}) {
-  ctx.font = `${font === FA ? 800 : 400} ${size}px ${font}`;
-  ctx.textAlign = align; ctx.textBaseline = 'middle'; ctx.direction = dir;
-  const o = outline || Math.max(2, Math.round(size / 18));
-  if (shadow) { ctx.fillStyle = shadow; ctx.fillText(text, x, y + o * 2); }
-  ctx.fillStyle = '#1b0b2b';
-  for (const [dx, dy] of [[o, 0], [-o, 0], [0, o], [0, -o], [o, o], [-o, o], [o, -o], [-o, -o]]) ctx.fillText(text, x + dx, y + dy);
-  ctx.fillStyle = fill; ctx.fillText(text, x, y);
+function text(ctx, s, x, y, size, color, { weight = 900, align = 'center', italic = true, stroke = 0, shadow = null } = {}) {
+  ctx.font = `${italic ? 'italic ' : ''}${weight} ${size}px ${DISPLAY}`;
+  ctx.textAlign = align; ctx.textBaseline = 'middle';
+  if (shadow) { ctx.fillStyle = shadow; ctx.fillText(s, x + size * 0.05, y + size * 0.05); }
+  if (stroke) { ctx.lineWidth = stroke; ctx.strokeStyle = '#0b0b12'; ctx.lineJoin = 'round'; ctx.strokeText(s, x, y); }
+  ctx.fillStyle = color; ctx.fillText(s, x, y);
 }
-function pixelFrame(ctx, x, y, w, h, edge, fill, b = 6) {
-  ctx.fillStyle = '#1b0b2b'; ctx.fillRect(x - b * 2, y, w + b * 4, h); ctx.fillRect(x, y - b * 2, w, h + b * 4); ctx.fillRect(x - b, y - b, w + b * 2, h + b * 2);
-  ctx.fillStyle = edge; ctx.fillRect(x - b, y, w + b * 2, h); ctx.fillRect(x, y - b, w, h + b * 2);
-  ctx.fillStyle = fill; ctx.fillRect(x, y, w, h);
-}
-function drawQR(ctx, text, x, y, size) {
-  const q = qrcode(0, 'M');
-  q.addData(text); q.make();
+function skewBox(ctx, x, y, w, h, fill) { ctx.save(); ctx.translate(x + w / 2, y + h / 2); ctx.transform(1, 0, -0.14, 1, 0, 0); ctx.fillStyle = fill; ctx.beginPath(); ctx.roundRect(-w / 2, -h / 2, w, h, h * 0.18); ctx.fill(); ctx.restore(); }
+function drawQR(ctx, data, x, y, size) {
+  const q = qrcode(0, 'M'); q.addData(data); q.make();
   const n = q.getModuleCount(), cell = Math.floor(size / (n + 4)), s = cell * (n + 4);
-  pixelFrame(ctx, x, y, s, s, '#3dd8e7', '#fff4e6', Math.max(3, cell));
-  ctx.fillStyle = '#1b0b2b';
+  ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.roundRect(x, y, s, s, cell * 2); ctx.fill();
+  ctx.fillStyle = '#0b0b12';
   for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) if (q.isDark(r, c)) ctx.fillRect(x + (c + 2) * cell, y + (r + 2) * cell, cell, cell);
   return s;
 }
-function cover(ctx, img, x, y, w, h) {
-  const k = Math.max(w / img.width, h / img.height), iw = img.width * k, ih = img.height * k;
-  ctx.imageSmoothingEnabled = false;
-  ctx.drawImage(img, x + (w - iw) / 2, y + (h - ih) / 2, iw, ih);
-}
-function stat(ctx, x, y, w, h, label, value, color, scale) {
-  pixelFrame(ctx, x, y, w, h, '#5b3d8f', 'rgba(20,10,38,.9)', Math.round(4 * scale));
-  ctx.direction = 'rtl'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  ctx.font = `800 ${Math.round(26 * scale)}px ${FA}`; ctx.fillStyle = '#cdb9e6'; ctx.fillText(label, x + w / 2, y + h * 0.3);
-  pixelText(ctx, value, x + w / 2, y + h * 0.68, Math.round(64 * scale), color);
-}
 
-/** Draw a card. `frame` is a canvas holding a real rendered game frame for this format. */
-export async function drawCard(format, frame, data) {
+/** Draw a card. `frame` is a canvas holding a real rendered game frame. */
+export async function drawCard(format, frame, d) {
   const F = FORMATS[format], cv = document.createElement('canvas');
   cv.width = F.w; cv.height = F.h;
   const ctx = cv.getContext('2d');
-  const logo = await loadLogo();
-  const { result, seed, title, level, chain, url, daily } = data;
-  ctx.fillStyle = '#1b0b2b'; ctx.fillRect(0, 0, F.w, F.h);
+  const { result: r, car, title, level, url, labels } = d;
+  ctx.fillStyle = '#0b0b12'; ctx.fillRect(0, 0, F.w, F.h);
   const wide = format === 'wide';
-  if (wide) {
-    cover(ctx, frame, 0, 0, F.w * 0.56, F.h);
-    const g = ctx.createLinearGradient(F.w * 0.4, 0, F.w * 0.6, 0);
-    g.addColorStop(0, 'rgba(27,11,43,0)'); g.addColorStop(1, 'rgba(27,11,43,1)');
-    ctx.fillStyle = g; ctx.fillRect(F.w * 0.4, 0, F.w * 0.2, F.h);
-  } else {
-    cover(ctx, frame, 0, 0, F.w, F.h);
-    const g = ctx.createLinearGradient(0, 0, 0, F.h);
-    g.addColorStop(0, 'rgba(27,11,43,.55)'); g.addColorStop(0.22, 'rgba(27,11,43,0)');
-    g.addColorStop(format === 'story' ? 0.5 : 0.42, 'rgba(27,11,43,0)'); g.addColorStop(format === 'story' ? 0.66 : 0.6, 'rgba(27,11,43,.86)'); g.addColorStop(1, 'rgba(27,11,43,.97)');
-    ctx.fillStyle = g; ctx.fillRect(0, 0, F.w, F.h);
-  }
-  // scanline sparkle for a printed-poster feel
-  ctx.fillStyle = 'rgba(255,255,255,.025)';
-  for (let y = 0; y < F.h; y += 6) ctx.fillRect(0, y, F.w, 2);
-  const cx = wide ? F.w * 0.78 : F.w / 2;
-  const s = wide ? 0.62 : format === 'post' ? 0.82 : 1;
+  cover(ctx, frame, 0, 0, wide ? F.w * 0.62 : F.w, wide ? F.h : F.h * 0.72);
+  const g = wide ? ctx.createLinearGradient(F.w * 0.42, 0, F.w * 0.66, 0) : ctx.createLinearGradient(0, F.h * 0.38, 0, F.h * 0.74);
+  g.addColorStop(0, 'rgba(11,11,18,0)'); g.addColorStop(1, 'rgba(11,11,18,1)');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, F.w, F.h);
+  const top = ctx.createLinearGradient(0, 0, 0, F.h * 0.2); top.addColorStop(0, 'rgba(11,11,18,0.7)'); top.addColorStop(1, 'rgba(11,11,18,0)');
+  ctx.fillStyle = top; ctx.fillRect(0, 0, F.w, F.h * 0.2);
+  const s = wide ? 0.56 : format === 'post' ? 0.8 : 1;
+  const cx = wide ? F.w * 0.79 : F.w / 2;
   // logo
-  if (logo) {
-    const lw = (wide ? 360 : format === 'post' ? 470 : 620) * (wide ? 1 : 1), lh = (lw * 112) / 182;
-    ctx.imageSmoothingEnabled = false;
-    ctx.drawImage(logo, cx - lw / 2, wide ? 18 : 40, lw, lh);
-  }
-  let y = wide ? 270 : format === 'post' ? 640 : 1090;
-  // title ribbon
-  ctx.font = `800 ${Math.round(56 * s)}px ${FA}`;
-  const tw = ctx.measureText(title).width + 120 * s;
-  pixelFrame(ctx, cx - tw / 2, y - 44 * s, tw, 88 * s, result.win ? '#ff8fb4' : '#ff416a', result.win ? '#e3336a' : '#3d2f61', Math.round(6 * s));
-  pixelText(ctx, title, cx, y, Math.round(56 * s), '#ffffff', { font: FA, dir: 'rtl' });
-  y += 150 * s;
-  ctx.font = `800 ${Math.round(30 * s)}px ${FA}`; ctx.fillStyle = '#cdb9e6'; ctx.textAlign = 'center'; ctx.direction = 'rtl';
-  ctx.fillText(daily ? 'زمان بقا · چالش امروز' : 'زمان بقا', cx, y - 70 * s);
-  pixelText(ctx, fmtTime(result.timeMs), cx, y + 18 * s, Math.round(190 * s), '#ffe37c', { shadow: '#c8174a', outline: Math.round(8 * s) });
+  const ly = wide ? 70 : 110 * s;
+  text(ctx, 'ESCAPE', cx - 70 * s, ly, 92 * s, '#ffffff', { shadow: '#ff2d6f' });
+  const lg = ctx.createLinearGradient(cx, 0, cx + 200 * s, 0); lg.addColorStop(0, '#ffd23f'); lg.addColorStop(1, '#ff2d6f');
+  text(ctx, '60', cx + 150 * s, ly - 8 * s, 150 * s, lg);
+  let y = wide ? 190 : F.h * (format === 'story' ? 0.6 : 0.56);
+  skewBox(ctx, cx - 210 * s, y - 42 * s, 420 * s, 84 * s, title === 'LEGEND' ? '#ffd23f' : '#ff3b4e');
+  text(ctx, title, cx, y, 64 * s, '#ffffff');
+  y += 120 * s;
+  text(ctx, labels.score, cx, y - 30 * s, 34 * s, '#a3a8b8', { weight: 800 });
+  const sg = ctx.createLinearGradient(cx - 300 * s, 0, cx + 300 * s, 0); sg.addColorStop(0, '#ffd23f'); sg.addColorStop(1, '#ff2d6f');
+  text(ctx, fmt(r.points), cx, y + 60 * s, 170 * s, sg);
+  y += 190 * s;
+  const items = [[labels.time, fmtTime(r.timeMs)], [labels.top, `${fmt(r.topSpeed)} KM/H`], [labels.td, fmt(r.takedowns)]];
+  const bw = 300 * s, gap = 24 * s, x0 = cx - (bw * 3 + gap * 2) / 2;
+  items.forEach(([k, v], i) => {
+    const bx = x0 + i * (bw + gap);
+    skewBox(ctx, bx, y, bw, 120 * s, 'rgba(255,255,255,0.08)');
+    text(ctx, k, bx + bw / 2, y + 34 * s, 26 * s, '#a3a8b8', { weight: 800 });
+    text(ctx, v, bx + bw / 2, y + 82 * s, 50 * s, '#ffffff');
+  });
   y += 170 * s;
-  const sw = (wide ? 160 : 290) * (wide ? 1 : s), sh = (wide ? 108 : 150) * (wide ? 1 : s), gap = 26 * s;
-  const sx0 = cx - (sw * 3 + gap * 2) / 2;
-  const ss = wide ? 0.62 : s;
-  stat(ctx, sx0 + (sw + gap) * 2, y, sw, sh, 'امتیاز', fmt(result.points), '#ffe37c', ss);
-  stat(ctx, sx0 + (sw + gap), y, sw, sh, 'جاخالی', fmt(result.closeCalls), '#fff4e6', ss);
-  stat(ctx, sx0, y, sw, sh, 'بهترین زنجیره', fmt(chain || 0), '#3dd8e7', ss);
-  y += sh + 70 * s;
-  // challenge call to action + QR
-  const qrSize = wide ? 150 : format === 'post' ? 200 : 260;
-  if (wide) {
-    pixelText(ctx, 'رکوردم رو بزن!', cx, y, 44, '#3dd8e7', { font: FA, dir: 'rtl' });
-    drawQR(ctx, url, 40, F.h - qrSize - 40, qrSize);
-  } else {
-    const qx = cx - qrSize / 2 - (format === 'story' ? 170 : 160) * s;
-    drawQR(ctx, url, F.w - qrSize - 60 - (format === 'post' ? 0 : 20), y - 20, qrSize);
-    ctx.direction = 'rtl'; ctx.textAlign = 'right';
-    pixelText(ctx, 'رکوردم رو بزن!', F.w - qrSize - 120, y + 30 * s, Math.round(58 * s), '#3dd8e7', { font: FA, dir: 'rtl', align: 'right' });
-    ctx.font = `800 ${Math.round(28 * s)}px ${FA}`; ctx.fillStyle = '#fff4e6'; ctx.direction = 'rtl'; ctx.textAlign = 'right';
-    ctx.fillText('کد QR رو اسکن کن و همین مسیر رو برو', F.w - qrSize - 120, y + 100 * s);
-    ctx.fillText(`سطح ${level} · فرار ۶۰`, F.w - qrSize - 120, y + 150 * s);
-    void qx;
-  }
-  // footer
-  ctx.direction = 'ltr'; ctx.textAlign = 'center'; ctx.font = `400 ${Math.round(34 * s)}px ${PX}`; ctx.fillStyle = 'rgba(255,244,230,.6)';
-  ctx.fillText(`ESCAPE 60 · ${seed}`, cx, F.h - (wide ? 26 : 48));
+  text(ctx, `${car} · LV ${level}`, cx, y, 38 * s, '#19e3ff', { weight: 800 });
+  const qs = wide ? 150 : 230 * s;
+  if (wide) drawQR(ctx, url, 36, F.h - qs - 36, qs);
+  else { drawQR(ctx, url, cx - qs / 2, y + 50 * s, qs); }
+  text(ctx, 'BEAT MY SCORE', cx, wide ? F.h - 40 : F.h - 60 * s, 40 * s, '#ffffff', { weight: 900 });
   return cv;
 }
-
-export async function cardBlob(cv) {
-  return new Promise((ok) => cv.toBlob((b) => ok(b), 'image/png'));
-}
+export async function cardBlob(cv) { return new Promise((ok) => cv.toBlob((b) => ok(b), 'image/png')); }
 /** Native share sheet with the image (Instagram / Telegram / WhatsApp targets on phones). */
-export async function shareImage(blob, text, url, name = 'escape60.png') {
+export async function shareImage(blob, msg, url, name = 'escape60.png') {
   const file = new File([blob], name, { type: 'image/png' });
-  if (navigator.canShare?.({ files: [file] })) {
-    await navigator.share({ files: [file], text: text + '\n' + url, title: 'فرار ۶۰' });
-    return 'shared';
-  }
+  if (navigator.canShare?.({ files: [file] })) { await navigator.share({ files: [file], text: msg + '\n' + url, title: 'ESCAPE 60' }); return 'shared'; }
   downloadBlob(blob, name);
   return 'downloaded';
 }
@@ -157,8 +96,8 @@ export function downloadBlob(blob, name) {
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 4000);
 }
-export function networkLink(net, text, url) {
-  const t = encodeURIComponent(text), u = encodeURIComponent(url);
+export function networkLink(net, msg, url) {
+  const t = encodeURIComponent(msg), u = encodeURIComponent(url);
   if (net === 'telegram') return `https://t.me/share/url?url=${u}&text=${t}`;
   if (net === 'x') return `https://x.com/intent/post?text=${t}&url=${u}`;
   if (net === 'whatsapp') return `https://wa.me/?text=${t}%20${u}`;

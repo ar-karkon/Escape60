@@ -1,4 +1,6 @@
-# Game Design Document (GDD) — v0.1
+# Game Design Document (GDD) — v0.1 (updated for v3.0)
+
+> **v3.0 core loop:** pick a car and effects in the garage → rolling start in Sunset Bay → lose the police, drift, near-miss and take down cops for points (×8 chain) → the 60 s mark is a celebrated milestone (+2,500) and the run continues in overtime with rising heat → repair at pit stops (3 per run) → the run ends when the car explodes (0 health), is boxed in (busted) or at 10 minutes → results, XP, unlocks, share. Controls: auto throttle, steer, brake, handbrake drift, nitro. See docs/13_DECISIONS.md D23–D31.
 
 ## Fantasy and fantasy boundary
 بازیکن راننده‌ای در شهر **کاملاً خیالی** است که باید برای ۶۰ ثانیه از محاصره ماشین‌های پلیس فرار کند. حس تعقیب، تصمیم‌گیری لحظه‌ای و جاخالی موفق محور اصلی است. این بازی نسخه GTA نیست.

@@ -1,226 +1,242 @@
 <!doctype html>
-<html lang="fa" dir="rtl">
+<html lang="en" dir="ltr">
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no"/>
-  <meta name="theme-color" content="#1b0b2b"/>
-  <meta name="description" content="فرار ۶۰ — بازی رایگان و سریع تعقیب و گریز در شهر ساحلی غروب. ۶۰ ثانیه از پلیس فرار کن، زنجیره جاخالی بساز و دوستات رو به چالش بکش!"/>
+  <meta name="theme-color" content="#0b0b12"/>
+  <meta name="description" content="ESCAPE 60 — a free street-pursuit racing game in your browser. 14 cars, drifts, nitro, takedowns and an open coastal city. Lose the cops, survive, set a record."/>
   <meta property="og:type" content="website"/>
-  <meta property="og:title" content="فرار ۶۰ | ESCAPE 60 — ۶۰ ثانیه از پلیس فرار کن"/>
-  <meta property="og:description" content="تعقیب و گریز سه‌بعدی در شهر ساحلی نئونی. رکوردت رو ثبت کن و دوستات رو به چالش بکش."/>
+  <meta property="og:title" content="ESCAPE 60 — Street Pursuit"/>
+  <meta property="og:description" content="Drift, boost and take down the police in an open coastal city. How long can you run?"/>
   <meta property="og:image" content="./assets/og-card.jpg"/>
   <meta name="twitter:card" content="summary_large_image"/>
-  <link rel="icon" href="./assets/logo.svg"><title>فرار ۶۰ | ESCAPE 60</title>
-  <link rel="preload" href="./assets/fonts/RooyinFree-Bold.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="preload" href="./assets/fonts/RooyinFree-Regular.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="preload" href="./assets/fonts/jersey-10-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="icon" href="./assets/logo.svg"><title>ESCAPE 60 — Street Pursuit</title>
+  <link rel="preload" href="./assets/fonts/barlow-condensed-latin-800-italic.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="./assets/fonts/barlow-condensed-latin-900-italic.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="./style.css"/>
 </head>
-<body data-view="home">
+<body data-view="loading">
   <main id="app">
-    <canvas id="game" aria-label="شهر سه‌بعدی فرار ۶۰؛ با چپ و راست فرمان بده"></canvas>
+    <canvas id="game" aria-label="ESCAPE 60"></canvas>
     <canvas id="ink" aria-hidden="true"></canvas>
     <div id="hurt" class="hurt" aria-hidden="true"></div>
-    <span id="threat" class="threat" aria-hidden="true" hidden></span>
 
-    <div id="overlay" class="overlay">
-      <!-- MAIN MENU -->
-      <section id="home" class="screen home">
-        <header class="brand">
-          <h1 class="logo"><img src="./assets/logo.svg" alt="ESCAPE 60 — فرار ۶۰" width="182" height="112"></h1>
-          <p class="tagline">یک شهر. سه جان. شصت ثانیه برای فرار.</p>
-        </header>
-        <div class="dock">
-          <div id="challenge-banner" class="challenge hidden" role="status"></div>
-          <div class="profile" id="profile">
-            <b class="lvl" id="lvl">LV 1</b>
-            <div class="xpbar"><i id="xp-fill"></i></div>
-            <small id="xp-text">0 / 400 XP</small>
-            <span class="streak" id="streak" title="روزهای پشت سر هم"><span data-icon="flame"></span><b id="streak-n">0</b></span>
-          </div>
-          <button id="event-card" class="event-card hidden" aria-label="رویداد ویژه امروز">
-            <span class="ev-tag"><span data-icon="spark"></span>رویداد ویژه امروز <i id="ev-src">AI</i></span>
-            <b id="ev-title"></b>
-            <small id="ev-brief"></small>
-            <span id="ev-goals" class="ev-goals"></span>
-          </button>
-          <p class="chip chip-daily" id="daily-label"></p>
-          <button id="play" class="btn btn-primary btn-xl">
-            <span class="btn-ico" data-icon="play"></span>
-            <span class="btn-text"><b>شروع فرار</b><small>START ESCAPE</small></span>
-          </button>
-          <div class="cards">
-            <button id="board" class="card"><span class="card-ico" data-icon="trophy"></span><b>رکوردها</b></button>
-            <button id="missions-open" class="card"><i class="badge" id="missions-badge">3</i><span class="card-ico" data-icon="calendar"></span><b>مأموریت روز</b></button>
-            <button id="garage-open" class="card"><span class="card-ico" data-icon="car"></span><b>گاراژ</b></button>
-            <button id="settings" class="card"><span class="card-ico" data-icon="gear"></span><b>تنظیمات</b></button>
-          </div>
-          <footer class="status-row">
-            <small id="online-state" class="chip chip-status">در حال بررسی اتصال…</small>
-            <small class="ver" id="ver">v2.0</small>
-          </footer>
-        </div>
-      </section>
+    <!-- LOADING -->
+    <section id="loading" class="screen loading">
+      <div class="logo"><span class="l1">ESCAPE</span><span class="l2">60</span></div>
+      <div class="load-bar"><i id="load-fill"></i></div>
+      <p id="load-text" data-i18n="loading">Building Sunset Bay…</p>
+    </section>
 
-      <!-- RESULTS -->
-      <section id="results" class="screen results hidden">
-        <header class="brand brand-small">
-          <h1 class="logo"><img src="./assets/logo.svg" alt="ESCAPE 60" width="182" height="112"></h1>
-          <p class="ribbon" id="result-tag">RUN COMPLETE</p>
-        </header>
-        <div class="panel result-panel">
-          <div class="title-ribbon">
-            <span class="ti" data-icon="trophy"></span><h2 id="result-title">فرار کردی!</h2><span class="ti" data-icon="trophy"></span>
-          </div>
-          <p class="time-label"><span data-icon="stopwatch"></span>زمان بقا <b id="new-best" class="new-best hidden">رکورد جدید!</b></p>
-          <div class="time-row">
-            <span class="laurel" data-icon="laurel"></span>
-            <div class="result-time" id="result-time">00.00</div>
-            <span class="laurel" data-icon="laurel" data-mirror></span>
-          </div>
-          <p class="status-chip" id="result-status"><span data-icon="check"></span><b>فرار موفق!</b></p>
-          <p id="challenge-result" class="challenge-result hidden"></p>
-          <div id="result-mission" class="result-mission hidden"><p class="rm-head"><span data-icon="spark"></span><b id="rm-title"></b><i id="rm-state"></i></p><span id="rm-list" class="ev-goals"></span></div>
-          <div class="stats">
-            <div class="stat"><span class="stat-ico" data-icon="star"></span><small>امتیاز کل</small><strong id="result-score">0</strong></div>
-            <div class="stat"><span class="stat-ico" data-icon="drift"></span><small>جاخالی‌ها</small><strong id="result-near">0</strong></div>
-            <div class="stat"><span class="stat-ico" data-icon="combo"></span><small>بهترین زنجیره</small><strong id="result-chain">0</strong></div>
-          </div>
-          <div class="xp-row">
-            <b class="lvl" id="lvl2">LV 1</b>
-            <div class="xpbar"><i id="xp-fill2"></i></div>
-            <b class="xp-gain" id="xp-gain">+0 XP</b>
-          </div>
-          <p class="unlocks hidden" id="result-unlocks"></p>
-          <div class="rank-row"><span data-icon="bars"></span><p class="rank" id="rank">رکورد فقط روی این دستگاه ذخیره شد</p></div>
-          <div id="coach" class="coach hidden"><button id="coach-btn" class="link coach-btn"><span data-icon="coach"></span>تحلیل مربی هوشمند این دور</button><p id="coach-text" class="hidden"></p></div>
-          <p class="detail" id="result-detail"></p>
-          <div class="actions">
-            <button id="share" class="btn btn-secondary btn-share"><span class="btn-ico" data-icon="share"></span><b>اشتراک و چالش</b></button>
-            <button id="replay" class="btn btn-primary"><span class="btn-ico" data-icon="play"></span><b>دوباره بازی کن</b></button>
-            <button id="home-button" class="btn btn-secondary"><span class="btn-ico" data-icon="home"></span><b>منوی اصلی</b></button>
-          </div>
-          <button id="random" class="link"><span data-icon="dice"></span>چالش تصادفی تازه</button>
+    <!-- HOME -->
+    <section id="home" class="screen home hidden">
+      <header class="topbar">
+        <div class="logo small"><span class="l1">ESCAPE</span><span class="l2">60</span></div>
+        <div class="profile">
+          <b id="lvl" class="lvl">LV 1</b>
+          <div class="xpbar"><i id="xp-fill"></i></div>
+          <span class="streak" id="streak"><span data-icon="flame"></span><b id="streak-n">0</b></span>
         </div>
-      </section>
-    </div>
-
-    <!-- HUD -->
-    <header id="hud" class="hud hidden" aria-live="off">
-      <div class="hud-top">
-        <button aria-label="توقف بازی" id="pause-button" class="hud-pause"><span data-icon="pause"></span></button>
-        <div class="hud-timer">
-          <b id="time">00.00</b>
-          <small>زمان بقا</small>
-          <div class="progress" aria-hidden="true"><div id="power"></div><i id="mark-best" class="mark best hidden"></i><i id="mark-target" class="mark target hidden"></i></div>
+        <button id="settings-open" class="icon-btn" data-i18n-label="settings"><span data-icon="gear"></span></button>
+      </header>
+      <div id="challenge-banner" class="challenge hidden" role="status"></div>
+      <div class="home-bottom">
+        <div class="car-plate">
+          <span class="cls" id="home-cls">B</span>
+          <div><b id="home-car">Kaze S15</b><small id="home-tag"></small></div>
+          <div class="fx-chips" id="home-fx"></div>
         </div>
-        <div class="hud-wanted"><div id="pressure" class="sirens" aria-label="فشار تعقیب"></div><small>تعقیب</small></div>
-      </div>
-      <div id="combo" class="combo off" aria-label="ضریب زنجیره">
-        <b id="combo-x">×1</b>
-        <div class="combo-bar"><i id="combo-fill"></i></div>
-        <small>زنجیره</small>
-      </div>
-      <div class="hud-bottom">
-        <div class="hud-health" id="health" role="meter" aria-label="سلامت ماشین" aria-valuemin="0" aria-valuemax="100" aria-valuenow="100">
-          <span class="hp-ico" data-icon="shield"></span>
-          <div class="hp-bar"><i class="hp-trail" id="hp-trail"></i><i class="hp-fill" id="hp-fill"></i></div>
-          <b id="hp-num">100</b>
+        <p class="chip mode" id="mode-label"></p>
+        <button id="play" class="btn-play">
+          <span class="ico-wrap" data-icon="play"></span>
+          <span class="txt"><b data-i18n="play">START RUN</b><small data-i18n="playSub"></small></span>
+        </button>
+        <div class="tiles">
+          <button id="garage-open" class="tile"><span data-icon="car"></span><b data-i18n="garage">GARAGE</b></button>
+          <button id="missions-open" class="tile"><i class="badge" id="missions-badge">3</i><span data-icon="calendar"></span><b data-i18n="missions">MISSIONS</b></button>
+          <button id="board-open" class="tile"><span data-icon="trophy"></span><b data-i18n="records">RECORDS</b></button>
         </div>
-        <div class="hud-score"><span data-icon="star"></span><b id="score">0</b></div>
-      </div>
-      <div id="popups" class="popups" aria-hidden="true"></div>
-      <div id="banner" class="banner hidden" role="status"></div>
-      <div id="radio" class="radio hidden" role="status" aria-live="polite"><span class="radio-ico" data-icon="radio"></span><p><small>بی‌سیم پلیس</small><b id="radio-text"></b></p></div>
-      <div id="countdown" class="countdown hidden" aria-live="assertive"></div>
-    </header>
-    <nav id="controls" class="controls hidden" aria-label="فرمان ماشین">
-      <button id="right" class="steer" aria-label="فرمان راست"><span data-icon="arrowL" data-mirror></span></button>
-      <div class="minimap" aria-label="نقشه کوچک: خیابان‌ها، بن‌بست‌ها و پلیس">
-        <canvas id="minimap"></canvas>
-        <div class="mm-count"><b id="count">60</b><small>تا فرار</small></div>
-      </div>
-      <button id="left" class="steer" aria-label="فرمان چپ"><span data-icon="arrowL"></span></button>
-    </nav>
-
-    <!-- PAUSE -->
-    <section id="pause" class="pause-overlay hidden">
-      <div class="panel pause-card">
-        <p class="ribbon">PAUSED</p>
-        <h2>توقف بازی</h2>
-        <p>برای ادامه آماده‌ای؟</p>
-        <button id="resume" class="btn btn-primary"><span class="btn-ico" data-icon="play"></span><b>ادامه بازی</b></button>
-        <button id="quit" class="btn btn-secondary"><span class="btn-ico" data-icon="home"></span><b>برگشت به منو</b></button>
+        <footer class="status-row"><small id="online-state" class="status" data-i18n="checking"></small><small class="ver" id="ver"></small></footer>
       </div>
     </section>
 
-    <dialog id="config" class="panel">
-      <h2><span data-icon="gear"></span>تنظیمات</h2>
-      <label class="toggle-row"><input id="music-toggle" type="checkbox"><i class="switch"></i><span data-icon="sound"></span><b>موسیقی</b></label>
-      <label class="toggle-row"><input id="sfx-toggle" type="checkbox"><i class="switch"></i><span data-icon="siren"></span><b>افکت‌های صوتی</b></label>
-      <label class="toggle-row"><input id="motion" type="checkbox"><i class="switch"></i><b>کاهش حرکت و لرزش</b></label>
-      <label class="toggle-row"><input id="quality" type="checkbox"><i class="switch"></i><b>گرافیک سبک (گوشی ضعیف)</b></label>
-      <button id="credits-open" class="link">سازندگان صدا و فونت‌ها</button>
-      <a class="link edge-link" href="./edge">این بازی روی لبه‌ی آروان چطور کار می‌کند؟</a>
-      <button id="close-config" class="btn btn-primary"><b>بازگشت</b></button>
+    <!-- GARAGE -->
+    <section id="garage" class="screen garage hidden">
+      <header class="topbar">
+        <button id="garage-back" class="icon-btn" data-i18n-label="back"><span data-icon="back"></span></button>
+        <h2 data-i18n="garage">GARAGE</h2>
+        <b id="lvl-g" class="lvl">LV 1</b>
+      </header>
+      <div class="garage-drag" id="garage-drag" aria-hidden="true"></div>
+      <div class="garage-panel">
+        <div class="tabs" role="tablist">
+          <button class="tab active" data-tab="cars" data-i18n="cars">CARS</button>
+          <button class="tab" data-tab="paint" data-i18n="paint">PAINT</button>
+          <button class="tab" data-tab="fx" data-i18n="effects">EFFECTS</button>
+        </div>
+        <div class="tab-body" data-body="cars">
+          <div class="car-head"><span class="cls" id="g-cls">B</span><div><b id="g-name"></b><small id="g-tag"></small></div><b id="g-lock" class="lock hidden"></b></div>
+          <div class="stats" id="g-stats"></div>
+          <div class="car-list" id="car-list"></div>
+        </div>
+        <div class="tab-body hidden" data-body="paint">
+          <div class="swatches" id="paint-list"></div>
+          <p class="label" data-i18n="livery">Livery</p>
+          <div class="chips" id="livery-list"></div>
+        </div>
+        <div class="tab-body hidden" data-body="fx">
+          <div id="fx-rows"></div>
+          <p class="label" data-i18n="accent">Effect colour</p>
+          <div class="swatches small" id="accent-list"></div>
+          <p class="hint" data-i18n="fxHint"></p>
+        </div>
+        <button id="garage-race" class="btn-play slim"><span class="ico-wrap" data-icon="play"></span><span class="txt"><b data-i18n="race">RACE</b></span></button>
+      </div>
+    </section>
+
+    <!-- RESULTS -->
+    <section id="results" class="screen results hidden">
+      <div class="res-head">
+        <p class="res-tag" id="res-tag">WRECKED</p>
+        <h2 id="res-title">WRECKED</h2>
+        <small id="res-sub"></small>
+      </div>
+      <div class="res-card">
+        <div class="res-score"><small data-i18n="score">SCORE</small><b id="res-score">0</b><span id="res-best" class="new-best hidden" data-i18n="newRecord">NEW RECORD</span></div>
+        <div class="res-time"><small data-i18n="survived">Survived</small><b id="res-time">0:00.00</b><span id="res-escaped" class="escaped hidden" data-i18n="escapedBadge">ESCAPED 60</span></div>
+        <div class="res-stats" id="res-stats"></div>
+        <p id="challenge-result" class="challenge-result hidden"></p>
+        <div class="xp-row"><b class="lvl" id="lvl2">LV 1</b><div class="xpbar"><i id="xp-fill2"></i></div><b class="xp-gain" id="xp-gain">+0 XP</b></div>
+        <p class="unlocks hidden" id="res-unlocks"></p>
+        <p class="rank" id="rank"></p>
+        <div class="actions">
+          <button id="replay" class="btn-play slim"><span class="ico-wrap" data-icon="retry"></span><span class="txt"><b data-i18n="retry">RETRY</b></span></button>
+          <button id="res-garage" class="tile"><span data-icon="car"></span><b data-i18n="garage">GARAGE</b></button>
+          <button id="share" class="tile"><span data-icon="share"></span><b data-i18n="share">SHARE</b></button>
+          <button id="home-button" class="tile"><span data-icon="home"></span><b data-i18n="menu">MENU</b></button>
+        </div>
+      </div>
+    </section>
+
+    <!-- HUD -->
+    <section id="hud" class="hud hidden" aria-live="off">
+      <div class="hud-score">
+        <b id="score">0</b>
+        <span id="mult" class="mult off">×1</span>
+        <i class="chainbar"><u id="chain-fill"></u></i>
+      </div>
+      <div class="hud-timer">
+        <b id="time">0:00.00</b>
+        <small id="time-label">ESCAPE 60</small>
+        <i class="mbar"><u id="milestone-fill"></u></i>
+      </div>
+      <div class="hud-right">
+        <button id="pause-btn" class="icon-btn small" aria-label="Pause"><span data-icon="pause"></span></button>
+        <div class="heat" id="heat"></div>
+      </div>
+      <div class="minimap"><canvas id="minimap"></canvas></div>
+      <div id="pit-arrow" class="pit-arrow hidden"><span class="arw" data-icon="wrench"></span><small id="pit-dist"></small></div>
+      <div class="cluster">
+        <div class="speedo">
+          <svg viewBox="0 0 120 70" class="rpm"><path d="M10 64 A52 52 0 0 1 110 64" class="track"/><path id="rpm-arc" d="M10 64 A52 52 0 0 1 110 64" class="fill"/></svg>
+          <b id="speed">0</b><small data-i18n="kmh">KM/H</small><span id="gear" class="gear">1</span>
+        </div>
+        <div class="bars">
+          <div class="bar nitro"><span data-icon="bolt"></span><i class="track"><u id="nitro-fill"></u></i></div>
+          <div class="bar health" id="health"><span data-icon="wrench"></span><i class="track"><u class="trail" id="hp-trail"></u><u class="fillb" id="hp-fill"></u></i><b id="hp-num">100</b></div>
+          <div class="repairs" id="repairs"></div>
+        </div>
+      </div>
+      <div id="bust" class="bust hidden"><b data-i18n="busting">BUSTING</b><i><u id="bust-fill"></u></i></div>
+      <div id="popups" class="popups" aria-hidden="true"></div>
+      <div id="banner" class="banner hidden" role="status"></div>
+      <div id="countdown" class="countdown hidden" aria-live="assertive"></div>
+      <div id="milestone" class="milestone hidden">
+        <div class="ms-burst"></div>
+        <h2 data-i18n="milestone">60 SECONDS!</h2>
+        <p data-i18n="milestoneSub">YOU ESCAPED — KEEP GOING</p>
+        <div class="ms-stats"><span><small data-i18n="score">SCORE</small><b id="ms-score">0</b></span><span><small data-i18n="bestTime">Best</small><b id="ms-best">—</b></span></div>
+        <em data-i18n="bonus">+2,500 BONUS</em>
+      </div>
+      <p id="howto" class="howto hidden"></p>
+    </section>
+    <nav id="controls" class="controls hidden">
+      <div class="steer-pad">
+        <button id="left" class="ctl steer" data-i18n-label="left"><span data-icon="left"></span></button>
+        <button id="right" class="ctl steer" data-i18n-label="right"><span data-icon="right"></span></button>
+      </div>
+      <div class="act-pad">
+        <button id="brake" class="ctl brake"><span data-icon="brake"></span><small data-i18n="brake">BRAKE</small></button>
+        <button id="hand" class="ctl hand"><span data-icon="drift"></span><small data-i18n="handbrake">DRIFT</small></button>
+        <button id="nitro" class="ctl nitro"><svg viewBox="0 0 100 100" class="ring"><circle cx="50" cy="50" r="45" class="track"/><circle id="nitro-ring" cx="50" cy="50" r="45" class="fill"/></svg><span data-icon="bolt"></span><small data-i18n="nitro">NITRO</small></button>
+      </div>
+    </nav>
+
+    <!-- PAUSE -->
+    <section id="pause" class="screen pause hidden">
+      <div class="panel">
+        <h2 data-i18n="pause">PAUSED</h2>
+        <button id="resume" class="btn-play slim"><span class="ico-wrap" data-icon="play"></span><span class="txt"><b data-i18n="resume">RESUME</b></span></button>
+        <button id="restart" class="tile wide"><span data-icon="retry"></span><b data-i18n="restart">RESTART</b></button>
+        <button id="pause-settings" class="tile wide"><span data-icon="gear"></span><b data-i18n="settings">SETTINGS</b></button>
+        <button id="quit" class="tile wide"><span data-icon="home"></span><b data-i18n="quit">QUIT TO MENU</b></button>
+      </div>
+    </section>
+
+    <dialog id="config" class="panel dlg">
+      <h2 data-i18n="settingsTitle">SETTINGS</h2>
+      <div class="row-set"><span data-icon="globe"></span><b data-i18n="language">Language</b><div class="seg" id="lang-seg"><button data-v="en">English</button><button data-v="fa">فارسی</button></div></div>
+      <div class="row-set"><span data-icon="sun"></span><b data-i18n="tod">Time of day</b><div class="seg" id="tod-seg"><button data-v="sunset" data-i18n="tod_sunset"></button><button data-v="night" data-i18n="tod_night"></button><button data-v="day" data-i18n="tod_day"></button></div></div>
+      <div class="row-set"><span data-icon="speed"></span><b data-i18n="graphics">Graphics</b><div class="seg" id="gfx-seg"><button data-v="auto" data-i18n="g_auto"></button><button data-v="high" data-i18n="g_high"></button><button data-v="low" data-i18n="g_low"></button></div></div>
+      <label class="toggle-row"><input id="music-toggle" type="checkbox"><i class="switch"></i><b data-i18n="music">Music</b></label>
+      <label class="toggle-row"><input id="sfx-toggle" type="checkbox"><i class="switch"></i><b data-i18n="sfx">Sound effects</b></label>
+      <label class="toggle-row"><input id="shake-toggle" type="checkbox"><i class="switch"></i><b data-i18n="shake">Camera shake</b></label>
+      <label class="toggle-row"><input id="motion" type="checkbox"><i class="switch"></i><b data-i18n="motion">Reduce motion</b></label>
+      <button id="credits-open" class="link" data-i18n="credits">Credits & licenses</button>
+      <button id="close-config" class="btn-play slim"><span class="txt"><b data-i18n="close">CLOSE</b></span></button>
     </dialog>
-    <dialog id="records" class="panel">
-      <h2><span data-icon="trophy"></span>جدول رکوردها</h2>
+    <dialog id="records" class="panel dlg">
+      <h2 data-i18n="lbTitle">LEADERBOARD</h2>
       <div id="entries" class="entries"></div>
-      <button id="close-board" class="btn btn-primary"><b>بازگشت</b></button>
+      <button id="close-board" class="btn-play slim"><span class="txt"><b data-i18n="close">CLOSE</b></span></button>
     </dialog>
-    <dialog id="missions" class="panel">
-      <h2><span data-icon="calendar"></span>مأموریت‌های امروز</h2>
-      <div id="ev-detail" class="ev-detail hidden">
-        <p class="ev-tag"><span data-icon="spark"></span>رویداد ویژه · مسیر روزانه <i id="evd-src">AI</i></p>
-        <h3 id="evd-title"></h3>
-        <p id="evd-brief"></p>
-        <ul id="evd-goals" class="mission-list"></ul>
-      </div>
+    <dialog id="missions" class="panel dlg">
+      <h2 data-i18n="missionsTitle">DAILY MISSIONS</h2>
       <ul id="mission-list" class="mission-list"></ul>
-      <p class="hint">هر مأموریت +۱۵۰ XP · هر روز پشت سر هم بازی کنی جایزه XP بیشتر می‌گیری.</p>
-      <button id="daily-play" class="btn btn-primary"><span class="btn-ico" data-icon="play"></span><b>چالش روزانه — یک مسیر برای همه</b></button>
-      <button id="close-missions" class="btn btn-secondary"><b>بازگشت</b></button>
+      <p class="hint" data-i18n="missionHint"></p>
+      <button id="daily-play" class="btn-play slim"><span class="ico-wrap" data-icon="play"></span><span class="txt"><b data-i18n="playDaily">PLAY TODAY'S ROUTE</b></span></button>
+      <button id="close-missions" class="link" data-i18n="close">CLOSE</button>
     </dialog>
-    <dialog id="garage" class="panel">
-      <h2><span data-icon="car"></span>گاراژ</h2>
-      <div id="paint-list" class="paint-list"></div>
-      <p class="hint">با بالا رفتن سطح، رنگ‌های تازه باز می‌شوند. رنگ فقط ظاهری است.</p>
-      <button id="close-garage" class="btn btn-primary"><b>بازگشت</b></button>
-    </dialog>
-    <dialog id="share-sheet" class="panel share-sheet">
-      <h2><span data-icon="share"></span>رکوردت رو به رخ بکش!</h2>
+    <dialog id="share-sheet" class="panel dlg share-sheet">
+      <h2 data-i18n="shareTitle">SHOW OFF YOUR RUN</h2>
       <div class="tabs" role="tablist">
-        <button class="tab active" data-format="story" role="tab">استوری ۹:۱۶</button>
-        <button class="tab" data-format="post" role="tab">پست ۴:۵</button>
-        <button class="tab" data-format="wide" role="tab">X / افقی</button>
+        <button class="tab active fmt" data-format="story" data-i18n="story">Story 9:16</button>
+        <button class="tab fmt" data-format="post" data-i18n="post">Post 4:5</button>
+        <button class="tab fmt" data-format="wide" data-i18n="wide">Wide 16:9</button>
       </div>
-      <div class="preview"><img id="share-preview" alt="پیش‌نمایش کارت اشتراک"><p id="share-hint" class="hint"></p></div>
-      <button id="share-image" class="btn btn-primary"><span class="btn-ico" data-icon="share"></span><b>اشتراک تصویر (اینستاگرام، تلگرام…)</b></button>
+      <div class="preview"><img id="share-preview" alt=""><p id="share-hint" class="hint"></p></div>
+      <button id="share-image" class="btn-play slim"><span class="ico-wrap" data-icon="share"></span><span class="txt"><b data-i18n="shareImage">SHARE IMAGE</b></span></button>
       <div class="net-row">
-        <a id="net-telegram" class="net tg" target="_blank" rel="noopener">تلگرام</a>
+        <a id="net-telegram" class="net tg" target="_blank" rel="noopener">Telegram</a>
         <a id="net-x" class="net x" target="_blank" rel="noopener">X</a>
-        <a id="net-whatsapp" class="net wa" target="_blank" rel="noopener">واتساپ</a>
-        <button id="save-image" class="net save">ذخیره</button>
+        <a id="net-whatsapp" class="net wa" target="_blank" rel="noopener">WhatsApp</a>
+        <button id="save-image" class="net save" data-i18n="save">Save</button>
       </div>
-      <button id="copy-link" class="btn btn-secondary"><b>کپی لینک چالش</b></button>
-      <button id="close-share" class="link">بستن</button>
+      <button id="copy-link" class="tile wide"><b data-i18n="copyLink">COPY CHALLENGE LINK</b></button>
+      <button id="close-share" class="link" data-i18n="close">CLOSE</button>
     </dialog>
-    <dialog id="credits" class="panel credits">
-      <h2>سازندگان</h2>
+    <dialog id="credits" class="panel dlg credits">
+      <h2 data-i18n="credits">Credits & licenses</h2>
       <div class="credit-list">
-        <p><b>موسیقی (OpenGameArt)</b></p>
-        <p>Law In The City — Alexandr Zhelanov (CC-BY 4.0)</p>
-        <p>Neon Action II — Bogart VGM (CC-BY 4.0)</p>
-        <p>Maximum Overdrive — Bogart VGM (CC-BY 3.0)</p>
-        <p>Vice Police — tausdei (CC-BY 3.0)</p>
-        <p>Cold Night — Kim Lightyear (CC-BY 3.0)</p>
-        <p><b>افکت‌ها</b></p>
-        <p>aquinn · qubodup · domasx2 · ggbotnet · pyranostudios · rubberduck · Kenney · lukerustltd (CC0 / CC-BY 3.0)</p>
-        <p><b>فونت‌ها</b> Rooyin Free — Mohamad Darvishi · Jersey 10 · Vazirmatn (SIL OFL) · <b>موتور</b> Three.js (MIT)</p>
-        <p>جزئیات کامل: assets/audio/CREDITS.md</p>
+        <p><b>Music (OpenGameArt)</b></p>
+        <p>Law In The City — Alexandr Zhelanov (CC-BY 4.0) · Neon Action II — Bogart VGM (CC-BY 4.0) · Maximum Overdrive — Bogart VGM (CC-BY 3.0) · Vice Police — tausdei (CC-BY 3.0) · Cold Night — Kim Lightyear (CC-BY 3.0)</p>
+        <p><b>Sound effects</b></p>
+        <p>aquinn · qubodup · domasx2 · ggbotnet · pyranostudios · rubberduck · Kenney · lukerustltd (CC0 / CC-BY 3.0). Explosion, nitro, repair and backfire sounds are synthesised in-game.</p>
+        <p><b>Fonts</b> Barlow Condensed — The Barlow Project Authors · Vazirmatn — Saber Rastikerdar (SIL OFL)</p>
+        <p><b>Engine</b> Three.js (MIT). Cars, city and effects are original procedural designs; car shapes are inspired by classic road cars and carry no brands.</p>
+        <p>Full details: assets/audio/CREDITS.md</p>
       </div>
-      <button id="close-credits" class="btn btn-primary"><b>بازگشت</b></button>
+      <button id="close-credits" class="btn-play slim"><span class="txt"><b data-i18n="close">CLOSE</b></span></button>
     </dialog>
   </main>
   <script type="module" src="./src/main.js"></script>

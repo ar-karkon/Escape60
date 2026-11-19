@@ -1,9 +1,9 @@
 {
   "name": "escape60",
-  "version": "1.0.0",
+  "version": "3.0.0",
   "private": true,
   "type": "module",
-  "description": "Escape 60 — mobile browser arcade pursuit game",
+  "description": "Escape 60 \u2014 browser street-pursuit racing game",
   "scripts": {
     "dev": "node server/server.mjs",
     "start": "node server/server.mjs",
@@ -11,8 +11,7 @@
     "check": "npm test && node scripts/check-syntax.mjs",
     "build": "node scripts/build.mjs",
     "test:browser": "node scripts/browser-smoke.cjs",
-    "capture": "node scripts/capture-screens.cjs",
-    "logo": "node scripts/make-logo.mjs"
+    "capture": "node scripts/capture-screens.cjs"
   },
   "engines": {
     "node": ">=20"
