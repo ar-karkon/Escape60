@@ -10,7 +10,7 @@ export async function request(path, options = {}, ms = 6500) {
 /** Today's route and city briefing (the first request of a day may wait while the briefing is written). */
 export const today = () => request('/challenges/today', {}, 20000);
 export const startRun = (seed, car, spawn, rules) => request('/runs/start', { method: 'POST', body: JSON.stringify({ seed, car, spawn, rules }) });
-export const radio = (date) => request(`/radio?date=${encodeURIComponent(date)}`, {}, 20000);
+export const radio = (date, lang = 'en') => request(`/radio?date=${encodeURIComponent(date)}&lang=${lang === 'fa' ? 'fa' : 'en'}`, {}, 20000);
 /** The dispatcher's call for this run. */
 export const dispatch = (payload) => request('/dispatch', { method: 'POST', body: JSON.stringify(payload) }, 7000);
 /** Crew chief for a verified run. */

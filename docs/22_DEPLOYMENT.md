@@ -1,6 +1,6 @@
-# Deployment runbook — Escape60 on Arvan (v3.5.1: SIM 2.2.0 · API 4.1.0)
+# Deployment runbook — Escape60 on Arvan (v3.5.1: SIM 2.2.0 · API 4.1.2)
 
-Live URL: **https://escape60.lavanai2525-3qem7.arvanedge.ir** — still serving v2.3 until this version is deployed with `npm run deploy`. What runs where is explained for judges in [TECHNOLOGY.md](TECHNOLOGY.md); the API is in [06_EDGE_SPEC.md](06_EDGE_SPEC.md).
+Live URL: **https://escape60.lavanai2525-3qem7.arvanedge.ir** — API 4.1.2 / SIM 2.2.0 deployed and checked on 2026-11-20. What runs where is explained for judges in [TECHNOLOGY.md](TECHNOLOGY.md); the API is in [06_EDGE_SPEC.md](06_EDGE_SPEC.md).
 
 ## راهنمای سریع به‌روزرسانی سرور (از کامپیوتر خودتان)
 ۰. **پیش از دیپلوی — تست روی کامپیوتر خودتان (۵ دقیقه، توصیه می‌شود):**
@@ -16,7 +16,7 @@ Live URL: **https://escape60.lavanai2525-3qem7.arvanedge.ir** — still serving 
    - اختیاری: `AI_BASE` (پیش‌فرض `https://api.arvancloudai.ir/v1` — اگر آدرس درگاه شما در پنل AIaaS فرق دارد همان را بگذارید)، `AI_MODEL` (پیش‌فرض `DeepSeek-V4-Flash`)، `AI_DAILY_CAP` (پیش‌فرض ۴۰۰۰ فراخوانی در روز برای تماس مرکز و سرمکانیک).
 ۳. در پوشه‌ی پروژه بزنید: `npm run deploy` و کلیدهای Object Storage را وقتی پرسید وارد کنید (نمایش داده و ذخیره نمی‌شوند). اسکریپت تست می‌کند، می‌سازد و فایل‌های تغییرکرده را آپلود می‌کند.
 ۴. وقتی اسکریپت منتظر ماند: پنل ← Edge Computing ← `escape60` ← **ویرایش کد** ← همه‌ی کد را پاک کنید و محتوای کلیپ‌بورد را (همان `dist/edge/worker.js`) بچسبانید ← **انتشار** ← در ترمینال Enter بزنید.
-۵. اسکریپت خودش بررسی می‌کند: نسخه‌ی API ‏`4.1.0` و شبیه‌ساز `2.2.0`، ذخیره‌سازی `arvan-object-storage`، فشرده‌سازی Brotli، صفحه‌ی `/edge`، اتصال AIaaS و منبع گزارش امروز (`ai`). اگر چیزی قرمز شد خروجی را بفرستید.
+۵. اسکریپت خودش بررسی می‌کند: نسخه‌ی API ‏`4.1.2` و شبیه‌ساز `2.2.0`، ذخیره‌سازی `arvan-object-storage`، فشرده‌سازی Brotli، صفحه‌ی `/edge`، اتصال AIaaS و منبع گزارش امروز (`ai`). اگر چیزی قرمز شد خروجی را بفرستید.
 ۶. (اختیاری) تست کامل با مرورگر: `GAME_URL=https://escape60.lavanai2525-3qem7.arvanedge.ir npm run test:browser` (با `CHROME_BIN` مثل مرحله‌ی ۰).
 ۷. **چک‌لیست بعد از دیپلوی — در گوشی آدرس بازی را باز کنید و ببینید:**
    - صفحه‌ی اول: کارت **TODAY** (گزارش امروز شهر) و وضعیت «جدول جهانی آنلاین است».
@@ -59,7 +59,7 @@ Values are JSON, so a string must be written **with double quotes**, e.g. `"abc1
 | `AI_BASE` | no | default `https://api.arvancloudai.ir/v1` (the client calls `${AI_BASE}/chat/completions`) |
 | `AI_MODEL` | no | default `DeepSeek-V4-Flash` |
 | `AI_DAILY_CAP` | no | default `4000` per-run model calls per UTC day (dispatcher + crew chief); the daily briefing and radio are 3 calls a day regardless |
-| `REPLAY_CHUNK` | no | default `300` ticks = live-check interval and replay chunk; SIM 2.2 costs ~30–100 µs per tick, so ~10–30 ms per request |
+| `REPLAY_CHUNK` | no | default `90` ticks = live-check interval and replay chunk; SIM 2.2 costs ~30–100 µs per tick, so ~10–30 ms per request |
 | `PRECOMPRESSED` | no | `false` serves only uncompressed files (use if the deploy check reports a compression mismatch) |
 | `RUN_SECRET`, `S3_BUCKET` (`escape60-data`), `S3_ENDPOINT` (`https://s3.ir-central1.arvanstorage.ir`), `S3_REGION` (`ir-central1`), `STATIC_ORIGIN` | no | overrides |
 
@@ -90,9 +90,9 @@ Release 3.5.1 was checked in the cloud session before handing over: `npm run che
 ## After deploying: what to check
 | Check | Expected |
 |---|---|
-| `GET /api/v1/health` | `api: "4.1.0"`, `version: "2.2.0"`, `storage: "arvan-object-storage"`, `secured: true`, `ai: {configured: true, model: "DeepSeek-V4-Flash"}` |
+| `GET /api/v1/health` | `api: "4.1.2"`, `version: "2.2.0"`, `storage: "arvan-object-storage"`, `secured: true`, `ai: {configured: true, model: "DeepSeek-V4-Flash"}` |
 | `GET /api/v1/challenges/today` | `brief.source: "ai"` (the first request of a UTC day writes it, ≈5–15 s; later requests read the frozen copy) and `rules` with three contracts |
-| `GET /api/v1/radio` | `source: {en: "ai", fa: "ai"}` |
+| `GET /api/v1/radio?lang=en|fa` | HTTP 200; the selected language reports `ai` or `fallback` |
 | `/edge` | today's briefing, model calls/tokens/latency, live counters; Live Lab refuses the cheats |
 | Game | home card **TODAY**, dispatcher line in the intro, radio during the chase, LIVE chip, crew chief on results |
 
@@ -126,3 +126,8 @@ If `brief.source` is `fallback` with AI configured: the first model call of the 
 - The S3 key is account-wide (it can also reach other buckets of this account). Do not rotate it in the panel without updating the other projects that use it.
 - Never commit keys; they live only in encrypted edge variables.
 - Keep the game link live until results (14 Azar 1405).
+
+## Live release check (2026-11-20)
+- API 4.1.2, SIM 2.2.0, durable storage and AIaaS configured; new client, Brotli and `/edge` verified by `npm run deploy`.
+- A real browser run was verified and ranked, with 31 live checks, a share card and ghost rival. One live request returned a transient 500 (`Request handler dropped response sender`); the game recovered. The browser smoke script reports that console error and exits nonzero.
+- The daily briefing came from AIaaS. Radio returned HTTP 200 with the handwritten fallback after its model call failed.

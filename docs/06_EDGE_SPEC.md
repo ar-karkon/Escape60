@@ -1,6 +1,6 @@
-# Edge service — the edge referee (API 4.1.0)
+# Edge service — the edge referee (API 4.1.2)
 
-**Status:** implemented and tested locally (Node tests incl. a mocked AIaaS gateway, a browser run against the built worker in `npm run edge:local`). Judge-facing overview: [TECHNOLOGY.md](TECHNOLOGY.md). Not yet deployed — the live edge still runs v2.3 until `npm run deploy` is run (see `22_DEPLOYMENT.md`).
+**Status:** implemented and tested locally (Node tests incl. a mocked AIaaS gateway, a browser run against the built worker in `npm run edge:local`). Judge-facing overview: [TECHNOLOGY.md](TECHNOLOGY.md). Deployed on Arvan on 2026-11-20; see `22_DEPLOYMENT.md` for the live checks and remaining transient error.
 
 Code: `edge/app.mjs` (game service), `edge/static.mjs` (static delivery), `edge/card.mjs` + `edge/png.mjs` (PNG cards), `edge/metrics.mjs` (telemetry), `edge/s3.mjs` (storage), `edge/worker.js` (entry). The local dev server runs the same `createApp`.
 
@@ -10,7 +10,7 @@ The browser only sends inputs. The edge is the only judge, and it stays **statel
 | Work | Where it happens |
 |---|---|
 | Run tickets (route, car, start time, HMAC) | `POST /runs/start` |
-| **Live referee**: re-simulates the newest ~5 s of inputs while the run is being driven | `POST /runs/live` every `REPLAY_CHUNK` ticks |
+| **Live referee**: re-simulates the newest ~1.5 s of inputs while the run is being driven | `POST /runs/live` every `REPLAY_CHUNK` ticks |
 | **Pacing proof**: inputs may not arrive faster than real time (+10 %, 3 s jitter) | every live/finish request |
 | **Live global rank** from the edge's own score | live responses |
 | Final verdict: replays only what the live checks have not covered, compares the result field by field, stores once | `POST /runs/finish` |

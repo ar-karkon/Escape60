@@ -334,10 +334,12 @@ test('AIaaS writes the daily briefing once; the simulation plays by its rules an
   assert.equal(rv.body.rival.taunt.en, 'See you at the docks.');
   assert.match((await h.call(`/r/${f.body.id}`)).body, /Kaze survives the tide/);
   // radio bank and dispatcher call
-  const radio = (await h.call('/api/v1/radio')).body;
-  assert.deepEqual(radio.source, { en: 'ai', fa: 'ai' });
-  assert.equal(radio.radio.fa.start[0], 'همه‌ی واحدها، {car} در {zone}!');
-  assert.ok(radio.radio.en.busted.length > 0, 'missing moments filled from the handwritten bank');
+  const radioEn = (await h.call('/api/v1/radio?lang=en')).body;
+  const radioFa = (await h.call('/api/v1/radio?lang=fa')).body;
+  assert.deepEqual(radioEn.source, { en: 'ai', fa: 'fallback' });
+  assert.deepEqual(radioFa.source, { en: 'fallback', fa: 'ai' });
+  assert.equal(radioFa.radio.fa.start[0], 'همه‌ی واحدها، {car} در {zone}!');
+  assert.ok(radioEn.radio.en.busted.length > 0, 'missing moments filled from the handwritten bank');
   const dis = (await h.call('/api/v1/dispatch', { seed: day.seed, car: 'kaze', zone: 2, lang: 'fa' })).body;
   assert.equal(dis.source, 'ai'); assert.equal(dis.line, 'کنترل بندر: یک کازه نارنجی در اسکله!'); assert.equal(dis.who, 'کنترل بندر');
   const m = (await h.call('/api/v1/edge')).body;

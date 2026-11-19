@@ -111,7 +111,7 @@ async function checkOnline() {
   try {
     const res = await api.today(); online = !!res.seed; $('online-state').textContent = t('online'); $('online-state').className = 'status online';
     brief = res.brief || null; briefRules = res.rules || null;
-    if (brief) api.radio(brief.date).then((r) => { radioBank = r.radio; }).catch(() => {});
+    if (brief) api.radio(brief.date, getLang()).then((r) => { radioBank = r.radio; }).catch(() => {});
     if (view === 'home') renderBrief();
     if (online && !nextRival) prefetchRival();
   }
@@ -421,12 +421,12 @@ function begin() {
   setView('game');
   updateHud(0);
   resetEdgeHud();
-  live = { checkpoint: null, inflight: null, sent: 0, every: 300, expect: new Map(), fails: 0, rank: null };
+  live = { checkpoint: null, inflight: null, sent: 0, every: 90, expect: new Map(), fails: 0, rank: null };
   const pre = nextRival; nextRival = null;
   if (pre && pre.forSeed === seed && pre.spawn === game.spawn) setGhost(pre);
   if (online) {
     const started = game;
-    api.startRun(seed, profile.car, spawn, rulesFor(seed)?.id).then((r) => { if (game === started && !finishQueued) { runTicket = r; live.every = r.live?.every || 300; renderLive('sync'); } }).catch(() => {});
+    api.startRun(seed, profile.car, spawn, rulesFor(seed)?.id).then((r) => { if (game === started && !finishQueued) { runTicket = r; live.every = r.live?.every || 90; renderLive('sync'); } }).catch(() => {});
     // no rival prefetched for this start: ask the edge for one that started here too
     if (!ghost) api.rival(seed, { ...rivalQuery(), spawn }).then(({ rival }) => { if (game === started && !finishQueued && !ghost && rival?.trace?.length && rival.spawn === game.spawn) setGhost(rival); }).catch(() => {});
   }

@@ -25,7 +25,7 @@ import { createAI } from './ai.mjs';
 import { fallbackDirector, rulesOf, fallbackChief, FALLBACK_RADIO } from '../web/src/director.js';
 import { createMetrics } from './metrics.mjs';
 
-export const API_VERSION = '4.1.0';
+export const API_VERSION = '4.1.2';
 export const FEATURES = ['tickets', 'live-referee', 'pacing-proof', 'live-rank', 'chunked-replay', 'ghost-rival', 'edge-cards', 'link-previews', 'percentile', 'telemetry', 'precompressed-static', 'ai-director', 'ai-radio', 'ai-dispatch', 'ai-crew-chief'];
 const enc = new TextEncoder();
 const seedValid = (s) => typeof s === 'string' && /^[a-zA-Z0-9_-]{2,64}$/.test(s);
@@ -47,7 +47,7 @@ const bad = (status, message, reason) => Object.assign(Error(message), { status,
 export function createApp({ env = {}, store, now = () => Date.now(), log = () => {}, loadIndex = null, aiFetch }) {
   const minPlayRatio = Number(env.MIN_PLAY_RATIO ?? 0.78);
   // Each request gets a small CPU budget on the edge, so long replays are split into signed chunks.
-  const chunkTicks = Math.max(60, Number(env.REPLAY_CHUNK || 300));
+  const chunkTicks = Math.max(60, Number(env.REPLAY_CHUNK || 90));
   // Tickets must verify on every edge node, so the key comes from configuration (never per-isolate random).
   const secretSource = String(env.RUN_SECRET || env.S3_SECRET_KEY || 'escape60-unconfigured-dev-secret');
   let hmacKey;
@@ -125,20 +125,21 @@ export function createApp({ env = {}, store, now = () => Date.now(), log = () =>
     if (!date) return null;
     return rulesOf(await directorFor(date, { generate: date === dayOf(now()) }));
   }
-  async function radioFor(date) {
-    if (radios.has(date)) return radios.get(date);
-    return once(`r|${date}`, async () => {
-      const k = `radio/v1/${date}.json`;
+  async function radioFor(date, lang = 'en') {
+    const id = `${date}|${lang}`;
+    if (radios.has(id)) return radios.get(id);
+    return once(`r|${id}`, async () => {
+      const k = `radio/v2/${date}/${lang}.json`;
       let r = (await readJson(k).catch(() => null))?.value || null;
       const d = await directorFor(date, { generate: date === dayOf(now()) });
       if (!r && d && date === dayOf(now())) {
         const bank = { en: FALLBACK_RADIO.en, fa: FALLBACK_RADIO.fa }, src = { en: 'fallback', fa: 'fallback' };
-        if (ai.configured) await Promise.all(['en', 'fa'].map(async (lang) => { try { bank[lang] = { ...FALLBACK_RADIO[lang], ...(await ai.radio(d, lang)) }; src[lang] = 'ai'; } catch (e) { log('radio', lang, e.message); } }));
+        if (ai.configured) { try { bank[lang] = { ...FALLBACK_RADIO[lang], ...(await ai.radio(d, lang)) }; src[lang] = 'ai'; } catch (e) { log('radio', lang, e.message); } }
         const cand = { date, id: d.id, source: src, radio: bank };
         r = (await store.put(k, JSON.stringify(cand), { ifNoneMatch: '*' })) ? cand : (await readJson(k))?.value || cand;
       }
       r ||= { date, source: { en: 'fallback', fa: 'fallback' }, radio: d?.radio || FALLBACK_RADIO };
-      radios.set(date, r); if (radios.size > 6) radios.delete(radios.keys().next().value);
+      radios.set(id, r); if (radios.size > 12) radios.delete(radios.keys().next().value);
       return r;
     });
   }
@@ -353,7 +354,7 @@ export function createApp({ env = {}, store, now = () => Date.now(), log = () =>
   }
   async function radioRoute(url) {
     const date = /^\d{4}-\d{2}-\d{2}$/.test(url.searchParams.get('date') || '') ? url.searchParams.get('date') : dayOf(now());
-    const r = await radioFor(date);
+    const r = await radioFor(date, url.searchParams.get('lang') === 'fa' ? 'fa' : 'en');
     return json({ date, source: r.source, radio: r.radio }, 200, { 'Cache-Control': 'public, max-age=120' });
   }
   /** The dispatcher's call for one run, in the player's language (fallback: a line from the day's radio bank). */

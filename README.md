@@ -20,7 +20,7 @@
 </div>
 
 > [!NOTE]
-> **Live version:** The hosted game is a public preview and may still run an earlier release. The latest source on `main` is **not verified as redeployed**. Promotional art is distinct from actual gameplay screenshots.
+> **Live version:** The hosted game was verified on Arvan on 2026-11-20 (API 4.1.2, SIM 2.2.0). Promotional art is distinct from actual gameplay screenshots.
 
 ## ✨ Why Escape 60?
 
@@ -108,7 +108,7 @@ npm run deploy         # release to Arvan from your computer (asks for the stora
 - **Audio**: licensed music and SFX (CC0 / CC-BY, see `web/assets/audio/CREDITS.md`) plus synthesised explosion, nitro, repair, backfire, wind and gear-shifted engine pitch.
 - **Progression & sharing**: XP and levels unlock cars, paints and effects; three daily missions and a day streak; daily shared route and friend-challenge links; share cards (story / post / wide) from a real in-engine frame with a QR code.
 - **Daily city briefing, police radio and crew chief** (AIaaS): every day the city gets a theme, three contracts with rewards and its own police tactics — the simulation plays by them — plus bilingual police radio, a dispatcher call for each run and a crew-chief debrief after each verified run. How it works: [docs/TECHNOLOGY.md](docs/TECHNOLOGY.md).
-- **Edge referee** (`edge/`, API 4.1.0 — see [the spec](docs/06_EDGE_SPEC.md)): the browser sends only its inputs. While you drive, the edge re-simulates every 5 s of them with the same 60 Hz simulation, refuses inputs that arrive faster than real time and answers with the authoritative score and your **live global rank**; the final verdict only replays the last seconds. Verified inputs come back as **ghost rivals** (the run just above your best, re-simulated bit-exactly in your game), verified runs get **PNG share cards drawn on the edge** and `/r/<id>` link previews, and every text file is negotiated as Brotli/gzip at the edge. Stateless: HMAC-signed tickets and checkpoints let any edge node answer any request. `/edge` is a live dashboard with telemetry from every edge isolate, a cheat lab and an edge benchmark. `web/src/dmath.js` keeps trigonometry identical across engines.
+- **Edge referee** (`edge/`, API 4.1.2 — see [the spec](docs/06_EDGE_SPEC.md)): the browser sends only its inputs. While you drive, the edge re-simulates every 1.5 s of them with the same 60 Hz simulation, refuses inputs that arrive faster than real time and answers with the authoritative score and your **live global rank**; the final verdict only replays the last seconds. Verified inputs come back as **ghost rivals** (the run just above your best, re-simulated bit-exactly in your game), verified runs get **PNG share cards drawn on the edge** and `/r/<id>` link previews, and every text file is negotiated as Brotli/gzip at the edge. Stateless: HMAC-signed tickets and checkpoints let any edge node answer any request. `/edge` is a live dashboard with telemetry from every edge isolate, a cheat lab and an edge benchmark. `web/src/dmath.js` keeps trigonometry identical across engines.
 
 ## 🗂️ Project layout
 
@@ -132,7 +132,7 @@ docs/                           design, decisions, deployment and status
 
 ## ☁️ Edge deployment
 
-`npm run build` produces `dist/web/` (static site; works on any static host and on the edge proxy) and `dist/edge/worker.js` (API + static proxy). See `docs/22_DEPLOYMENT.md`. `npm run deploy` releases from your own computer without CI: it uploads only changed files, guides the one panel step (pasting the edge worker) and verifies the live URL, compression and the `/edge` dashboard. `npm run edge:local` runs the exact worker file locally first. The game service needs only an S3-compatible bucket (`S3_ACCESS_KEY`, `S3_SECRET_KEY`); without it the leaderboard falls back to memory. Replays run in chunks (`REPLAY_CHUNK`, default 300 ticks) to fit small per-request CPU budgets.
+`npm run build` produces `dist/web/` (static site; works on any static host and on the edge proxy) and `dist/edge/worker.js` (API + static proxy). See `docs/22_DEPLOYMENT.md`. `npm run deploy` releases from your own computer without CI: it uploads only changed files, guides the one panel step (pasting the edge worker) and verifies the live URL, compression and the `/edge` dashboard. `npm run edge:local` runs the exact worker file locally first. The game service needs only an S3-compatible bucket (`S3_ACCESS_KEY`, `S3_SECRET_KEY`); without it the leaderboard falls back to memory. Replays run in chunks (`REPLAY_CHUNK`, default 90 ticks) to fit small per-request CPU budgets.
 
 **Status:** see `docs/00_STATUS.md`. Real-device FPS and an audible mix check are still outstanding; the live deployment must be rebuilt and redeployed for this version.
 
@@ -142,7 +142,7 @@ docs/                           design, decisions, deployment and status
 | :--- | :--- |
 | Driving, cars, garage and map | ✅ Implemented in source |
 | Deterministic replay and ranking logic | ✅ Implemented; local tests available |
-| Arvan Edge service | ✅ Prior live version tested; **latest build pending verification** |
+| Arvan Edge service | ✅ API 4.1.2 and SIM 2.2.0 verified live; one transient live-check 500 observed |
 | iOS Safari / real-device FPS / final audio mix | 🟡 Still needs hands-on QA |
 
 Source-of-truth documents: **[Status](docs/00_STATUS.md)** · **[Deployment guide](docs/22_DEPLOYMENT.md)** · **[Changelog](docs/CHANGELOG.md)** · **[Documentation index](docs/README.md)**.

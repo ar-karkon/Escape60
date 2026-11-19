@@ -12,6 +12,7 @@ const OFFLINE = !!process.env.OFFLINE;
     const p = await ctx.newPage(), errors = [];
     p.on("pageerror", (e) => errors.push(e.message));
     p.on("console", (e) => { if (e.type() === "error" && !/status of 4\d\d/.test(e.text())) errors.push(e.text()); });
+    p.on("response", async (r) => { if (r.url().includes('/api/v1/runs/') && !r.ok()) console.log('run API:', r.status(), new URL(r.url()).pathname, (await r.text()).slice(0, 180)); });
     await p.goto(new URL("/?seed=smoke-1&q=low&capture=1", process.env.GAME_URL || "http://localhost:4173").href);
     await p.waitForFunction(() => document.body.dataset.view === "home", null, { timeout: 120000 });
     await p.locator("#settings-open").tap(); await p.locator("#shake-toggle + .switch").tap(); await p.locator("#close-config").tap();
@@ -39,7 +40,7 @@ const OFFLINE = !!process.env.OFFLINE;
     await p.waitForFunction(() => window.__escape60.state()?.ticks > 120, null, { timeout: 60000 });
     await p.locator("#pause-btn").tap(); await p.locator("#resume").tap();
     if (!OFFLINE) {
-      await p.waitForFunction(() => /#\d+/.test(document.querySelector("#live-rank").textContent) && document.querySelector("#live").dataset.state === "ok", null, { timeout: 60000 });
+      await p.waitForFunction(() => /#\d+/.test(document.querySelector("#live-rank").textContent) && document.querySelector("#live").dataset.state === "ok", null, { timeout: 60000 }).catch(async (e) => { console.log('live state:', await p.evaluate(() => ({ chip: document.querySelector('#live').outerHTML.slice(0, 450), ticks: window.__escape60.state()?.ticks }))); throw e; });
       console.log("live chip:", (await p.locator("#live").innerText()).replace(/\s+/g, " "));
     }
     await p.waitForFunction(() => document.body.dataset.view === "results", null, { timeout: 400000 });
