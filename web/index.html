@@ -38,6 +38,12 @@
             <small id="xp-text">0 / 400 XP</small>
             <span class="streak" id="streak" title="روزهای پشت سر هم"><span data-icon="flame"></span><b id="streak-n">0</b></span>
           </div>
+          <button id="event-card" class="event-card hidden" aria-label="رویداد ویژه امروز">
+            <span class="ev-tag"><span data-icon="spark"></span>رویداد ویژه امروز <i id="ev-src">AI</i></span>
+            <b id="ev-title"></b>
+            <small id="ev-brief"></small>
+            <span id="ev-goals" class="ev-goals"></span>
+          </button>
           <p class="chip chip-daily" id="daily-label"></p>
           <button id="play" class="btn btn-primary btn-xl">
             <span class="btn-ico" data-icon="play"></span>
@@ -74,6 +80,7 @@
           </div>
           <p class="status-chip" id="result-status"><span data-icon="check"></span><b>فرار موفق!</b></p>
           <p id="challenge-result" class="challenge-result hidden"></p>
+          <div id="result-mission" class="result-mission hidden"><p class="rm-head"><span data-icon="spark"></span><b id="rm-title"></b><i id="rm-state"></i></p><span id="rm-list" class="ev-goals"></span></div>
           <div class="stats">
             <div class="stat"><span class="stat-ico" data-icon="star"></span><small>امتیاز کل</small><strong id="result-score">0</strong></div>
             <div class="stat"><span class="stat-ico" data-icon="drift"></span><small>جاخالی‌ها</small><strong id="result-near">0</strong></div>
@@ -86,6 +93,7 @@
           </div>
           <p class="unlocks hidden" id="result-unlocks"></p>
           <div class="rank-row"><span data-icon="bars"></span><p class="rank" id="rank">رکورد فقط روی این دستگاه ذخیره شد</p></div>
+          <div id="coach" class="coach hidden"><button id="coach-btn" class="link coach-btn"><span data-icon="coach"></span>تحلیل مربی هوشمند این دور</button><p id="coach-text" class="hidden"></p></div>
           <p class="detail" id="result-detail"></p>
           <div class="actions">
             <button id="share" class="btn btn-secondary btn-share"><span class="btn-ico" data-icon="share"></span><b>اشتراک و چالش</b></button>
@@ -123,6 +131,7 @@
       </div>
       <div id="popups" class="popups" aria-hidden="true"></div>
       <div id="banner" class="banner hidden" role="status"></div>
+      <div id="radio" class="radio hidden" role="status" aria-live="polite"><span class="radio-ico" data-icon="radio"></span><p><small>بی‌سیم پلیس</small><b id="radio-text"></b></p></div>
       <div id="countdown" class="countdown hidden" aria-live="assertive"></div>
     </header>
     <nav id="controls" class="controls hidden" aria-label="فرمان ماشین">
@@ -152,6 +161,7 @@
       <label class="toggle-row"><input id="motion" type="checkbox"><i class="switch"></i><b>کاهش حرکت و لرزش</b></label>
       <label class="toggle-row"><input id="quality" type="checkbox"><i class="switch"></i><b>گرافیک سبک (گوشی ضعیف)</b></label>
       <button id="credits-open" class="link">سازندگان صدا و فونت‌ها</button>
+      <a class="link edge-link" href="./edge">این بازی روی لبه‌ی آروان چطور کار می‌کند؟</a>
       <button id="close-config" class="btn btn-primary"><b>بازگشت</b></button>
     </dialog>
     <dialog id="records" class="panel">
@@ -161,6 +171,12 @@
     </dialog>
     <dialog id="missions" class="panel">
       <h2><span data-icon="calendar"></span>مأموریت‌های امروز</h2>
+      <div id="ev-detail" class="ev-detail hidden">
+        <p class="ev-tag"><span data-icon="spark"></span>رویداد ویژه · مسیر روزانه <i id="evd-src">AI</i></p>
+        <h3 id="evd-title"></h3>
+        <p id="evd-brief"></p>
+        <ul id="evd-goals" class="mission-list"></ul>
+      </div>
       <ul id="mission-list" class="mission-list"></ul>
       <p class="hint">هر مأموریت +۱۵۰ XP · هر روز پشت سر هم بازی کنی جایزه XP بیشتر می‌گیری.</p>
       <button id="daily-play" class="btn btn-primary"><span class="btn-ico" data-icon="play"></span><b>چالش روزانه — یک مسیر برای همه</b></button>

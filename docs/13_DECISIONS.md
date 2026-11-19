@@ -38,3 +38,12 @@ Decision:
 Tradeoffs:
 Revisit triggers:
 ```
+
+## D-EDGE-ONLY — all ranking logic on Arvan Edge (2026-11-19)
+Status: accepted. Context: contest rewards real edge logic and says "no server needed". Decision: the edge worker issues tickets, replays runs, stores results in Arvan Object Storage and calls AIaaS; the Node server is dev-only and runs the same `createApp`. Tradeoffs: per-request CPU limit → chunked replay with HMAC checkpoints; storage is S3 objects with ETag retries rather than a database. Revisit: if Arvan exposes a KV/DB binding to edge computes.
+
+## D-DMATH — engine-independent trig in the simulation (2026-11-19)
+Status: accepted. Context: Arvan's runtime returned different last bits for Math.sin/cos/pow than V8, so a valid run failed replay. Decision: `web/src/dmath.js` (fdlibm polynomial kernels, only IEEE-exact ops), SIM 1.5.0. Also fixes latent Safari/Firefox ↔ server mismatches.
+
+## D-AI-CONTENT-ONLY — AI writes content, never rules (2026-11-19)
+Status: accepted. The model writes the daily event text, radio lines and coach text. Objectives come from a whitelist with clamped goals and are judged from the verified replay; one model call per day for the event, cached coach reports with a daily cap. Cheapest connected model (DeepSeek-V4-Flash).

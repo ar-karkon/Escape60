@@ -97,11 +97,26 @@ export function cityMap(seed) {
     }
     return out;
   }
-  const tmp = [];
+  // Cell geometry is a pure function of the map, so it is built once per cell as a flat array
+  // (x0, y0, x1, y1, ...). Same rectangles in the same order: results are unchanged, but the
+  // replay on Arvan Edge no longer rebuilds them thousands of times per run.
+  const cells = new Map();
+  function cellSolids(ci, cj) {
+    const k = ci * 1e6 + cj;
+    let flat = cells.get(k);
+    if (flat) return flat;
+    const rects = solidsInCell(ci, cj, []);
+    flat = new Float64Array(rects.length * 4);
+    rects.forEach((r, n) => flat.set(r, n * 4));
+    if (cells.size > 4000) cells.clear();
+    cells.set(k, flat);
+    return flat;
+  }
   function circleHits(x, y, r = 18) {
-    solidsInCell(Math.floor(x / BLOCK), Math.floor(y / BLOCK), tmp);
+    const f = cellSolids(Math.floor(x / BLOCK), Math.floor(y / BLOCK));
     const r2 = r * r;
-    for (const [a, b, c, d] of tmp) {
+    for (let n = 0; n < f.length; n += 4) {
+      const a = f[n], b = f[n + 1], c = f[n + 2], d = f[n + 3];
       const cx = x < a ? a : x > c ? c : x, cy = y < b ? b : y > d ? d : y;
       if ((x - cx) * (x - cx) + (y - cy) * (y - cy) < r2) return true;
     }

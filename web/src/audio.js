@@ -125,6 +125,21 @@ export class AudioEngine {
       src.start(c.currentTime + delay);
     } catch {}
   }
+  /** Short synthesized radio squelch (original, generated in Web Audio — no recorded asset). */
+  radio(gain = 0.22) {
+    if (!this.ctx || !this.sfxOn) return;
+    try {
+      const c = this.ctx, len = Math.floor(c.sampleRate * 0.16), buf = c.createBuffer(1, len, c.sampleRate), d = buf.getChannelData(0);
+      for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * (i < len * 0.12 ? 1 : 0.35);
+      const src = c.createBufferSource(), bp = c.createBiquadFilter(), g = c.createGain(), t = c.currentTime;
+      src.buffer = buf; bp.type = 'bandpass'; bp.frequency.value = 1700; bp.Q.value = 1.4;
+      g.gain.setValueAtTime(gain, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.16);
+      src.connect(bp); bp.connect(g); g.connect(this.sfxBus); src.start(t);
+      const o = c.createOscillator(), og = c.createGain();
+      o.type = 'square'; o.frequency.value = 1250; og.gain.setValueAtTime(gain * 0.25, t + 0.17); og.gain.exponentialRampToValueAtTime(0.001, t + 0.24);
+      o.connect(og); og.connect(this.sfxBus); o.start(t + 0.17); o.stop(t + 0.25);
+    } catch {}
+  }
   duckMusic(amount = 0.35, ms = 600) {
     if (!this.ctx) return;
     const t = this.ctx.currentTime, g = this.musicBus.gain, base = this.musicOn ? 0.55 : 0;

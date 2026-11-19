@@ -41,6 +41,8 @@ const assert = require("node:assert/strict");
     await p.locator("#close-garage").tap();
     await p.locator("#missions-open").tap();
     assert.equal(await p.locator("#mission-list li").count(), 3);
+    // AI special event (from the edge, or the deterministic fallback when offline) is listed too.
+    await p.waitForFunction(() => document.querySelectorAll("#evd-goals li").length >= 3, null, { timeout: 30000 });
     await p.locator("#close-missions").tap();
     await p.locator("#board").tap();
     await p.locator("#close-board").tap();
@@ -49,7 +51,7 @@ const assert = require("node:assert/strict");
     await p.locator("#resume").tap();
     const time = (t) =>
       p.waitForFunction(
-        // Harder pursuit (SIM 1.4.0): an unsteered run may be caught before t, which also ends the wait.
+        // Harder pursuit (SIM 1.4.0+): an unsteered run may be caught before t, which also ends the wait.
         (t) => Number(document.querySelector("#time").textContent) >= t || document.body.dataset.view === "results",
         t,
         { timeout: 160000 },
@@ -60,8 +62,12 @@ const assert = require("node:assert/strict");
     if ((await p.evaluate(() => document.body.dataset.view)) === "game") await shot("pursuit");
     await p.locator("#results").waitFor({ timeout: 90000 });
     await p.waitForFunction(() =>
-      document.querySelector("#rank").textContent.includes("تأییدشده"),
+      document.querySelector("#rank").textContent.includes("تأیید شد"),
     );
+    // AI coach report for the edge-verified run.
+    await p.locator("#coach-btn").tap();
+    await p.locator("#coach-text").waitFor({ timeout: 30000 });
+    console.log("coach:", await p.locator("#coach-text").innerText());
     await p.waitForTimeout(600);
     await shot("results");
     console.log(await p.locator("#results").innerText());

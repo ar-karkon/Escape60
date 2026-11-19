@@ -41,3 +41,11 @@ Simulation, scoring, daily seed and server replay are unchanged (`SIM_VERSION` 1
 - **Minimap:** heading-up map at the bottom with streets, avenues, dead ends, police (blinking, clamped to the edge), roadblocks, traffic and seconds left.
 - **Lights & Unbound-style feedback:** twin-lobe headlight beams, lamp halos, anamorphic flares on oncoming headlights, brake-light response, tail-light trail ribbons at speed, graffiti streaks at top speed and a «PERFECT» tag for long drifts, cel-toned smoke.
 - **Performance:** device-aware start quality and a 6-step adaptive ladder (resolution, DPR, shadows, bloom, ink/halftone, pedestrian count); traffic cars merged into one draw call; the comic layer does no canvas work while idle; shadows off on phones. In software rendering the automatic mode ran ~3× faster than forced high quality.
+
+## 2.3 — Arvan Edge deployment, AI special event, edge replay — 2026-11-19
+- **Deployed on Arvan Edge Computing** (`escape60.lavanai2525-3qem7.arvanedge.ir`): one edge compute serves the API and proxies the flat static build from the public bucket `escape60-game`. No separate server.
+- **Edge game service** (`edge/app.mjs`): HMAC run tickets, authoritative replay on the edge in signed chunks (Arvan's per-request CPU budget), single-use runs, leaderboard + daily stats in Arvan Object Storage through a WebCrypto SigV4 client with conditional writes, call-sign labels, `/api/v1/stats`, `/edge` evidence page.
+- **AI special event** (AIaaS, DeepSeek-V4-Flash): daily title, briefing, three whitelisted objectives and police-radio lines, validated and frozen per day; judged from the replay; ★ in the leaderboard; deterministic fallback.
+- **AI police radio** in the HUD and **AI coach report** on the results screen for verified runs.
+- **Simulation 1.5.0:** engine-independent `sin/cos/atan2/hypot` (`dmath.js`) — Arvan's runtime returned different last bits for `Math.sin/cos/pow`, which made replays diverge. Rules unchanged. Collision geometry cached per cell and per-tick allocations removed (replay ~2× faster).
+- Build: esbuild bundle (`dist/web` flat, `dist/edge/worker.js`); local server now runs the same edge app; share-sheet links set before image encoding (smoke-test race).

@@ -1,30 +1,30 @@
-# Edge deployment and API proposal
+# Edge service — implemented API
 
-**Status: API CONTRACT DRAFT — not deployed; exact Arvan APIs and plan limits not yet verified.**
+**Status: deployed on Arvan Edge (2026-11-19).** Code: `edge/app.mjs` (service), `edge/s3.mjs` (storage), `edge/worker.js` (entry + static proxy). The local dev server runs the same `createApp`.
 
-## Why real Edge
-Serving HTML/JS alone is not enough for a strong technical case. Lightweight service-side challenge generation/validation, abuse throttling and efficient public leaderboard reads are candidate meaningful Edge uses.
+## Endpoints
+| Method & path | Purpose |
+|---|---|
+| `GET /api/v1/health` | runtime, SIM/API versions, storage kind, `secured`, AI model |
+| `GET /api/v1/challenges/today` | `{seed, challengeId, version, expiresAt, mission}` — daily UTC seed + AI special event |
+| `GET /api/v1/mission` | today's mission only |
+| `POST /api/v1/runs/start` `{seed}` | `{runId, token, missionId}` — stateless HMAC ticket `{r, s, t, v, ms}` |
+| `POST /api/v1/runs/finish` `{runId, token, trace, result, checkpoint?}` | chunked replay; `202 {continue, progress, checkpoint}` until done, then `200 {accepted, rank, of, label, result, mission, verifyMs}` |
+| `POST /api/v1/runs/report` `{runId, token}` | AI coach text for a verified run (cached in the run record) |
+| `GET /api/v1/leaderboard?seed=&limit=` | top entries `{rank, timeMs, points, label, mission}`, 5 s isolate cache |
+| `GET /api/v1/stats` | today's runs, wins, missions, avg verify ms, AI calls |
 
-## Proposed endpoints (subject to runtime and privacy review)
-- `GET /api/v1/challenges/today` → `{challengeId, seed, gameVersion, expiresAt}`
-- `POST /api/v1/runs/start` → `{runId, challengeId, issuedAt, token}`
-- `POST /api/v1/runs/finish` → `{runId, timeMs, points, inputTraceHash, inputTrace?, clientVersion}`
-- `GET /api/v1/leaderboard?challengeId=...&limit=20` → aggregate, anonymized ranks
-- `GET /api/v1/health` → status; exclude secrets
+## Verification rules (finish)
+1. Ticket signature valid, `runId` matches, `SIM_VERSION` matches, age ≤ 15 min.
+2. Trace shape valid (RLE pairs, inputs −3..3, ≤ 3600 ticks).
+3. Replay from the ticket's seed with the shared simulation, at most `REPLAY_CHUNK` ticks per request. Between requests the edge signs `runId | SHA-256(trace) | verifyMs | stateJSON`; a forged state, timing or swapped trace fails the HMAC.
+4. Last chunk: game must end exactly at the end of the trace; the browser's `timeMs/points/health/win` must equal the replay; wall time since the ticket ≥ 78 % of the run time.
+5. Single use: run record written with `If-None-Match: *`; leaderboard and stats updated with `If-Match` ETag retries.
 
-## Threat model
-Client controls inputs, timing, DOM and network → **client score is not trusted**. Signed tokens prevent naïve forged sessions but **not** physics cheating. Potential solution tiers:
-1. Basic: time window, nonce expiry, rate limit, suspicious score checks; mark as lower assurance.
-2. Stronger: sampled event log validation, deterministic seed/versions, replay on trusted backend or proof validation where feasible.
-3. Full: server authoritative simulation (probably too costly for MVP).
+## AI usage
+- Mission: one model call per UTC day (first request), output validated by `sanitizeMission` (lengths, stripped markup/URLs, whitelisted objective types, clamped goals, radio lines per event), frozen in `missions/v1/<date>.json`. Runs remember whether their ticket used the AI or the fallback mission, so judging never changes mid-day.
+- Coach: one call per verified run on request, ≤ 220 output tokens, capped per day (`AI_DAILY_REPORT_CAP`).
+- The model never controls physics, spawns, scoring or ranks.
 
-## Open feasibility checklist
-- Official Arvan runtime: JS standard, limits, outbound fetch, timers, crypto APIs.
-- Deployment method and domain, static vs function bundling.
-- Persistent KV/DB support and transactional increments.
-- Limits: requests, CPU, memory, bandwidth, billing, cache invalidation.
-- If no durable storage: external compatible store + Edge validation OR remove leaderboard until ready; never claim server verification not implemented.
-- Account, payment method and billing alerts.
-
-## Operational constraints
-All requests authenticated with anonymous game-specific tokens; rotating secrets in environment, quotas/alerts, no PII by default. Provide an architecture evidence page for judges with actual deployment logs/performance once available.
+## Privacy
+No accounts, cookies, analytics or IP storage. Leaderboard labels are call signs derived from the run id.

@@ -1,17 +1,55 @@
-# Deployment runbook — Escape60
+# Deployment runbook — Escape60 on Arvan (as deployed 2026-11-19)
 
-1. Run `npm run check && npm run build` from repo root.
-2. Test static game by serving `dist/` over HTTP. A static-only deploy supports offline local bests, not verified global leaderboard.
-3. Deploy `server/server.mjs` with Node 20+ on persistent hosting and configure strong `ESCAPE60_SECRET`. Mount `server/data/` to durable storage. Enable TLS, backups, crash restart, rate limit at network edge.
-4. Smoke-test Arvan Edge JavaScript runtime with minimal `fetch` handler, then adapt `edge/worker.js` to actual per-service secrets and outbound fetch APIs. Current code assumes Service Worker event listener and globals `ESCAPE60_EDGE_UPSTREAM` and `ESCAPE60_EDGE_KEY` (not confirmed as available in Arvan). Do not commit these values.
-5. Set `REQUIRE_EDGE_AUTH=1` and matching `ESCAPE60_EDGE_KEY` on Node origin; ensure the origin cannot be bypassed via public insecure exposure.
-6. Map `/api/v1/*` through Arvan Edge and serve `/` and assets on the same HTTPS origin. Check `/api/v1/health`, `/api/v1/challenges/today`, `/api/v1/runs/start` and `/api/v1/runs/finish`.
-7. Confirm a legitimate 60s browser run is accepted and a tampered trace is rejected; verify leaderboard durability after restart.
-8. Check official competition rules, domain/route restrictions and submit game link before deadline.
+Live URL: **https://escape60.lavanai2525-3qem7.arvanedge.ir** · architecture/evidence page: `/edge`
 
-### Danger boundaries
-- The Edge worker only provides request routing and perimeter validation; persistent scoreboard and replay validation are owned by Node origin.
-- No non-tested Arvan provider features have been asserted as operational. Separate origin is still a deployment dependency.
-- Offline mode indicates local-only result, not a verified online rank.
+There is no separate server. One Arvan Edge Compute (`escape60`) serves the whole game:
 
-The static host must serve web/vendor/three.js as JavaScript and logo.svg as SVG. Deploy client, Node simulation 1.1.0 and Edge adapter together. Chromium desktop with software WebGL is a functional test only. Device FPS and Arvan routing require separate verification.
+| Path | Handled by |
+|---|---|
+| `/api/v1/*` | `edge/app.mjs` inside the edge worker (tickets, chunked replay, leaderboard, AI) |
+| everything else | edge proxies the file's basename from the public bucket `escape60-game` and sets MIME / cache headers |
+
+## Arvan resources
+- Edge Compute `escape60` (default route `escape60.lavanai2525-3qem7.arvanedge.ir/*`).
+- Object Storage bucket `escape60-game` (ir-central1, **public read**) — the flat static build.
+- Object Storage bucket `escape60-data` (ir-central1, **private**) — `missions/`, `runs/`, `leaderboard/`, `stats/` JSON objects.
+- AIaaS gateway `gateway-yjjo6` (`https://api.arvancloudai.ir/v1`), model `DeepSeek-V4-Flash` (cheapest connected model).
+
+## Edge variables (Edge → escape60 → تنظیمات → متغیر جدید, tick "encrypted")
+Values are JSON, so a string must be written **with double quotes**, e.g. `"abc123"`.
+
+| Name | Value |
+|---|---|
+| `S3_ACCESS_KEY` | Object Storage access key (Object Storage → مدیریت دسترسی) |
+| `S3_SECRET_KEY` | Object Storage secret key (also derives the run-ticket HMAC key) |
+| `AI_API_KEY` | AIaaS machine-user key for the gateway |
+| optional | `RUN_SECRET`, `AI_MODEL` (default `DeepSeek-V4-Flash`), `AI_DAILY_REPORT_CAP` (default 1500), `S3_BUCKET` (`escape60-data`), `S3_ENDPOINT` (`https://s3.ir-central1.arvanstorage.ir`), `S3_REGION` (`ir-central1`), `STATIC_ORIGIN`, `REPLAY_CHUNK` (720) |
+
+Without the S3 keys the edge falls back to per-isolate memory (leaderboard not durable) and a fixed dev ticket secret; `/api/v1/health` reports `storage: "memory"` and `secured: false`. Without `AI_API_KEY` the deterministic fallback mission and template coach report are used.
+
+## Release steps
+1. `npm run check && npm run build` → `dist/web/` (42 flat files, hashed `app-*.js`, `style-*.css`) and `dist/edge/worker.js` (~40 KB).
+2. Upload changed files from `dist/web/` to `escape60-game` (public toggle on). `index.html` last.
+3. Edge → escape60 → ویرایش کد → replace with `dist/edge/worker.js` → انتشار.
+4. Verify: `/api/v1/health` (version, storage, ai), a full run through `npm run test:browser` with `GAME_URL=<live url> CHROME_BIN=/usr/bin/google-chrome`, `/edge` stats.
+5. Any simulation change: bump `SIM_VERSION`; the edge replays with the bundled copy of the same `simulation.js`.
+
+## Verified on the live edge (2026-11-19)
+- With keys set: `/api/v1/health` reports `storage: arvan-object-storage`, `secured: true`, AI DeepSeek-V4-Flash; AI daily event generated and frozen; AI coach replies; leaderboard and stats persist.
+- Static: HTML, JS, CSS, fonts, audio served with correct MIME; Range requests return 206 (Safari audio).
+- Full 60 s run (seed `x2`, 3600 ticks) accepted after 5 chunked requests; total replay CPU 54.6 ms. Short runs accepted in one request.
+- Browser smoke test (menu, missions, pause, run, results, coach, share, replay) passed against the live URL.
+
+## Runtime findings (Arvan Edge)
+- Service Worker `fetch` event interface; `env` global holds variables (`EC_ID`, `EC_URL` always present). `crypto.subtle`, `fetch`, `performance.now` available; `caches` and `localStorage` throw.
+- Per-request CPU budget is small: a ~900-tick replay works, a 3600-tick replay is killed ("Request handler dropped response sender"). Hence chunked replay (720 ticks/request) with HMAC-signed checkpoints that bind run id, trace hash, elapsed verify time and exact state.
+- `Math.sin`, `Math.cos`, `Math.pow` differ in the last bits from V8/Node → the simulation uses `web/src/dmath.js` (SIM 1.5.0).
+- Wall time of at least 20 s per request is allowed, but heavy work (replay + many storage writes) in one request gets dropped, so the final storage commit runs in its own request after the last replay chunk.
+- Arvan Object Storage honours `If-None-Match: *` but answers 412 to `If-Match` even with the current ETag → `s3.mjs` re-reads the ETag right before an unconditional write.
+- DeepSeek-V4-Flash thinks by default (hidden reasoning tokens, slow, can exceed the edge limit) → requests send `thinking: {type: "disabled"}`; the daily event then takes ~9 s and coach replies ~3 s.
+- The AIaaS machine user is `escape60-ai`; its key is pasted with the `apikey ` prefix, which the edge strips.
+
+## Danger boundaries
+- The S3 key is account-wide (it can also reach other buckets of this account). Do not rotate it in the panel without updating the other projects that use it.
+- Never commit keys; they live only in encrypted edge variables.
+- Keep the game link live until results (14 Azar 1405).

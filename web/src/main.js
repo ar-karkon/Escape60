@@ -6,6 +6,7 @@ import { redrawAtlas } from './gfx/signs.js';
 import { loadProfile, saveProfile, applyRun, xpForLevel, missionInfo, PAINTS, paintById, parseChallenge, beats } from './meta.js';
 import * as api from './api.js';
 import { createMinimap } from './ui/minimap.js';
+import { fallbackMission, judgeMission, objectiveText, pickRadio } from './mission.js';
 
 const $ = (id) => document.getElementById(id);
 hydrateIcons();
@@ -26,6 +27,7 @@ let game = null, paused = false, seed = '', runTicket = null, trace = [], last =
 let pressedLeft = false, pressedRight = false, dragging = false, dragX = 0, finishQueued = false, lastEvent = -1, online = false;
 let countdown = 0, countStep = -1, shownHealth = -1, shownPolice = -1, heliShown = false, driftPts = 0, driftShownAt = 0;
 let shownMult = 1, bestPassed = false, targetPassed = false, lastResult = null, lastSecond = -1;
+let mission = null, radioAt = -1e9, radioTimer = 0, radioSalt = 0, chainSaid = false, finalSaid = false, lastTicket = null;
 const audio = new AudioEngine();
 let reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const daySeed = () => `daily-${new Date().toISOString().slice(0, 10)}`;
@@ -46,7 +48,7 @@ const profile = loadProfile();
 const formatTime = (ms) => (ms / 1000).toFixed(2).padStart(5, '0');
 const fmt = (n) => Math.round(n).toLocaleString('en-US');
 const faNum = (n) => Number(n).toLocaleString('fa-IR');
-$('ver').textContent = `v2.0 · SIM ${SIM_VERSION}`;
+$('ver').textContent = `v2.3 · SIM ${SIM_VERSION}`;
 
 function applyPaint() { const p = paintById(profile.paint); render.setPaint(p.body, p.stripe); }
 applyPaint();
@@ -66,15 +68,51 @@ async function checkOnline() {
   try {
     const res = await api.today();
     online = !!res.seed;
-    els.online.textContent = '● رقابت آنلاین فعال';
+    els.online.textContent = '● رقابت آنلاین · تأیید روی لبه‌ی آروان';
     els.online.className = 'chip chip-status online';
+    if (res.mission?.objectives) setMission(res.mission);
   } catch {
     online = false;
     els.online.textContent = 'آفلاین · رکورد روی همین دستگاه';
     els.online.className = 'chip chip-status offline';
+    setMission(fallbackMission(daySeed().slice(6), daySeed()));
   }
 }
+/* ---------- AI special event + police radio ---------- */
+const eventKey = () => 'escape60-event-' + daySeed();
+function eventBest() { try { return JSON.parse(localStorage.getItem(eventKey()) || 'null'); } catch { return null; } }
+function goalChips(list) { return list.map((o) => `<span class="${o.done ? 'done' : ''}">${o.done ? '✓ ' : ''}${o.text || objectiveText(o)}</span>`).join(''); }
+function setMission(m) {
+  mission = m;
+  const ai = m.source === 'ai';
+  for (const id of ['ev-src', 'evd-src']) { $(id).textContent = ai ? 'AI' : 'BOT'; $(id).classList.toggle('fallback', !ai); $(id).title = ai ? `نوشته‌شده با ${m.model} روی AIaaS آروان` : 'نسخه‌ی آماده (هوش مصنوعی در دسترس نبود)'; }
+  $('ev-title').textContent = m.title; $('ev-brief').textContent = m.briefing;
+  $('evd-title').textContent = m.title; $('evd-brief').textContent = m.briefing;
+  renderEventGoals();
+  $('event-card').classList.remove('hidden'); $('ev-detail').classList.remove('hidden');
+}
+function renderEventGoals() {
+  if (!mission) return;
+  const best = eventBest();
+  const list = mission.objectives.map((o, i) => ({ ...o, text: objectiveText(o), done: !!best?.done?.[i] }));
+  $('ev-goals').innerHTML = goalChips(list);
+  $('evd-goals').innerHTML = list.map((o) => `<li class="${o.done ? 'done' : ''}"><span>${iconSVG(o.done ? 'check' : 'star')}</span><b>${o.text}</b><i><u style="width:${o.done ? 100 : 0}%"></u></i><small>${o.done ? 'انجام شد' : ''}</small></li>`).join('')
+    + `<li class="${best?.complete ? 'done' : ''}"><span>${iconSVG('trophy')}</span><b>همه در یک دور = نشان ★ در جدول</b><i><u style="width:${best?.complete ? 100 : 0}%"></u></i><small>${best?.complete ? '★' : ''}</small></li>`;
+}
+function radioSay(event, force = false) {
+  if (!mission || !game) return;
+  const t = performance.now();
+  if (!force && t - radioAt < 3800) return;
+  const line = pickRadio(mission, event, radioSalt++);
+  if (!line) return;
+  radioAt = t;
+  $('radio-text').textContent = line;
+  const box = $('radio'); box.classList.remove('hidden'); box.style.animation = 'none'; void box.offsetWidth; box.style.animation = '';
+  audio.radio();
+  clearTimeout(radioTimer); radioTimer = setTimeout(() => box.classList.add('hidden'), 3200);
+}
 checkOnline();
+$('event-card').addEventListener('click', () => { audio.play('click', { gain: 0.6 }); renderMissions(); $('missions').showModal(); });
 function updateMode() {
   seed = initialSeed;
   els.daily.textContent = sanitizedSeed ? 'چالش دوستانه · یک مسیر مشترک' : 'چالش امروز · مسیر مشترک برای همه';
@@ -98,6 +136,7 @@ function renderProfile() {
   $('missions-badge').classList.toggle('hidden', open === 0);
 }
 function renderMissions() {
+  renderEventGoals();
   $('mission-list').innerHTML = profile.missions.list.map((m) => {
     const info = missionInfo(m);
     const pct = Math.min(100, (100 * m.progress) / info.goal);
@@ -163,6 +202,7 @@ async function begin() {
   game = createGame(seed); trace = []; steer = 0; pressedLeft = false; pressedRight = false; paused = false;
   finishQueued = false; lastEvent = -1; runTicket = null; countdown = 1.8; countStep = -1;
   shownHealth = 100; trailHp = 100; trailHold = 0; shownPolice = -1; heliShown = false; driftPts = 0; shownMult = 1; lastSecond = -1;
+  radioAt = -1e9; chainSaid = false; finalSaid = false; lastTicket = null; $('radio').classList.add('hidden');
   const best = persisted[seed]?.timeMs;
   bestPassed = !best; targetPassed = !challenge || seed !== initialSeed;
   placeMark(els.markBest, best && best < 60000 ? best : 0);
@@ -181,7 +221,7 @@ function showCount(step) {
   countStep = step;
   els.countdown.classList.remove('hidden');
   if (step < 3) { els.countdown.innerHTML = `<b>${3 - step}</b>`; audio.play('beep', { gain: 0.8 }); }
-  else { els.countdown.innerHTML = '<b class="go">برو!</b>'; audio.play('go'); setTimeout(() => { if (countStep === 3) els.countdown.classList.add('hidden'); }, 650); }
+  else { els.countdown.innerHTML = '<b class="go">برو!</b>'; audio.play('go'); setTimeout(() => radioSay('start', true), 700); setTimeout(() => { if (countStep === 3) els.countdown.classList.add('hidden'); }, 650); }
 }
 function quantizeSteer() { const v = pressedLeft ? -1 : pressedRight ? 1 : steer; return Math.max(-3, Math.min(3, Math.round(v * 3))); }
 function updateHud() {
@@ -225,7 +265,13 @@ function finish() {
   els.resultStatus.innerHTML = result.win ? `<span>${iconSVG('check')}</span><b>فرار موفق!</b>` : `<span>${iconSVG('siren')}</span><b>دستگیر شدی</b>`;
   els.newBest.classList.toggle('hidden', !(newBest && prev));
   els.resultDetail.textContent = `بهترین زمان این مسیر: ${formatTime(persisted[seed].timeMs)} · سلامت: ${faNum(result.health)}٪ · برخورد: ${faNum(result.hits)} · جاخالی از راه‌بند: ${faNum(result.dodges)}`;
-  els.rank.textContent = runTicket ? 'در انتظار تأیید سرور…' : 'رکورد فقط روی این دستگاه ذخیره شد';
+  els.rank.textContent = runTicket ? 'در حال بازپخش و تأیید روی لبه‌ی آروان…' : 'رکورد فقط روی این دستگاه ذخیره شد';
+  if (result.win) radioSay('escaped', true); else radioSay('busted', true);
+  const isEvent = mission && seed === daySeed();
+  showMission(isEvent ? judgeMission(mission, result) : null, runTicket ? 'pending' : 'local');
+  $('coach').classList.toggle('hidden', !runTicket);
+  $('coach-btn').classList.remove('hidden'); $('coach-text').classList.add('hidden');
+  lastTicket = runTicket;
   // friend challenge outcome (target came from the link, so it is labelled unverified)
   if (challenge && seed === initialSeed) {
     const won = beats(result, challenge);
@@ -250,13 +296,26 @@ function finish() {
   setTimeout(() => { if (game?.state === 'ended') setView('results'); }, result.win ? 450 : 650);
   if (runTicket) {
     const finished = game;
-    api.finishRun(runTicket.runId, runTicket.token, encodeTrace(trace), result).then((r) => {
+    api.finishRun(runTicket.runId, runTicket.token, encodeTrace(trace), result, (pct) => { if (game === finished) els.rank.textContent = `بازپخش و تأیید روی لبه‌ی آروان… ${faNum(pct)}٪`; }).then((r) => {
       if (game !== finished) return;
-      els.rank.textContent = r.rank ? `رتبه تأییدشده در جدول این مسیر: #${r.rank}` : 'نتیجه ثبت شد';
-      return api.leaderboard(seed);
-    }).then((r) => { if (game === finished && r && r.entries?.length) els.rank.textContent += ` · ${r.entries.length} رکورد برتر`; })
-      .catch(() => { if (game === finished) els.rank.textContent = 'رکورد فقط روی این دستگاه ذخیره شد'; });
+      els.rank.textContent = r.rank ? `تأیید شد روی لبه: رتبه #${faNum(r.rank)} از ${faNum(r.of)} · نام رمز: ${r.label}` : 'نتیجه روی لبه تأیید و ثبت شد';
+      if (r.mission) { showMission(r.mission, 'verified'); rememberEvent(r.mission); }
+    }).catch(() => { if (game === finished) { els.rank.textContent = 'تأیید آنلاین انجام نشد · رکورد روی همین دستگاه ذخیره شد'; $('coach').classList.add('hidden'); } });
   }
+}
+function showMission(j, state) {
+  const box = $('result-mission');
+  if (!j) { box.classList.add('hidden'); return; }
+  box.classList.remove('hidden'); box.classList.toggle('complete', j.complete);
+  $('rm-title').textContent = mission.title;
+  $('rm-state').textContent = j.complete ? (state === 'verified' ? '★ کامل · تأیید لبه' : '★ کامل') : `${faNum(j.done)}/${faNum(j.list.length)}`;
+  $('rm-list').innerHTML = goalChips(j.list);
+  if (state === 'local') rememberEvent(j);
+}
+function rememberEvent(j) {
+  const prev = eventBest();
+  const next = { done: j.list.map((o, i) => o.done || !!prev?.done?.[i]), complete: j.complete || !!prev?.complete };
+  try { localStorage.setItem(eventKey(), JSON.stringify(next)); } catch {}
 }
 function tick() {
   if (!game || paused || game.state !== 'playing') return;
@@ -277,13 +336,15 @@ function tick() {
       audio.play('whoosh', { gain: 0.55, rate: 0.9 + Math.random() * 0.2 });
       if (m >= 2) audio.play('combo', { rate: 0.85 + 0.1 * m, gain: 0.6, delay: 0.05 });
       if (event.type === 'near' && Math.random() < 0.35) audio.play('horn', { delay: 0.12, gain: 0.5, rate: 0.9 + Math.random() * 0.25 });
+      if (m >= 3 && !chainSaid) { chainSaid = true; radioSay('chain', true); } else if (Math.random() < 0.3) radioSay('near');
       vibrate(m >= 3 ? 25 : 12);
     } else if (event.type === 'hit') {
       popup(`-${event.dmg}`, event.kind === 'police' ? 'ضربه پلیس!' : event.kind === 'roadblock' ? 'راه‌بند!' : 'تصادف!', 'bad');
       audio.play('crash', { gain: 0.5 + event.dmg / 60 }); audio.duckMusic(0.4, 500); vibrate(40 + event.dmg * 2);
       els.hurt.classList.remove('on'); void els.hurt.offsetWidth; els.hurt.classList.add('on');
-    } else if (event.type === 'roadblock') { banner('⚠ راه‌بند پلیس جلوتر — از کنارش جاخالی بده!'); for (let k = 0; k < 3; k++) audio.play('beep', { delay: k * 0.15, rate: 1.4 }); }
-    else if (event.type === 'police') { banner('🚨 پلیس تازه به تعقیب پیوست', true, 1200); }
+      chainSaid = false; radioSay('hit');
+    } else if (event.type === 'roadblock') { banner('⚠ راه‌بند پلیس جلوتر — از کنارش جاخالی بده!'); for (let k = 0; k < 3; k++) audio.play('beep', { delay: k * 0.15, rate: 1.4 }); radioSay('roadblock', true); }
+    else if (event.type === 'police') { banner('🚨 پلیس تازه به تعقیب پیوست', true, 1200); if (event.tick > 0) radioSay('police'); }
     else if (event.type === 'scrape') { audio.play('scrape', { gain: 0.6 }); vibrate(15); }
   }
   if (gained > 0 && !skillEvent) {
@@ -292,7 +353,8 @@ function tick() {
   }
   lastEvent = e.length - 1;
   const ms = (game.ticks * 1000) / TICK_RATE;
-  if (!heliShown && game.ticks >= 25 * TICK_RATE) { heliShown = true; banner('🚁 هلیکوپتر پلیس بالای سرت است!', true, 1500); }
+  if (!heliShown && game.ticks >= 25 * TICK_RATE) { heliShown = true; banner('🚁 هلیکوپتر پلیس بالای سرت است!', true, 1500); radioSay('heli', true); }
+  if (!finalSaid && game.ticks >= 50 * TICK_RATE) { finalSaid = true; radioSay('final', true); }
   if (!bestPassed && ms > persisted[seed].timeMs) { bestPassed = true; popup('رکورد شکست!', 'از بهترین زمانت جلو زدی', 'cyan'); audio.play('levelup'); }
   if (!targetPassed && ms > challenge.timeMs) { targetPassed = true; popup('از دوستت جلو زدی!', 'فقط زنده بمون', 'hot'); audio.play('levelup'); }
   const sec = Math.floor(ms / 1000);
@@ -375,13 +437,28 @@ button('board', async () => {
   try {
     const { entries } = await api.leaderboard(seed);
     list.innerHTML = own + (entries.length
-      ? entries.map((r, i) => `<div class="row"><span>#${i + 1}</span><span>${formatTime(r.timeMs)}s</span><span>${fmt(r.points)} ★</span></div>`).join('')
+      ? entries.map((r, i) => `<div class="row"><span>#${i + 1}</span><span class="who">${(r.label || '').replace(/[<>&"]/g, '')}${r.mission ? ' ★' : ''}</span><span>${formatTime(r.timeMs)}s</span><span>${fmt(r.points)}</span></div>`).join('') + '<p class="lb-note">★ = رویداد ویژه‌ی AI کامل شد · همه‌ی رکوردها با بازپخش روی لبه‌ی آروان تأیید شده‌اند</p>'
       : 'هنوز رکوردی برای این مسیر ثبت نشده است.');
   } catch {
     list.innerHTML = own + '<p>جدول آنلاین در دسترس نیست.</p>';
   }
 });
 button('close-board', () => $('records').close());
+button('coach-btn', async () => {
+  const t = lastTicket; if (!t) return;
+  const btn = $('coach-btn'), out = $('coach-text');
+  btn.disabled = true; btn.lastChild.textContent = 'مربی در حال تحلیل…';
+  try {
+    const r = await api.report(t.runId, t.token);
+    if (t !== lastTicket) return;
+    out.textContent = r.report;
+    const tag = document.createElement('small');
+    tag.textContent = r.source === 'ai' ? 'تحلیل هوش مصنوعی · AIaaS آروان (از آمار تأییدشده‌ی همین دور)' : 'تحلیل خودکار از آمار تأییدشده‌ی همین دور';
+    out.appendChild(tag);
+    out.classList.remove('hidden'); btn.classList.add('hidden');
+  } catch { btn.lastChild.textContent = 'تحلیل در دسترس نیست — دوباره تلاش کن'; }
+  finally { btn.disabled = false; }
+});
 button('home-button', () => { game = null; updateMode(); setView('home'); });
 button('play', begin);
 button('replay', begin);
@@ -404,12 +481,12 @@ async function buildCard() {
     url: shareMod.challengeUrl(seed, result), daily: seed.startsWith('daily-'),
   });
   $('share-preview').src = shareCanvas.toDataURL('image/jpeg', 0.85);
-  shareBlob = await shareMod.cardBlob(shareCanvas);
   $('share-hint').textContent = F.hint;
   const text = shareMod.shareText(result), url = shareMod.challengeUrl(seed, result);
   $('net-telegram').href = shareMod.networkLink('telegram', text, url);
   $('net-x').href = shareMod.networkLink('x', text, url);
   $('net-whatsapp').href = shareMod.networkLink('whatsapp', text, url);
+  shareBlob = await shareMod.cardBlob(shareCanvas);
 }
 button('share', async () => {
   if (!lastResult) return;

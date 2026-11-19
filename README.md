@@ -2,7 +2,7 @@
 
 **An original, fully playable, mobile-first 60-second arcade police chase game.** Built for ArvanCloud Edge Games. Sunset Bay is a 3D voxel / pixel-art tropical neon city built from original procedural models, rendered with a locally bundled Three.js r170 (MIT), HDR bloom and a pixel-art UI.
 
-**Status (2026-11-19):** browser game and local persistent replay-validated leaderboard implemented. Arvan Edge production deployment **not** performed and no live competition entry has been submitted. Online leaderboard requires an API origin; static-only deployment plays offline and displays local bests honestly.
+**Status (2026-11-19):** deployed on Arvan Edge Computing at **https://escape60.lavanai2525-3qem7.arvanedge.ir** (no separate server). The edge serves the game, issues signed run tickets and replay-verifies every run (full 60 s runs verified live, in signed chunks). The durable leaderboard (Arvan Object Storage) and the AIaaS mission/coach features switch on once the `S3_*` and `AI_API_KEY` edge variables are set; until then the edge falls back to in-memory storage and a deterministic mission. The competition entry has not been submitted yet. Edge architecture page: `/edge`.
 
 ## Run and play
 
@@ -30,7 +30,7 @@ The same 3D city renders the menu, race and finish. Each 520-unit simulation blo
 - **Camera:** close rear three-quarter chase (~9.4 up, 14 behind) with speed FOV, damping, steer roll and hit shake; buildings in front of the car dissolve. Off-screen police show as an edge arrow.
 - **Quality:** adaptive resolution / shadows / bloom; «گرافیک سبک» in settings; `?q=high` or `?q=low` pins a tier for benchmarks.
 
-The 1.4.0 simulation builds a real street network per seed (avenues every third street, T-junctions, dead ends, closed blocks that become parks, plazas, malls and car parks), drives traffic along it, adds patrols at 8, 18, 30, 42 and 52 seconds with roadblocks from 20 seconds, uses a 0–100 health bar where damage scales with how hard you hit (with slow regeneration), spawns traffic and police outside the visible range, and keeps the skill chain: near misses and roadblock dodges in quick succession multiply points up to ×5 (any hit resets it). Everything is verified by the same server replay. Downtown increases traffic frequency and highway driving has a higher speed cap. Local and server rankings use version-specific keys. The static bundle includes Three.js, the fonts (Rooyin Free, Jersey 10, Vazirmatn — SIL OFL) and their licenses, so gameplay needs no CDN requests.
+The simulation (1.5.0; 1.4.0 rules with engine-independent trig) builds a real street network per seed (avenues every third street, T-junctions, dead ends, closed blocks that become parks, plazas, malls and car parks), drives traffic along it, adds patrols at 8, 18, 30, 42 and 52 seconds with roadblocks from 20 seconds, uses a 0–100 health bar where damage scales with how hard you hit (with slow regeneration), spawns traffic and police outside the visible range, and keeps the skill chain: near misses and roadblock dodges in quick succession multiply points up to ×5 (any hit resets it). Everything is verified by the same server replay. Downtown increases traffic frequency and highway driving has a higher speed cap. Local and server rankings use version-specific keys. The static bundle includes Three.js, the fonts (Rooyin Free, Jersey 10, Vazirmatn — SIL OFL) and their licenses, so gameplay needs no CDN requests.
 
 Real 390×780 engine screenshots: [Menu](docs/screenshots/menu.png) · [Driving](docs/screenshots/coastal.png) · [High-pressure chase](docs/screenshots/pursuit.png) · [Results](docs/screenshots/results.png) · [Share sheet](docs/screenshots/share-sheet.png) · share cards [Story](docs/screenshots/share-story.jpg) / [Post](docs/screenshots/share-post.jpg) / [Wide](docs/screenshots/share-wide.jpg) · [Side by side with the concept references](docs/screenshots/comparison.jpg). Concept references live in `design/references/`; the remaining visual gaps are listed in `docs/25_VISUAL_QUALITY_AUDIT_FA.md`.
 
@@ -44,8 +44,11 @@ Real 390×780 engine screenshots: [Menu](docs/screenshots/menu.png) · [Driving]
 - **Keep-playing loop:** XP and levels, eight unlockable paint jobs in the garage, three daily missions, a day streak bonus, "new record" and friend-target markers on the timer, instant retry (Space / Enter).
 - **Share & challenge:** share sheet with real in-engine cards in three formats — Story 9:16 (Instagram / Telegram / WhatsApp status), Post 4:5 and Wide 16:9 (X / Telegram) — each with the run's real numbers and a QR code. Native share sends the image on phones; direct Telegram, X and WhatsApp links; download; copy link. Challenge links carry the seed and the friend's target (`?seed=…&c=time.points`), which the game shows as an unverified target and compares at the end.
 - Daily UTC seed and portable challenge URL, local best persistence, Open Graph / Twitter card meta.
-- Node HTTP API with no dependencies, disk-backed leaderboard, session tokens, simple in-memory throttling, and server-authoritative replay of quantized steering trace. No personal registration needed.
-- Edge Service-Worker-style proxy adapter with daily challenge at Edge and validation gates (not deployed/tested on Arvan runtime).
+- **Arvan Edge game service** (`edge/app.mjs`): daily challenge, HMAC run tickets, authoritative 60 Hz replay of the steering trace *on the edge* (chunked with signed checkpoints to fit the per-request CPU budget), single-use runs, leaderboard and daily stats in Arvan Object Storage via a WebCrypto SigV4 client, call-sign labels instead of names, no personal data.
+- **AI Special Event (Arvan AIaaS, DeepSeek-V4-Flash):** once per UTC day the edge asks the model for a title, briefing, three objectives from a whitelist (goals clamped) and police-radio lines; output is schema-validated and frozen in storage with a conditional write so every player and every edge node gets the same event. Objectives are judged from the replayed result (★ in the leaderboard). Deterministic fallback when the model is unavailable.
+- **AI police radio** in the HUD (model-written lines triggered by real game events, synthesized squelch) and an **AI coach report** for verified runs (cached, daily budget).
+- Deterministic math (`web/src/dmath.js`): Arvan's runtime, Safari and Firefox return different last bits for `Math.sin/cos/pow` than Chrome/Node, so the simulation uses its own IEEE-exact trig.
+- Local dev server (`server/server.mjs`) runs the same edge app with a disk store.
 - Tests, CI, operational guide, pre-existing GDD and design rationale.
 
 ## Project layout
@@ -63,22 +66,23 @@ web/src/audio.js        music streaming, SFX buffers, engine/siren/squeal/heli m
 web/src/meta.js         XP, levels, paints, daily missions, streak, friend-challenge parsing
 web/src/share.js        social share cards (story/post/wide) with QR, native share and network links
 web/assets/             logo, OFL fonts, licensed audio (see assets/audio/CREDITS.md)
-server/server.mjs       Node origin API, persisted leaderboards and replay validation
-edge/worker.js          provisional Arvan Edge API adapter
+web/src/mission.js      AI special event: whitelist, validation, judging, radio lines, fallback
+web/src/dmath.js        engine-independent sin/cos/atan2/hypot for deterministic replay
+web/edge.html           /edge — live architecture and stats page for judges
+edge/app.mjs            game service (tickets, chunked replay, leaderboard, AI) — runs on Arvan Edge
+edge/s3.mjs             Arvan Object Storage client (SigV4 on WebCrypto) + memory store
+edge/worker.js          Arvan Edge entry: API + static proxy to the public bucket
+server/server.mjs       local dev server running the same edge app with a disk store
 scripts/                build, syntax check, browser smoke test, screenshot capture, comparison sheet
 design/references/      concept art-direction references (not shipped)
 docs/                   full design, rules, architecture, research and backlog
 ```
 
-## Production deployment
+## Production deployment (Arvan, as deployed)
 
-1. Host files from `dist/` on a static HTTPS site supported by Arvan. Verify `/src/main.js` loads as a module and SPA route fallback is not required.
-2. Deploy `server/server.mjs` on **persistent Node hosting** for leaderboards, configure `ESCAPE60_SECRET` and persistent `server/data/` volume. `PORT` defaults to `4173`.
-3. If routing API via an Arvan Edge function, inspect actual Arvan-supported runtime and configure upstream/edge key using **server-side** environment or build-time injection, not browser JS. `edge/worker.js` is an adapter requiring provider validation. Route `/api/v1/*` to the worker and protect the Node origin with `REQUIRE_EDGE_AUTH=1` and `ESCAPE60_EDGE_KEY`.
-4. If static and API origins are separate, set `globalThis.ESCAPE60_API_BASE` in HTML **before** the `main.js` import, and configure appropriately scoped CORS on the API. Same-origin routing is preferred.
-5. Test actual public URL, no-secret exposure, rate and quota alarms, restart behavior and validity of score acceptance on mobile. Submit only once official rules are confirmed.
+See `docs/22_DEPLOYMENT.md`. In short: `npm run check && npm run build`, upload every file in `dist/web/` to the public bucket `escape60-game`, paste `dist/edge/worker.js` into the `escape60` edge compute, and set the edge variables `S3_ACCESS_KEY`, `S3_SECRET_KEY` (private bucket `escape60-data`) and `AI_API_KEY` (AIaaS machine user). Values are JSON, so strings need double quotes.
 
-**Limitations:** score authenticity is deterministic replay, not tamperproof against automated clients. Rate limiting is in-memory and IP-level; edge per-isolate checks are not globally authoritative. API server needs durable storage and HTTPS. No real user telemetry or ranking is invented.
+**Limitations:** deterministic replay proves a run is *possible*, not that a human played it (a bot could still submit a perfect trace). Rate limiting is per edge isolate. Real-device FPS and an audible mix check are still outstanding.
 
 ## Competition and research
 

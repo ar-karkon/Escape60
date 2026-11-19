@@ -44,6 +44,9 @@ const ICONS = {
   combo: ["cc......cc", ".cc....cc.", "..cc..cc..", "...cccc...", "....cc....", "...cccc...", "..cc..cc..", ".cc....cc.", "cc......cc"],
   lock: ["..kkkk..", ".k....k.", ".k....k.", "ssssssss", "sssnnsss", "sssnnsss", "ssssssss"],
   dice: ["wwwwwwww", "wkwwwwww", "wwwwwwww", "wwwkkwww", "wwwkkwww", "wwwwwwww", "wwwwwwkw", "wwwwwwww"],
+  radio: [".......s..", "......s...", ".....s....", "kkkkkkkkkk", "knnnnnnnnk", "kn.ww.cc.k", "kn.ww.cc.k", "knnnnnnnnk", "kkkkkkkkkk"],
+  spark: ["....y.....", "....y.....", "...yyy....", "yyyyyyyyy.", "...yyy..c.", "....y..ccc", "....y...c."],
+  coach: ["..wwww..", ".wwwwww.", ".wkwwkw.", ".wwwwww.", "..wppw..", "...ww...", ".cccccc.", "cccccccc"],
 };
 
 export function iconSVG(name, mirror = false) {
