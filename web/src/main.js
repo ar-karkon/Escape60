@@ -14,7 +14,7 @@ import { createThreats } from './ui/threats.js';
 import { pickRadio, fillRadio, contractText, targetText, fallbackChief } from './director.js';
 
 const $ = (id) => document.getElementById(id);
-const VERSION = 'v3.5';
+const VERSION = 'v3.5.1';
 /** Seconds of aerial intro + countdown before you get control (skippable with any input). */
 const INTRO = 4.8;
 hydrateIcons();
@@ -654,7 +654,7 @@ function frame(now) {
   const mode = view === 'garage' ? 'garage' : view === 'game' || view === 'results' ? 'game' : 'menu';
   render.frame(view === 'game' || view === 'results' ? game : null, now, { mode, alpha: acc * TICK_RATE, countdown: Math.max(0, countdown), introTotal: INTRO, reduced: settings.motion, shakeOn: settings.shake, ghost: gp });
   placeGhostTag(gp);
-  threats.draw(game, now, { active: view === 'game' && !paused, reduced: settings.motion, tail: t('copBehind'), you: t('you') });
+  threats.draw(game, now, { active: view === 'game' && !paused, reduced: settings.motion, tail: t('copBehind'), you: t('you'), radio: !$('radio').classList.contains('hidden') });
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);

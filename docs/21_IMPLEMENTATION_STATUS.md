@@ -1,10 +1,13 @@
 # Build progress (2026-11-19)
 
-## v3.0 (current)
-- `web/src/map.js` map v2 (curved road graph + distance field + pit stops), `web/src/simulation.js` SIM 2.0.0 (drift, nitro, brake, handbrake, 14 cars, damage limp, 3 repairs, wreck, busted, takedowns, milestone + overtime), `web/src/cars.js`.
-- `web/src/render.js` + `web/src/gfx/` rebuilt (stylised PBR city, procedural cars, effects, camera director, post); `web/index.html` / `style.css` / `main.js` new racing UI, garage, English + Persian.
-- `edge/app.mjs` API 3.0.0 without AI; `tests/` 14 Node tests; `scripts/browser-smoke.cjs` passes a real verified run; `npm run capture` real screenshots.
-- Not verified: real-device FPS, audio mix by ear, Safari, live redeploy of v3.0.
+## v3.5.1 (current — SIM 2.2.0, API 4.1.0)
+- `web/src/map.js` map v2: curved road graph + distance field + pit stops, 50 start positions (`SPAWNS`), ten districts (`district()`, also used by the rules).
+- `web/src/simulation.js` SIM 2.2.0: start index per run, drift, nitro, brake, handbrake, 14 cars, damage limp, 3 repairs, wreck, busted, takedowns, milestone + overtime, daily rules from `web/src/rules.js` (contracts + police tactics).
+- `web/src/render.js` + `web/src/gfx/`: stylised PBR city with per-district architecture, paving, props, gates and landmarks; camera director with aerial intro, pursuit framing and cop reveal; ghost rival; effects; post. `web/src/ui/threats.js` pursuit overlay; `web/src/ui/minimap.js`.
+- `web/src/main.js` / `index.html` / `style.css`: racing HUD, district cards, live-rank and rival chips, police radio, contracts, crew chief, garage, results, English + Persian.
+- `edge/` game service = edge referee (API 4.1.0): tickets (seed + car + start + rules), live referee, final replay, leaderboard, ghost rival, PNG cards and `/r/<id>` previews, telemetry for `/edge`, Brotli/gzip static, AIaaS director (`edge/ai.mjs`) with handwritten fallbacks.
+- Tests: 31 Node tests (`npm test`); `scripts/browser-smoke.cjs` plays a real run verified live and finally (dev server and built worker); `npm run capture` real screenshots.
+- Not verified: real-device FPS, audio mix by ear, Safari, the live redeploy of v3.x on Arvan, prompts against the live model.
 
 ## Earlier versions (history)
 

@@ -1,8 +1,14 @@
-# Deployment runbook — Escape60 on Arvan (v3.5: SIM 2.2.0 · API 4.1.0)
+# Deployment runbook — Escape60 on Arvan (v3.5.1: SIM 2.2.0 · API 4.1.0)
 
 Live URL: **https://escape60.lavanai2525-3qem7.arvanedge.ir** — still serving v2.3 until this version is deployed with `npm run deploy`. What runs where is explained for judges in [TECHNOLOGY.md](TECHNOLOGY.md); the API is in [06_EDGE_SPEC.md](06_EDGE_SPEC.md).
 
 ## راهنمای سریع به‌روزرسانی سرور (از کامپیوتر خودتان)
+۰. **پیش از دیپلوی — تست روی کامپیوتر خودتان (۵ دقیقه، توصیه می‌شود):**
+   - `git pull` و بعد `npm ci` (دقیقاً همان نسخه‌ی ابزارهای قفل‌شده).
+   - `npm run check` ← باید «۳۱ تست پاس» و `Syntax OK` ببینید.
+   - `npm run build && npm run edge:local` ← همان فایل Edge که آپلود می‌شود روی http://localhost:4174 اجرا می‌شود. در مرورگر بازش کنید و یک دور بازی کنید (چک‌لیست «بعد از دیپلوی» پایین را همین‌جا هم می‌شود دید).
+   - اختیاری، تست خودکار مرورگر: در ترمینال دوم `GAME_URL=http://localhost:4174 npm run test:browser`. این تست به کروم نیاز دارد: اگر پیدا نکرد، مسیرش را بدهید، مثلاً ویندوز `set CHROME_BIN=C:\Program Files\Google\Chrome\Application\chrome.exe` و مک `CHROME_BIN="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"`. آخرش باید `smoke OK` بنویسد. (در ویندوز متغیرها را جدا بدهید: `set GAME_URL=http://localhost:4174` و بعد `npm run test:browser`.)
+   - **پشتیبان برای برگشت:** قبل از دیپلوی، در پنل Edge ← `escape60` ← ویرایش کد، کل کد فعلی را در یک فایل (مثلاً `edge-backup.js`) ذخیره کنید، و صفحه‌ی فعلی را هم نگه دارید: `curl -o index-backup.html https://escape60.lavanai2525-3qem7.arvanedge.ir/` (پایین «برگشت به نسخه‌ی قبل» را ببینید).
 ۱. **یک بار:** Node.js نسخه‌ی ۲۰ یا بالاتر نصب باشد. ریپو را بگیرید: `git clone https://github.com/ar-karkon/Escape60.git` (اگر قبلاً دارید: `git pull`) و داخل پوشه `npm install` بزنید.
 ۲. **متغیرهای Edge را چک کنید** (پنل آروان ← Edge Computing ← `escape60` ← تنظیمات ← متغیرها، تیک «رمزنگاری‌شده»). مقدار متغیرها JSON است، پس رشته را **داخل گیومه‌ی انگلیسی** بنویسید، مثل `"apikey abc123"`:
    - `S3_ACCESS_KEY` و `S3_SECRET_KEY` — کلید Object Storage (از قبل باید باشند).
@@ -11,7 +17,20 @@ Live URL: **https://escape60.lavanai2525-3qem7.arvanedge.ir** — still serving 
 ۳. در پوشه‌ی پروژه بزنید: `npm run deploy` و کلیدهای Object Storage را وقتی پرسید وارد کنید (نمایش داده و ذخیره نمی‌شوند). اسکریپت تست می‌کند، می‌سازد و فایل‌های تغییرکرده را آپلود می‌کند.
 ۴. وقتی اسکریپت منتظر ماند: پنل ← Edge Computing ← `escape60` ← **ویرایش کد** ← همه‌ی کد را پاک کنید و محتوای کلیپ‌بورد را (همان `dist/edge/worker.js`) بچسبانید ← **انتشار** ← در ترمینال Enter بزنید.
 ۵. اسکریپت خودش بررسی می‌کند: نسخه‌ی API ‏`4.1.0` و شبیه‌ساز `2.2.0`، ذخیره‌سازی `arvan-object-storage`، فشرده‌سازی Brotli، صفحه‌ی `/edge`، اتصال AIaaS و منبع گزارش امروز (`ai`). اگر چیزی قرمز شد خروجی را بفرستید.
-۶. (اختیاری) تست کامل با مرورگر: `GAME_URL=https://escape60.lavanai2525-3qem7.arvanedge.ir npm run test:browser`
+۶. (اختیاری) تست کامل با مرورگر: `GAME_URL=https://escape60.lavanai2525-3qem7.arvanedge.ir npm run test:browser` (با `CHROME_BIN` مثل مرحله‌ی ۰).
+۷. **چک‌لیست بعد از دیپلوی — در گوشی آدرس بازی را باز کنید و ببینید:**
+   - صفحه‌ی اول: کارت **TODAY** (گزارش امروز شهر) و وضعیت «جدول جهانی آنلاین است».
+   - شروع دور: نمای هوایی از بالای شهر که تا پشت ماشین شیرجه می‌زند، کارت اسم محله (مثلاً «شهر قدیم») و نشانگر طلایی «تو»؛ هر دور از یک جای دیگر شهر شروع می‌شود؛ تماس مرکز پلیس در بی‌سیم.
+   - حین تعقیب: فلش‌های قرمز/آبی دور ماشین با فاصله برای پلیس‌های بیرون از کادر، نور آژیر از لبه‌ی صفحه، علامت بالای پلیس‌های دیده‌شده، «پلیس پشت سرته!» و دوربینی که عقب می‌رود تا پلیس پشت سرت دیده شود؛ یک بار نمای سینمایی آهسته وقتی پلیس قفل می‌کند.
+   - تراشه‌ی **LIVE** با رتبه‌ی زنده زیر نقشه، رقیب شبح (بعد از اولین رکورد تأییدشده)، پیام‌های بی‌سیم و قراردادها.
+   - محله‌ها واقعاً فرق دارند: نئون، آجری، سنگفرش و ریسه‌ی لامپ، هتل‌های پاستلی، انبارها، ویلاها، شهرک فناوری با دروازه‌ی اسم.
+   - پایان: «رتبه‌ی جهانی #…»، گزارش سرمکانیک و لینک اشتراک `/r/…`.
+   - نکته: جدول رکوردها برای هر نسخه‌ی شبیه‌ساز جداست، پس جدول SIM 2.2.0 خالی شروع می‌شود؛ بازیکنی که صفحه‌ی قدیمی را باز نگه داشته پیام «بازی به‌روز شده — دوباره بارگذاری کنید» می‌گیرد.
+
+### برگشت به نسخه‌ی قبل (اگر چیزی خراب شد)
+۱. پنل Edge ← `escape60` ← ویرایش کد ← محتوای `edge-backup.js` را بچسبانید ← انتشار.
+۲. `index-backup.html` را با نام `index.html` در باکت `escape60-game` آپلود کنید (دسترسی عمومی روشن). فایل‌های جدید با نام هش‌دار به نسخه‌ی قبلی آسیبی نمی‌زنند و می‌توانند بمانند.
+۳. چند دقیقه بعد آدرس بازی را تازه کنید (کش HTML روی Edge حدود ۳۰ ثانیه است).
 
 ## Architecture on Arvan
 There is no separate server. One Arvan Edge Compute (`escape60`) serves the whole game:
@@ -65,6 +84,8 @@ What it does (`scripts/deploy-arvan.mjs`, signing in `scripts/sigv4.mjs`, checke
 Flags: `--skip-build`, `--skip-tests`, `--force` (upload everything), `--no-wait`. Env overrides: `S3_ENDPOINT`, `S3_REGION`, `STATIC_BUCKET`, `STATIC_ORIGIN`, `GAME_URL`. The edge code itself is replaced in the panel because no Edge Compute code API is documented/verified here.
 
 Rehearsed (2026-11-19) against a local fake S3 + edge that re-verifies every signature. Not yet run against the real Arvan endpoints (the cloud build session could not reach Arvan hosts).
+
+Release 3.5.1 was checked in the cloud session before handing over: `npm run check` (31 tests), `npm run build`, and the browser smoke test (a real autopiloted run verified live and finally, share card, rival) against both `npm start` and the built worker via `npm run edge:local`. The live Arvan steps above were not run from there.
 
 ## After deploying: what to check
 | Check | Expected |

@@ -63,7 +63,8 @@ export function createThreats(canvas, render) {
   }
 
   return {
-    draw(game, now, { active = true, reduced = false, tail = "COP ON YOUR TAIL", you = "YOU" } = {}) {
+    /** `radio`: a police-radio line is showing above the touch controls (portrait); keep clear of it. */
+    draw(game, now, { active = true, reduced = false, tail = "COP ON YOUR TAIL", you = "YOU", radio = false } = {}) {
       resize();
       if (!W) return;
       if (!clear) { ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, W, H); clear = true; }
@@ -101,7 +102,8 @@ export function createThreats(canvas, render) {
       cops.sort((a, b) => a.d - b.d);
       const ax = Math.cos(view.a), az = Math.sin(view.a);
       let glows = 0, tailCop = null;
-      const top = 150 * dpr, bottom = H - 178 * dpr, side = 62 * dpr;
+      const portrait = H > W;
+      const top = 150 * dpr, bottom = H - (portrait ? 198 : 178) * dpr, side = 62 * dpr;
       const rx = Math.min(W * 0.34, 190 * dpr), ry = Math.min(H * 0.21, 170 * dpr);
       ctx.save();
       for (let i = 0; i < cops.length && i < 6; i++) {
@@ -146,7 +148,7 @@ export function createThreats(canvas, render) {
       }
       ctx.restore();
       // ---- tail warning ----
-      if (tailCop) {
+      if (tailCop && !(radio && portrait)) {
         const on = !blinkOn || Math.floor(now / 230) % 2 === 0;
         const y = H - 138 * dpr;
         const text = `!! ${tail} !!`;

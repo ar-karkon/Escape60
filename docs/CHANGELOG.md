@@ -1,5 +1,10 @@
 # Changelog
 
+## 3.5.1 — integration check of 3.3 + 3.4 + 3.5 — 2026-11-19
+- Verified together on the merged code: pursuit overlay, pursuit camera and cop reveal, random starts, aerial intro and district cards, the ten districts, live referee, ghost rival, edge cards, daily briefing contracts, police radio, dispatcher call and crew chief. 31 Node tests; browser smoke test (a real autopiloted run verified live and finally) against the dev server and against the built edge worker (`npm run edge:local`).
+- Portrait: the pursuit overlay keeps clear of the police-radio line above the touch controls (bottom arrows sit higher; the tail warning gives way while a radio line is showing).
+- Docs: decision log IDs de-duplicated (edge referee is D38), D39 notes that `district()` is now part of the rules; status, implementation status and the deployment runbook are current for this release (no simulation or API change: SIM 2.2.0, API 4.1.0).
+
 ## 3.5 — city briefing, police radio, crew chief (SIM 2.2.0, API 4.1.0) — 2026-11-19
 - **Daily city briefing**: once a day a language model on Arvan AIaaS (DeepSeek-V4-Flash) writes the theme, a briefing, three **contracts** with point rewards and the **police tactics** of the day (heat pace, patrol rate, interceptors, roadblocks, spike strips, traffic). The simulation plays by these bounded rules (`web/src/rules.js`), the edge freezes them for everyone and signs them into every daily ticket. Home card **TODAY**, contract popups, progress in the pause menu and on the results screen.
 - **Police radio**: a daily bank of dispatcher lines in English and Persian reacts to the chase (heat, roadblocks, takedowns, near misses, pit stops, contracts, busted…), with the current district and your car filled in.
