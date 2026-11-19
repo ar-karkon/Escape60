@@ -246,7 +246,11 @@ export function createApp({ env = {}, store, now = () => Date.now(), log = () =>
       if (doc && doc.seed === seed) { metrics.add('rivals'); return json({ rival: { id: doc.id, rank: doc.rank, of: doc.of, label: doc.label, car: doc.car, points: doc.result.points, timeMs: doc.result.timeMs, end: doc.result.end, trace: doc.trace, friend: true } }, 200, { 'Cache-Control': 'public, max-age=300' }); }
     }
     const rows = all.filter((e) => e.g && e.id !== not);
-    if (!rows.length) return json({ rival: null }, 200, { 'Cache-Control': 'public, max-age=10' });
+    if (!rows.length) { // nobody else yet: race your own best run
+      const own = idValid(not) ? await runDoc(not) : null;
+      if (own && own.seed === seed) { metrics.add('rivals'); return json({ rival: { id: own.id, rank: own.rank, of: own.of, label: own.label, car: own.car, points: own.result.points, timeMs: own.result.timeMs, end: own.result.end, trace: own.trace, self: true } }); }
+      return json({ rival: null }, 200, { 'Cache-Control': 'public, max-age=10' });
+    }
     let pick;
     if (Number.isFinite(mine)) { const above = rows.filter((e) => e.points > mine); pick = above.length ? above[above.length - 1] : rows[0]; }
     else pick = rows[Math.min(rows.length - 1, Math.floor(rows.length / 2))];

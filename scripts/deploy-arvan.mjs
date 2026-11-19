@@ -9,6 +9,7 @@
    The Object Storage keys come from S3_ACCESS_KEY / S3_SECRET_KEY or are asked for (hidden input).
    They are used for this run only and never written to disk.
    Optional env: S3_ENDPOINT, S3_REGION, STATIC_BUCKET, STATIC_ORIGIN, GAME_URL.
+   Uploads every flat file of dist/web, including edge.html and the .br / .gz copies.
 
    Order matters: every new file is uploaded first (new hashed names do not disturb the live game),
    then the edge worker is replaced in the Arvan panel, and only then index.html switches players
@@ -29,7 +30,7 @@ const REGION = process.env.S3_REGION || 'ir-central1';
 const BUCKET = process.env.STATIC_BUCKET || 'escape60-game';
 const STATIC_ORIGIN = (process.env.STATIC_ORIGIN || `https://${BUCKET}.s3.${REGION}.arvanstorage.ir`).replace(/\/$/, '');
 const GAME_URL = (process.env.GAME_URL || 'https://escape60.lavanai2525-3qem7.arvanedge.ir').replace(/\/$/, '');
-const TYPES = { html: 'text/html; charset=utf-8', js: 'text/javascript; charset=utf-8', css: 'text/css; charset=utf-8', svg: 'image/svg+xml', json: 'application/json', woff2: 'font/woff2', png: 'image/png', jpg: 'image/jpeg', mp3: 'audio/mpeg', wav: 'audio/wav', md: 'text/plain; charset=utf-8', txt: 'text/plain; charset=utf-8', LICENSE: 'text/plain; charset=utf-8', webmanifest: 'application/manifest+json' };
+const TYPES = { br: 'application/octet-stream', gz: 'application/octet-stream', html: 'text/html; charset=utf-8', js: 'text/javascript; charset=utf-8', css: 'text/css; charset=utf-8', svg: 'image/svg+xml', json: 'application/json', woff2: 'font/woff2', png: 'image/png', jpg: 'image/jpeg', mp3: 'audio/mpeg', wav: 'audio/wav', md: 'text/plain; charset=utf-8', txt: 'text/plain; charset=utf-8', LICENSE: 'text/plain; charset=utf-8', webmanifest: 'application/manifest+json' };
 
 const c = { dim: (s) => `\x1b[2m${s}\x1b[0m`, ok: (s) => `\x1b[32m${s}\x1b[0m`, warn: (s) => `\x1b[33m${s}\x1b[0m`, bad: (s) => `\x1b[31m${s}\x1b[0m`, b: (s) => `\x1b[1m${s}\x1b[0m` };
 const step = (s) => console.log('\n' + c.b('▶ ' + s));
@@ -178,5 +179,18 @@ const after = await health();
 const apiOk = after.api === API_VERSION && after.version === SIM_VERSION;
 console.log(apiOk ? c.ok(`  ✔ API ${after.api} · sim ${after.version} · storage ${after.storage} · secured ${after.secured}`) : c.bad(`  ✖ API reports ${JSON.stringify(after)} — publish dist/edge/worker.js in the panel`));
 if (apiOk && after.storage !== 'arvan-object-storage') console.log(c.warn('  ! Leaderboard is in memory: set S3_ACCESS_KEY / S3_SECRET_KEY as encrypted edge variables.'));
-process.exitCode = live && apiOk ? 0 : 2;
-console.log('\n' + (live && apiOk ? c.ok(c.b('Done. Optional full check: GAME_URL=' + GAME_URL + ' npm run test:browser')) : c.warn(c.b('Finished with warnings (see above).'))));
+// Precompressed delivery: the bundle must decode to exactly the bytes we built (fetch decodes br/gzip).
+let packed = false;
+try {
+  const res = await fetch(`${GAME_URL}/${appName}`, { headers: { 'accept-encoding': 'br, gzip' } });
+  const enc = res.headers.get('content-encoding') || 'identity', got = Buffer.from(await res.arrayBuffer());
+  const local = files.find((f) => f.name === appName).body;
+  packed = res.ok && got.equals(local);
+  console.log(packed ? c.ok(`  ✔ ${appName} arrives as ${enc} and decodes byte-for-byte`) : c.bad(`  ✖ ${appName} (${enc}) does not match the build — set the edge variable PRECOMPRESSED to false and re-check`));
+} catch (e) { console.log(c.bad(`  ✖ bundle check failed: ${e.message}`)); }
+try {
+  const [page, edge] = await Promise.all([fetch(`${GAME_URL}/edge`), fetch(`${GAME_URL}/api/v1/edge`).then((r) => r.json())]);
+  console.log(page.ok && edge.features ? c.ok(`  ✔ /edge dashboard up · referee features: ${edge.features.join(', ')}`) : c.warn(`  … /edge → ${page.status}`));
+} catch (e) { console.log(c.warn(`  … /edge check failed: ${e.message}`)); }
+process.exitCode = live && apiOk && packed ? 0 : 2;
+console.log('\n' + (live && apiOk && packed ? c.ok(c.b('Done. Optional full check: GAME_URL=' + GAME_URL + ' npm run test:browser')) : c.warn(c.b('Finished with warnings (see above).'))));

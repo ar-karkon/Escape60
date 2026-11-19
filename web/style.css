@@ -683,8 +683,9 @@ body.no-touch .vbar { bottom: auto; }
 .rival-chip { --edge: var(--violet); grid-template-columns: 22px 1fr auto; grid-template-rows: auto auto; row-gap: 1px; }
 .rival-chip .rv-ico { grid-row: 1 / 3; width: 22px; height: 13px; }
 .rival-chip small { font: 400 12px/1 var(--px); letter-spacing: 1px; color: var(--cyan); white-space: nowrap; }
-.rival-chip .rv-name { grid-column: 2; color: var(--muted); font-size: 11px; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
-.rival-chip b { grid-column: 3; grid-row: 1 / 3; font: 400 22px/0.9 var(--px); color: #5dffb0; text-shadow: 2px 2px 0 var(--ink); }
+.rival-chip .rv-name { grid-column: 2 / 4; color: var(--muted); font-size: 11px; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.rival-chip b { grid-column: 3; grid-row: 1; font: 400 20px/0.9 var(--px); color: #5dffb0; text-shadow: 2px 2px 0 var(--ink); }
+.rival-chip b.long { font-size: 16px; }
 .rival-chip.behind b { color: var(--pink); }
 .rival-chip.beaten { --edge: var(--gold); }
 .rival-chip.beaten b { color: var(--gold); }

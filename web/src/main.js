@@ -47,7 +47,7 @@ let live = null, ghost = null, lastShareUrl = null; // edge referee state, rival
 const persisted = (() => { try { return JSON.parse(localStorage.getItem('escape60-bests-' + SIM_VERSION) || '{}'); } catch { return {}; } })();
 const input = { left: false, right: false, tl: false, tr: false, brake: false, nitroLatch: false, kb: { brake: false, hand: false, nitro: false }, pad: { x: 0, brake: false, hand: false, nitro: false } };
 if (qs.has('capture')) window.__escape60 = { render, freeze: (v) => { frozen = !!v; }, state: () => game && { ticks: game.ticks, state: game.state, hp: game.health, repairs: game.repairs, points: game.points, end: game.end, view }, info: () => render.info(), input,
-  map: { sample, pointAt, edges, stations }, game: () => game, override: null,
+  map: { sample, pointAt, edges, stations }, game: () => game, override: null, ghost: () => ghostPose(), live: () => live && { rank: live.rank, checks: !!live.checkpoint },
   /** run n simulation ticks immediately (test tooling) */ fast(n) { countdown = 0; for (let i = 0; i < n && game?.state === 'playing'; i++) tick(); updateHud(0); } };
 $('ver').textContent = `${VERSION} · SIM ${SIM_VERSION}`;
 
@@ -220,7 +220,8 @@ function updateHud(dt) {
   shownMult = mult;
   if (ghost) {
     const target = ghost.out ? ghost.info.points : ghost.game.points, d = game.points - target;
-    $('rival-delta').textContent = (d >= 0 ? '+' : '−') + fmtN(Math.abs(d));
+    const dt2 = (d >= 0 ? '+' : '−') + fmtN(Math.abs(d)), db = $('rival-delta');
+    db.textContent = dt2; db.classList.toggle('long', dt2.length > 6);
     $('rival').classList.toggle('behind', d < 0);
     $('rival-tag').textContent = `${ghost.out ? t('rivalTarget') : t('rivalTag')} #${ghost.info.rank}`;
   }
@@ -256,7 +257,7 @@ function renderLive(state, standing) {
     $('live-rank').textContent = txt; el.classList.remove('pump'); void el.offsetWidth; el.classList.add('pump');
   }
   live.rank = standing.rank;
-  $('live-of').textContent = standing.rank ? `/${standing.of}` : '';
+  $('live-of').textContent = standing.rank ? `/${Math.max(standing.of, standing.rank)}` : '';
 }
 /** Send the inputs so far; the edge replays the new ticks and answers with its own score and rank. */
 function sendLive() {
@@ -278,8 +279,8 @@ function sendLive() {
 function setGhost(rv) {
   ghost = { info: rv, game: createGame(seed, { car: rv.car }), item: 0, used: 0, out: false, beaten: false, endTick: 0 };
   render.setGhost(rv.car);
-  $('ghost-name').textContent = `${rv.label} · #${rv.rank}`;
-  $('rival-name').textContent = rv.label;
+  $('ghost-name').textContent = rv.self ? t('rivalSelf') : `${rv.label} · #${rv.rank}`;
+  $('rival-name').textContent = rv.self ? t('rivalSelf') : rv.label;
   $('rival-tag').textContent = `${t('rivalTag')} #${rv.rank}`;
   $('rival').classList.remove('hidden', 'beaten', 'behind');
   ghostAdvance(); // catches up if the rival arrived after the start
@@ -450,7 +451,7 @@ function finish() {
   if (ghost) {
     const won = r.points > ghost.info.points, el = $('res-rival');
     el.classList.remove('hidden'); el.classList.toggle('won', won);
-    const who = { name: ghost.info.label, rank: num(ghost.info.rank), n: num(ghost.info.points - r.points) };
+    const who = { name: ghost.info.self ? t('rivalSelf') : ghost.info.label, rank: num(ghost.info.rank), n: num(ghost.info.points - r.points) };
     $('res-rival-text').textContent = t(won ? 'rivalWon' : r.points === ghost.info.points ? 'rivalTie' : 'rivalAhead', who);
   } else $('res-rival').classList.add('hidden');
   lastShareUrl = null;

@@ -45,6 +45,8 @@ export function drawCard({ label, carName, carPaint = 0xff873c, result, rank, of
   p.rect(cx, cy + 8, 58, 1, CREAM); p.rect(cx + 55, cy + 5, 3, 2, GOLD); p.rect(cx, cy + 5, 2, 2, HOT);
   for (const wx of [cx + 12, cx + 46]) { p.disc(wx, cy + 13, 5, INK); p.disc(wx, cy + 13, 2, GRAY); }
   for (let i = 0; i < 4; i++) p.rect(cx - 30 + i * 6, cy + 6 + (i % 2) * 3, 4 - (i % 2), 1, CYAN); // speed lines
+  const car = String(carName).slice(0, 16);
+  text(p, car, cx + 29 - Math.round(textWidth(car, 1) / 2), cy - 15, 1, CREAM, INK);
   // info panel with a pixel frame (cut corners)
   const px0 = 8, py0 = 8, pw = 164, ph = 141;
   p.rect(px0 + 2, py0, pw - 4, ph, INK); p.rect(px0, py0 + 2, pw, ph - 4, INK);
@@ -70,7 +72,7 @@ export function drawCard({ label, carName, carPaint = 0xff873c, result, rank, of
   text(p, `TOP ${fmt(result.topSpeed || 0)} KM/H`, px0 + 8, y, 1, CREAM);
   text(p, `CHAIN ${result.bestChain || 1}×`, px0 + 86, y, 1, CREAM);
   y += 13;
-  text(p, `${label} · ${carName}`.slice(0, 26), px0 + 8, y, 1, CYAN);
+  text(p, String(label).slice(0, 24), px0 + 8, y, 1, CYAN);
   y += 13;
   p.rect(px0 + 8, y - 2, pw - 16, 1, DEEP);
   text(p, '✓ VERIFIED', px0 + 8, y + 2, 1, GREEN);

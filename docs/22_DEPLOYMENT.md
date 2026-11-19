@@ -1,19 +1,21 @@
 # Deployment runbook — Escape60 on Arvan (as deployed 2026-11-19)
 
-Live URL: **https://escape60.lavanai2525-3qem7.arvanedge.ir** (still serving v2.3 until v3.0 is rebuilt and redeployed). The `/edge` page and all AI variables were removed in v3.0.
+Live URL: **https://escape60.lavanai2525-3qem7.arvanedge.ir** (still serving v2.3 until this version is deployed with `npm run deploy`). All AI variables were removed in v3.0. Since v3.4 the edge is the "edge referee" (API 4.0.0, see `06_EDGE_SPEC.md`) and `/edge` is its live dashboard for judges.
 
 There is no separate server. One Arvan Edge Compute (`escape60`) serves the whole game:
 
 | Path | Handled by |
 |---|---|
-| `/api/v1/*` | `edge/app.mjs` inside the edge worker (tickets, chunked replay, leaderboard) |
-| everything else | edge proxies the file's basename from the public bucket `escape60-game` and sets MIME / cache headers |
+| `/api/v1/*` | `edge/app.mjs` inside the edge worker: tickets, live referee, final replay, leaderboard, ghost rival, PNG cards, telemetry, benchmark |
+| `/r/<id>` | link preview of a verified run (index.html from the bucket + Open Graph tags + route/target) |
+| `/edge` | `edge.html` — live edge referee dashboard (not linked from the game UI) |
+| everything else | `edge/static.mjs`: the file's basename from the public bucket `escape60-game`, its Brotli/gzip copy when the browser accepts it, MIME / cache headers, byte ranges |
 
 ## Arvan resources
 - Edge Compute `escape60` (default route `escape60.lavanai2525-3qem7.arvanedge.ir/*`).
 - Object Storage bucket `escape60-game` (ir-central1, **public read**) — the flat static build.
-- Object Storage bucket `escape60-data` (ir-central1, **private**) — `missions/`, `runs/`, `leaderboard/`, `stats/` JSON objects.
-- AIaaS gateway `gateway-yjjo6` (`https://api.arvancloudai.ir/v1`), model `DeepSeek-V4-Flash` (cheapest connected model).
+- Object Storage bucket `escape60-data` (ir-central1, **private**) — `runs/`, `runs-by-id/`, `leaderboard/`, `hist/`, `stats/`, `metrics/` JSON objects (old `missions/` objects from v2.3 are unused).
+- The AIaaS gateway used by v2.3 is no longer needed.
 
 ## Edge variables (Edge → escape60 → تنظیمات → متغیر جدید, tick "encrypted")
 Values are JSON, so a string must be written **with double quotes**, e.g. `"abc123"`.
@@ -22,7 +24,7 @@ Values are JSON, so a string must be written **with double quotes**, e.g. `"abc1
 |---|---|
 | `S3_ACCESS_KEY` | Object Storage access key (Object Storage → مدیریت دسترسی) |
 | `S3_SECRET_KEY` | Object Storage secret key (also derives the run-ticket HMAC key) |
-| optional | `RUN_SECRET`, `S3_BUCKET` (`escape60-data`), `S3_ENDPOINT` (`https://s3.ir-central1.arvanstorage.ir`), `S3_REGION` (`ir-central1`), `STATIC_ORIGIN`, `REPLAY_CHUNK` (default 300 ticks; SIM 2.0 costs ~20–40 µs per tick, tune to the edge CPU budget) |
+| optional | `RUN_SECRET`, `S3_BUCKET` (`escape60-data`), `S3_ENDPOINT` (`https://s3.ir-central1.arvanstorage.ir`), `S3_REGION` (`ir-central1`), `STATIC_ORIGIN`, `REPLAY_CHUNK` (default 300 ticks = live-check interval and replay chunk; SIM 2.0 costs ~30–70 µs per tick, so ~10–20 ms per request), `PRECOMPRESSED` (`false` serves only uncompressed files) |
 
 Without the S3 keys the edge falls back to per-isolate memory (leaderboard not durable) and a fixed dev ticket secret; `/api/v1/health` reports `storage: "memory"` and `secured: false`. The AIaaS key is no longer used (v3.0) and can be deleted from the edge settings.
 
@@ -46,9 +48,12 @@ Flags: `--skip-build`, `--skip-tests`, `--force` (upload everything), `--no-wait
 
 Rehearsed (2026-11-19) against a local fake S3 + edge that re-verifies every signature: first upload, unchanged-file skip, `index.html` held back until the edge reports the new version, re-run with nothing to do, dry run, wrong key (clear 403 message). Not yet run against the real Arvan endpoints (the cloud build session could not reach Arvan hosts).
 
+## Test the exact deploy artefact locally
+`npm run build && npm run edge:local` runs `dist/edge/worker.js` through the same Service Worker `fetch` interface (with `dist/web` as the bucket) on http://localhost:4174. `GAME_URL=http://localhost:4174 npm run test:browser` then plays a real run against it: live checks, final verdict, `/r/<id>` preview, PNG card and a ghost-rival run (verified 2026-11-19).
+
 ## Manual release steps (fallback)
 1. `npm run check && npm run build` → `dist/web/` (flat files for the edge proxy plus an `assets/` tree for ordinary static hosts, hashed `app-*.js`, `style-*.css`) and `dist/edge/worker.js`.
-2. Upload changed files from `dist/web/` to `escape60-game` (public toggle on). `index.html` last.
+2. Upload changed flat files from `dist/web/` to `escape60-game` (public toggle on) — including `edge.html` and every `.br` / `.gz` copy. `index.html` last.
 3. Edge → escape60 → ویرایش کد → replace with `dist/edge/worker.js` → انتشار.
 4. Verify: `/api/v1/health` (version 2.0.0, storage), a full verified run through `npm run test:browser` with `GAME_URL=<live url> CHROME_BIN=/usr/bin/google-chrome`.
 5. Any simulation change: bump `SIM_VERSION`; the edge replays with the bundled copy of the same `simulation.js`.

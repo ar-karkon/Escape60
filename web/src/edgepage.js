@@ -11,7 +11,7 @@ const S = {
   en: {
     title: 'EDGE REFEREE', sub: 'Every rank, rival and share card in ESCAPE 60 is decided on Arvan Edge Compute — while you drive. The browser only sends its inputs; the edge re-simulates the game and is the only judge.',
     countersTitle: 'Live edge telemetry', countersSub: 'Real counters merged from every edge isolate into object storage (no personal data).', today: 'Today', total: 'All time',
-    runs: 'Runs verified', live: 'Live checks', drive: 'Driving re-simulated', cpu: 'Edge CPU for replays', rejects: 'Cheats refused', rivals: 'Ghost rivals served', cards: 'PNG cards drawn', previews: 'Link previews', saved: 'Bytes saved (Brotli)', statics: 'Files served', api: 'API calls', isolates: 'Edge isolates', ticksSub: '{n} ticks at 60 Hz', perRun: '{n} ms per run',
+    runs: 'Runs verified', live: 'Live checks', drive: 'Driving re-simulated', cpu: 'Edge CPU for replays', rejects: 'Cheats refused', rivals: 'Ghost rivals served', cards: 'PNG cards drawn', previews: 'Link previews', saved: 'Bytes saved (Brotli)', statics: 'Files served', api: 'API calls', isolates: 'Edge isolates', ticksSub: '{n} ticks at 60 Hz', liveRunsSub: '{n} verified live while driven', cpuSub: '{n} µs per simulated tick',
     pipeTitle: 'What the edge does for every run', pipeSub: 'Stateless: everything the edge needs travels inside HMAC-signed tickets and checkpoints, so any edge node can answer any request.',
     steps: [
       ['Run ticket', 'An HMAC-signed ticket binds run id, route, car and start time.'],
@@ -33,7 +33,7 @@ const S = {
   fa: {
     title: 'داور لبه', sub: 'همه‌ی رتبه‌ها، رقیب‌ها و کارت‌های اشتراک فرار ۶۰ روی پردازش لبه‌ی آروان تعیین می‌شوند — همان لحظه که رانندگی می‌کنی. مرورگر فقط ورودی‌هایش را می‌فرستد؛ لبه بازی را دوباره شبیه‌سازی می‌کند و تنها داور است.',
     countersTitle: 'آمار زنده‌ی لبه', countersSub: 'شمارنده‌های واقعی که از همه‌ی ایزوله‌های لبه در فضای ذخیره‌سازی جمع می‌شوند (بدون داده‌ی شخصی).', today: 'امروز', total: 'از ابتدا',
-    runs: 'رانندگی تأییدشده', live: 'بررسی زنده', drive: 'رانندگی بازشبیه‌سازی‌شده', cpu: 'پردازنده‌ی لبه برای بازپخش', rejects: 'تقلب ردشده', rivals: 'رقیب شبح ارسال‌شده', cards: 'کارت PNG ساخته‌شده', previews: 'پیش‌نمایش لینک', saved: 'صرفه‌جویی حجم (Brotli)', statics: 'فایل ارسال‌شده', api: 'درخواست API', isolates: 'ایزوله‌های لبه', ticksSub: '{n} تیک ۶۰ هرتزی', perRun: '{n} میلی‌ثانیه برای هر رانندگی',
+    runs: 'رانندگی تأییدشده', live: 'بررسی زنده', drive: 'رانندگی بازشبیه‌سازی‌شده', cpu: 'پردازنده‌ی لبه برای بازپخش', rejects: 'تقلب ردشده', rivals: 'رقیب شبح ارسال‌شده', cards: 'کارت PNG ساخته‌شده', previews: 'پیش‌نمایش لینک', saved: 'صرفه‌جویی حجم (Brotli)', statics: 'فایل ارسال‌شده', api: 'درخواست API', isolates: 'ایزوله‌های لبه', ticksSub: '{n} تیک ۶۰ هرتزی', liveRunsSub: '{n} مورد حین رانندگی زنده تأیید شد', cpuSub: '{n} میکروثانیه برای هر تیک',
     pipeTitle: 'لبه برای هر رانندگی چه می‌کند', pipeSub: 'بدون حالت: هر چیزی که لبه لازم دارد داخل بلیت‌ها و نقطه‌های بازبینی امضاشده با HMAC جابه‌جا می‌شود، پس هر گره‌ی لبه می‌تواند به هر درخواستی جواب بدهد.',
     steps: [
       ['بلیت رانندگی', 'یک بلیت امضاشده (HMAC) شناسه، مسیر، ماشین و زمان شروع را قفل می‌کند.'],
@@ -84,10 +84,10 @@ function renderStats(d) {
   const s = d[scope] || { c: {}, rejects: {} }, c = s.c || {};
   const runs = c.runs || 0;
   const tiles = [
-    ['runs', fmtN(runs), runs && c.cpuMs ? fill(T('perRun'), { n: (c.cpuMs / Math.max(1, runs)).toFixed(1) }) : '', 'gr'],
+    ['runs', fmtN(runs), runs ? fill(T('liveRunsSub'), { n: fmtN(c.liveRuns) }) : '', 'gr'],
     ['live', fmtN(c.live), `${fmtN(c.liveTicks)} ticks`, 'cy'],
     ['drive', `${((c.ticks || 0) / TICK_RATE / 60).toFixed(1)} min`, fill(T('ticksSub'), { n: fmtN(c.ticks) }), ''],
-    ['cpu', (c.cpuMs || 0) < 1000 ? `${Math.round(c.cpuMs || 0)} ms` : `${((c.cpuMs || 0) / 1000).toFixed(1)} s`, '', ''],
+    ['cpu', (c.cpuMs || 0) < 1000 ? `${Math.round(c.cpuMs || 0)} ms` : `${((c.cpuMs || 0) / 1000).toFixed(1)} s`, c.ticks ? fill(T('cpuSub'), { n: fmtN((c.cpuMs * 1000) / c.ticks) }) : '', ''],
     ['rejects', fmtN(c.rejects), '', 'hot'],
     ['rivals', fmtN(c.rivals), '', 'cy'],
     ['cards', fmtN(c.cards), c.cards ? `${((c.cardMs || 0) / c.cards).toFixed(1)} ms / card` : '', ''],

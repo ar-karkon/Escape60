@@ -6,7 +6,7 @@ Version 3.0 (2026-11-19): a full rebuild toward a stylised world-class street ra
 - **Map** `web/src/map.js` (MAP_VERSION 2): one fixed hand-authored city with curved roads, a smooth signed-distance field for drivable space, five pit stops. The simulation, server replay, renderer and minimap must all read this module.
 - **Simulation** `web/src/simulation.js` (SIM 2.0.0): drift physics, brake / handbrake / nitro inputs (trace values 0..63), 14 car stat sets (`web/src/cars.js`), damage limp, 3 repairs, wreck explosion, busted meter, takedowns, 60 s milestone then endless overtime (10 min cap). Must use `web/src/dmath.js` instead of Math.sin/cos/atan2/hypot and must not use Math.exp/pow.
 - **Renderer** `web/src/render.js` + `web/src/gfx/` (Three.js r170 bundled): PBR-ish materials patched via onBeforeCompile (each patch needs its own `customProgramCacheKey`), procedural facades, city builder with marching-squares walls on the collision boundary, instanced streamed props with knock-over breakables, particles + selectable effects, camera director, HDR post. Visual only.
-- **Game service** `edge/app.mjs` (API 3.0.0): tickets bind seed + car, chunked authoritative replay, leaderboard. No AI endpoints anymore. Deployment notes in docs/22_DEPLOYMENT.md (the live edge still runs the previous version until redeployed).
+- **Game service = edge referee** `edge/app.mjs` (API 4.0.0, docs/06_EDGE_SPEC.md): tickets bind seed + car; live referee (`/runs/live` every REPLAY_CHUNK ticks, prefix-bound HMAC checkpoints, pacing proof, live rank); final replay; ghost rival from verified traces; PNG cards (`edge/card.mjs`, `edge/png.mjs`) and `/r/<id>` previews; telemetry (`edge/metrics.mjs`) for the `/edge` dashboard (`web/edge.html`, `web/src/edgepage.js`, separate from the game UI); Brotli/gzip static delivery (`edge/static.mjs`). No AI endpoints. Deployment notes in docs/22_DEPLOYMENT.md (the live edge still runs the previous version until redeployed).
 - UI: `web/index.html`, `web/style.css` (original pixel-neon system), `web/src/main.js`, English/Persian strings in `web/src/i18n.js` (add every new string in both languages).
 - Do **not** claim real-device FPS, audio mix or the live deployment of v3 as verified.
 - Audio rule: only CC0 / CC-BY sources with a verified license page; synthesised Web Audio sounds are original. Never GPL, share-alike, non-commercial or ripped game audio.
@@ -17,6 +17,7 @@ Version 3.0 (2026-11-19): a full rebuild toward a stylised world-class street ra
 - `npm run check`: tests plus syntax checks
 - `npm run build`: create deployable static site at dist/
 - `npm run test:browser` / `npm run capture`: mobile smoke test and real screenshot capture (server must be running)
+- `npm run edge:local`: run the built worker (dist/edge/worker.js) locally like the edge does, on :4174
 - `npm run deploy`: release to Arvan from a machine that can reach it (uploads changed files, guides the edge paste, verifies); see docs/22_DEPLOYMENT.md
 
 ## Rules

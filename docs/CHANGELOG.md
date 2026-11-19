@@ -1,5 +1,15 @@
 # Changelog
 
+## 3.4 — the edge referee (API 4.0.0) — 2026-11-19
+- **Live referee**: every 5 s the game sends its input trace; the edge re-simulates the new ticks, answers with its own score and your **live global rank** (LIVE chip under the minimap). Checkpoints are HMAC-bound to the exact input prefix, so the final verdict only replays the last seconds.
+- **Pacing proof**: inputs may not arrive faster than real time — speed hacks are refused mid-run.
+- **Ghost rival**: the edge picks the verified run just above your best (your friend's run when you open their link, your own best when the board is empty) and sends its inputs; the game re-simulates it bit-exactly as a holographic ghost car with a name tag, minimap diamond, live points delta and a RIVAL BEATEN moment.
+- **Edge-drawn share cards**: pixel-art PNG cards encoded on the edge (custom O(logical pixels) PNG encoder); verified runs share `/r/<id>` links with Open Graph previews that open the same route with the score as the target.
+- Results show the percentile among today's runs and the rival outcome.
+- **Brotli/gzip negotiation** at the edge (game bundle 732 KB → 176 KB), counted bytes saved.
+- **`/edge` dashboard** (EN/FA): live telemetry merged across edge isolates, pipeline, Live Lab (a bot drives a real run while you try to cheat), edge benchmark, recent verified runs, refusals by reason.
+- `npm run edge:local` runs the built worker locally; `npm run deploy` uploads the new files and verifies compression and `/edge`.
+
 ## 3.2.1 — slimmer bars, deploy without CI — 2026-11-19
 - Health and nitro side bars are slimmer and shorter (28 px column, 10 px track).
 - `npm run deploy`: one-command release to Arvan from your own computer — uploads only changed files to the bucket, guides the edge-worker paste, switches `index.html` last and verifies the live URL. SigV4 signing tested against AWS's published examples.

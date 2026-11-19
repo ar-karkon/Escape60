@@ -10,7 +10,9 @@
   <link rel="stylesheet" href="./style.css">
   <style>
     html, body { height: auto; min-height: 100%; overflow: auto; user-select: text; -webkit-user-select: text; }
-    body.edge-page { background: radial-gradient(120% 60% at 50% 0%, #5a1d6e 0%, #2b0f4c 45%, var(--ink) 80%) fixed; }
+    html { background: var(--ink); }
+    body.edge-page { background: linear-gradient(180deg, #4a1a68 0, #2b0f4c 420px, var(--ink) 1400px) no-repeat; }
+    html[dir="rtl"] .ep-tile b, html[dir="rtl"] .ep-tile i { text-align: right; }
     .ep { max-width: 1080px; margin: 0 auto; padding: max(18px, env(safe-area-inset-top)) 16px 40px; display: flex; flex-direction: column; gap: 22px; }
     .ep-head { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
     .ep-head img { width: 92px; height: auto; image-rendering: pixelated; }

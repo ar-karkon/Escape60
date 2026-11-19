@@ -177,7 +177,7 @@ test('the edge picks a ghost rival whose inputs replay to the same score', async
   const g = createGame('ghosts', { car: r.body.rival.car });
   for (const [v, c] of r.body.rival.trace) for (let i = 0; i < c; i++) { stepGame(g, v); g.events.length = 0; }
   assert.equal(g.points, r.body.rival.points, 'bit-exact ghost');
-  const none = await h.call(`/api/v1/rival?seed=ghosts&not=${one.f.body.id}`);
+  const none = await h.call('/api/v1/rival?seed=nobody-here');
   assert.equal(none.body.rival, null);
 });
 
@@ -241,4 +241,12 @@ test('static delivery negotiates Brotli/gzip copies and passes byte ranges throu
   const off = createStatic({ origin: 'https://bucket', fetchImpl, sizes, precompressed: false });
   assert.equal((await off(new Request('https://e/app-ABCDEFGH.js', { headers: { 'accept-encoding': 'br' } }))).headers.get('content-encoding'), null);
   assert.equal((await s(new Request('https://e/edge'))).status, 404, 'routes map /edge to edge.html (absent here)');
+});
+
+test('with nobody else on the board, the rival is your own best run', async () => {
+  const h = harness();
+  const one = await liveRun(h, 'solo', 'kaze');
+  const r = await h.call(`/api/v1/rival?seed=solo&points=${one.run.result.points}&not=${one.f.body.id}`);
+  assert.equal(r.body.rival.self, true);
+  assert.equal(r.body.rival.points, one.run.result.points);
 });
