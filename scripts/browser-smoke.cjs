@@ -49,14 +49,15 @@ const assert = require("node:assert/strict");
     await p.locator("#resume").tap();
     const time = (t) =>
       p.waitForFunction(
-        (t) => Number(document.querySelector("#time").textContent) >= t,
+        // Harder pursuit (SIM 1.4.0): an unsteered run may be caught before t, which also ends the wait.
+        (t) => Number(document.querySelector("#time").textContent) >= t || document.body.dataset.view === "results",
         t,
         { timeout: 160000 },
       );
     await time(2.4);
     await shot("coastal");
     await time(52.15);
-    await shot("pursuit");
+    if ((await p.evaluate(() => document.body.dataset.view)) === "game") await shot("pursuit");
     await p.locator("#results").waitFor({ timeout: 90000 });
     await p.waitForFunction(() =>
       document.querySelector("#rank").textContent.includes("تأییدشده"),

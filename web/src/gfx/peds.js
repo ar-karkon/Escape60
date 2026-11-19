@@ -41,7 +41,21 @@ export function createPeds(scene, material) {
   const rnd = () => { seedN = (seedN * 16807) % 2147483647; return (seedN - 1) / 2147483646; };
   const pick = (a) => a[Math.floor(rnd() * a.length)];
 
+  let net = null;
+  // Is the sidewalk at (axis, line, along-u) next to an open street?
+  const walkable = (axis, line, u) => {
+    if (!net) return true;
+    const li = Math.round(line / TILE), ci = Math.floor(u / TILE);
+    const st = axis === "z" ? net.seg(0, li, ci) : net.seg(1, ci, li);
+    if (st === 1) return true;
+    if (st === 0) return false;
+    const local = u - ci * TILE;
+    return st === 2 ? local < 30 : local > 22;
+  };
   function place(p, cx, cz, hx, hz, minD, maxD, ahead) {
+    for (let k = 0; k < 8; k++) { placeOnce(p, cx, cz, hx, hz, minD, maxD, ahead); if (walkable(p.axis, p.line, p.u)) return; }
+  }
+  function placeOnce(p, cx, cz, hx, hz, minD, maxD, ahead) {
     // Random sidewalk spot on the street grid around (cx, cz), biased ahead of the player.
     const d = minD + rnd() * (maxD - minD);
     const spread = ahead ? (rnd() - 0.5) * 1.4 : rnd() * Math.PI * 2;
@@ -71,7 +85,8 @@ export function createPeds(scene, material) {
 
   return {
     clear() { peds.length = 0; },
-    update(dt, time, cx, cz, hx, hz, threats, reduced, count = 72) {
+    update(dt, time, cx, cz, hx, hz, threats, reduced, count = 72, map = null) {
+      if (map !== net) { net = map; peds.length = 0; }
       if (peds.length < count) {
         const fresh = !peds.length;
         while (peds.length < count) { const p = {}; place(p, cx, cz, hx, hz, fresh ? 6 : 62, fresh ? 85 : 92, !fresh); peds.push(p); }
@@ -120,6 +135,8 @@ export function createPeds(scene, material) {
         } else {
           p.u += p.dir * p.speed * dt;
           p.phase += dt * p.speed * 5.2;
+          // turn back where the sidewalk ends (closed street, dead end)
+          if (!p.cross && !walkable(p.axis, p.line, p.u + p.dir * 1.5)) { p.u -= p.dir * p.speed * dt; p.dir *= -1; }
           if (p.cross) {
             // crossing the main road along a crosswalk: move laterally to the other side
             const target = -Math.sign(p.cross) * WALK;
@@ -133,7 +150,7 @@ export function createPeds(scene, material) {
               p.decided = true;
               const r = rnd();
               if (r < 0.28) p.dir *= -1;
-              else if (r < 0.42) { p.cross = p.side; }
+              else if (r < 0.42 && net && net.degree(Math.round((p.axis === "z" ? p.line : p.u) / TILE), Math.round((p.axis === "z" ? p.u : p.line) / TILE)) >= 3) { p.cross = p.side; }
               else if (r < 0.52) { p.mode = "idle"; p.timer = 1 + rnd() * 3; }
             }
             if (!atEnd) p.decided = false;

@@ -7,17 +7,37 @@ test('rejects malicious traces',()=>{assert.throws(()=>replayTrace('a',[[4,60]])
 test('roads and buildings',()=>{assert.equal(circleHitsBuilding(0,0),false);assert.equal(circleHitsBuilding(260,260),true);});
 test('score sort',()=>{assert.ok(compareResult({timeMs:60000,points:1},{timeMs:59000,points:200})<0);});
 
-test('pursuit director opens the first and final block at their scheduled ticks',()=>{
+test('pursuit director follows its schedule and only places barriers on open streets',async()=>{
+ const { DIRECTOR } = await import('../web/src/simulation.js');
  const game=createGame('sunset-1');
- while(game.state==='playing'){
+ while(game.state==='playing'&&game.ticks<DIRECTOR.finalRoadblock*60+1){
    stepGame(game);
-   for(const mark of game.marks)assert.ok(Number.isFinite(mark.angle));
+   for(const mark of game.marks){assert.ok(Number.isFinite(mark.angle));assert.ok(game.map.onStreet(mark.x,mark.y));}
  }
- assert.equal(game.win,true);
  const barriers=game.events.filter(e=>e.type==='roadblock');
- assert.equal(barriers[0].tick,25*60);
- assert.ok(barriers.some(e=>e.tick===55*60));
- assert.equal(game.events.find(e=>e.type==='police').tick,10*60);
+ assert.ok(barriers.length>=1);
+ assert.ok(barriers[0].tick>=DIRECTOR.roadblockFrom*60);
+ assert.equal(game.events.find(e=>e.type==='police').tick,DIRECTOR.policeAt[1]*60);
+});
+test('the street network has avenues, dead ends and closed segments, deterministically per seed',async()=>{
+ const { cityMap } = await import('../web/src/map.js');
+ const a=cityMap('net-a'), b=cityMap('net-a'), c=cityMap('net-b');
+ const counts=[0,0,0,0]; let differs=0;
+ for(let i=-12;i<12;i++)for(let j=-12;j<12;j++)for(const ax of [0,1]){counts[a.seg(ax,i,j)]++; if(a.seg(ax,i,j)!==b.seg(ax,i,j))throw Error('not deterministic'); if(a.seg(ax,i,j)!==c.seg(ax,i,j))differs++;}
+ assert.ok(counts[0]>20&&counts[2]>20&&counts[3]>20&&counts[1]>500, JSON.stringify(counts));
+ assert.ok(differs>50);
+ for(let j=-10;j<10;j++){assert.equal(a.seg(0,0,j),1);assert.equal(a.seg(1,j,0),1);} // avenues stay open
+ let deadEnds=0; for(let i=-12;i<12;i++)for(let j=-12;j<12;j++)if(a.degree(i,j)===1)deadEnds++;
+ assert.ok(deadEnds>5,'dead ends '+deadEnds);
+});
+test('traffic follows streets and never drives into buildings',()=>{
+ for(const seed of ['street-a','street-b']){
+   const game=createGame(seed);
+   for(let i=0;i<40*60&&game.state==='playing';i++){
+     stepGame(game,0);
+     for(const c of game.traffic) assert.equal(game.map.circleHits(c.x,c.y,10),false);
+   }
+ }
 });
 test('a barrier hit costs a fixed slice of the health bar and protects from repeat damage',()=>{
  const game=createGame('training',{noPolice:true,noTraffic:true});
@@ -31,13 +51,13 @@ test('a barrier hit costs a fixed slice of the health bar and protects from repe
 });
 test('damage scales with closing speed: head-on hurts more than a rear-end tap',()=>{
  const headOn=createGame('dmg-a',{noPolice:true,noTraffic:true}); headOn.nextTraffic=1e9;
- headOn.traffic.push({x:0,y:-10,angle:Math.PI/2,speed:80,passed:false,color:0});
+ headOn.traffic.push({x:0,y:-10,angle:Math.PI/2,speed:80,passed:false,color:0,lane:1,nx:0,ny:0,plan:null});
  stepGame(headOn);
  const rear=createGame('dmg-b',{noPolice:true,noTraffic:true}); rear.nextTraffic=1e9;
- rear.traffic.push({x:0,y:-10,angle:-Math.PI/2,speed:80,passed:false,color:0});
+ rear.traffic.push({x:0,y:-10,angle:-Math.PI/2,speed:80,passed:false,color:0,lane:1,nx:0,ny:-1,plan:null});
  stepGame(rear);
  const a=100-headOn.health, b=100-rear.health;
- assert.ok(a>b && b>=14 && a<=32, `head-on ${a} vs rear ${b}`);
+ assert.ok(a>b && b>=16 && a<=34, `head-on ${a} vs rear ${b}`);
 });
 test('health recovers slowly after a calm period, never above the maximum',async()=>{
  const { MAX_HEALTH, REGEN_DELAY } = await import('../web/src/simulation.js');

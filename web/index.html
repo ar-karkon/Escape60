@@ -127,7 +127,10 @@
     </header>
     <nav id="controls" class="controls hidden" aria-label="فرمان ماشین">
       <button id="right" class="steer" aria-label="فرمان راست"><span data-icon="arrowL" data-mirror></span></button>
-      <div class="center-hint"><b id="count">60</b><small>تا فرار</small></div>
+      <div class="minimap" aria-label="نقشه کوچک: خیابان‌ها، بن‌بست‌ها و پلیس">
+        <canvas id="minimap"></canvas>
+        <div class="mm-count"><b id="count">60</b><small>تا فرار</small></div>
+      </div>
       <button id="left" class="steer" aria-label="فرمان چپ"><span data-icon="arrowL"></span></button>
     </nav>
 

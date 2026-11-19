@@ -34,3 +34,10 @@ Simulation, scoring, daily seed and server replay are unchanged (`SIM_VERSION` 1
 - **Look:** FXAA, smooth upscaling at higher internal resolution, softer shadows, less voxel grain, comic ink outlines from depth, halftone shading in shadows, graffiti-style drift sparks, inked smoke puffs, starbursts and speed streaks; barricades drop in instead of popping up.
 - **Font:** all Persian text now uses the pixel font Rooyin Free (OFL).
 - **HUD:** segmented health bar with damage trail, regen glow and critical blink; damage numbers in popups; results show remaining health and best chain length.
+
+## 2.2 — real city, minimap, harder chase, natural lights, weak-phone performance — 2026-11-19
+- **Simulation 1.4.0** (browser + server replay + tests): seeded street network with avenues, T-junctions, dead ends and closed blocks; traffic drives the streets and turns at junctions; police steer around blocks; harder pursuit director.
+- **City:** closed streets become pocket parks, plazas with fountains or statues, mini malls and fenced car parks; dead ends get barriers, amber blinkers and a «بن‌بست» sign; crosswalks, stop lines and traffic lights only at real junctions; pedestrians only walk open sidewalks.
+- **Minimap:** heading-up map at the bottom with streets, avenues, dead ends, police (blinking, clamped to the edge), roadblocks, traffic and seconds left.
+- **Lights & Unbound-style feedback:** twin-lobe headlight beams, lamp halos, anamorphic flares on oncoming headlights, brake-light response, tail-light trail ribbons at speed, graffiti streaks at top speed and a «PERFECT» tag for long drifts, cel-toned smoke.
+- **Performance:** device-aware start quality and a 6-step adaptive ladder (resolution, DPR, shadows, bloom, ink/halftone, pedestrian count); traffic cars merged into one draw call; the comic layer does no canvas work while idle; shadows off on phones. In software rendering the automatic mode ran ~3× faster than forced high quality.

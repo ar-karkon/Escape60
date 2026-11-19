@@ -67,3 +67,21 @@ XP per run = time/100 ms + points/4 + 250 on a win + 15 × best chain + 40 × do
 - Bot check (60 seeds): driving straight with no input now wins 37 % of runs with ~22 health left
   (it won 98 % before the AI changes), so steering and cornering matter.
 - Tests cover damage scaling, regeneration, wall bumps, out-of-view spawning and the existing replay rules.
+
+## Implemented in simulation 1.4.0 (real street network, harder director)
+
+- **Street network (`web/src/map.js`, shared with the server):** every third line in each direction is an
+  always-open avenue; other segments are through streets (60 %), dead-end stubs from either end (20 %) or
+  closed (20 %, becomes a park, plaza, mini mall or car park). Junction squares with no street are solid.
+  Collision is the complement of the open corridors (road + sidewalk, 2 × 114 units).
+- **Traffic follows the streets:** right-hand lanes; at each junction it continues or turns onto an open
+  through street (turns happen where the two lanes cross), and U-turns where nothing is open. It never
+  enters stubs. Spawns are on open streets only, beyond the visible range.
+- **Police** probe 70 units ahead and follow the nearest open axis when the direct line is walled off.
+  Spawns and roadblocks are validated against the map.
+- **Harder director:** patrol cap rises at 0/8/18/30/42/52 s (one new patrol at most every 4 s);
+  roadblocks from 20 s every 7 s plus the final one at 55 s; police top speed 185 → 290;
+  damage traffic `clamp(12 + 0.065 × closing speed, 16, 34)`, police `clamp(14 + 0.055 × closing speed, 20, 32)`;
+  regeneration +1/s after 6 s calm.
+- Bot check (50 seeds): a no-input driver now wins 18 % (37 % in 1.3.0); a simple road-following bot that
+  turns and dodges survives 32 s on average. Reaching 60 s now takes real steering, cornering and use of the minimap.

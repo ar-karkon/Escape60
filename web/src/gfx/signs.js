@@ -48,6 +48,8 @@ const SIGNS = [
   ["kiosk", 32, 16, "neon", "24/7", "#5dffb0"],
   ["police", 64, 16, "plain", "POLICE", "#1a1d33"],
   ["welcome", 128, 24, "neonWide", "SUNSET BAY", "#ff5d95"],
+  ["deadEnd", 48, 32, "deadEnd", "بن‌بست"],
+  ["parking", 32, 32, "parking", "P"],
   ["welcomeFa", 96, 24, "neonWideFa", "خلیج غروب", "#3dd8e7"],
 ];
 
@@ -135,6 +137,18 @@ function drawAll() {
     if (kind === "neon" || kind === "neonFa") {
       frame(r, "#180f2b", "#3b2a5c");
       glowText(text, r.x + r.w / 2, r.y + r.h / 2 + (kind === "neonFa" ? 1 : 1), kind === "neonFa" ? 11 : 11, color, kind === "neonFa" ? FA : PIX);
+    } else if (kind === "deadEnd") {
+      px(r.x, r.y, r.w, r.h, "#f4f1ea");
+      px(r.x + 2, r.y + 2, r.w - 4, r.h - 4, "#d8283f");
+      px(r.x + 4, r.y + 4, r.w - 8, r.h - 8, "#f4f1ea");
+      px(r.x + r.w / 2 - 2, r.y + 7, 4, 12, "#d8283f");
+      px(r.x + r.w / 2 - 10, r.y + 7, 20, 4, "#d8283f");
+      ctx.font = `bold 9px ${FA}`; ctx.fillStyle = "#1b0b2b"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      ctx.fillText(text, r.x + r.w / 2, r.y + 25);
+    } else if (kind === "parking") {
+      px(r.x, r.y, r.w, r.h, "#f4f1ea"); px(r.x + 2, r.y + 2, r.w - 4, r.h - 4, "#2f6fe0");
+      ctx.font = `bold 22px ${PIX}`; ctx.fillStyle = "#f4f1ea"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      ctx.fillText(text, r.x + r.w / 2, r.y + r.h / 2 + 1);
     } else if (kind === "neonWide" || kind === "neonWideFa") {
       frame(r, "#160b28", color);
       glowText(text, r.x + r.w / 2, r.y + r.h / 2 + 1, kind === "neonWide" ? 20 : 15, color, kind === "neonWide" ? PIX : FA);

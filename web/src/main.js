@@ -5,10 +5,12 @@ import { hydrateIcons, iconSVG } from './ui/icons.js';
 import { redrawAtlas } from './gfx/signs.js';
 import { loadProfile, saveProfile, applyRun, xpForLevel, missionInfo, PAINTS, paintById, parseChallenge, beats } from './meta.js';
 import * as api from './api.js';
+import { createMinimap } from './ui/minimap.js';
 
 const $ = (id) => document.getElementById(id);
 hydrateIcons();
 const canvas = $('game'), render = createRenderer(canvas);
+const minimap = createMinimap($('minimap'));
 document.fonts?.ready.then(() => redrawAtlas()).catch(() => {});
 const els = {
   overlay: $('overlay'), home: $('home'), results: $('results'), hud: $('hud'), controls: $('controls'), pause: $('pause'),
@@ -331,6 +333,7 @@ function frame(t) {
   }
   audioMix();
   if (game) renderHealth(game.health, dt);
+  if (game && document.body.dataset.view === 'game') minimap.draw(game, game.map, t);
   render(game, t, { reducedMotion, low: $('quality').checked, seed, alpha: acc * TICK_RATE, countdown: Math.max(0, countdown), lockHigh: qualityLock === 'high' });
   requestAnimationFrame(frame);
 }

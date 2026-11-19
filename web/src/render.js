@@ -8,10 +8,13 @@ import { createFX } from "./gfx/fx.js";
 import { createPost } from "./gfx/post.js";
 import { createPeds } from "./gfx/peds.js";
 import { createComic } from "./gfx/comic.js";
+import { cityMap } from "./map.js";
+import { createTrails } from "./gfx/trails.js";
 import { CAR_COLORS } from "./gfx/palette.js";
 
 /* Sunset Bay renderer. Consumes simulation state only; it never changes gameplay. */
 const TICK = 1 / 60;
+const FLARE_COL = new T.Color(0xbfd8ff);
 const RED = new T.Color(0xff2a4a), BLUE = new T.Color(0x2f86ff), WARM = new T.Color(0xffd9a0), CYAN = new T.Color(0x3dd8e7), AMBER = new T.Color(0xffa020), PINK = new T.Color(0xff5d95);
 
 export function createRenderer(canvas) {
@@ -49,6 +52,9 @@ export function createRenderer(canvas) {
 
   const fx = createFX(scene);
   const peds = createPeds(scene, mats.car);
+  const trails = createTrails(scene);
+  const camDir = new T.Vector3();
+  let driftHeld = 0, topSpeedT = 0, brake = 0, prevSpeed = 0, perfectShown = false;
   const inkCanvas = document.getElementById("ink");
   const comic = inkCanvas ? createComic(inkCanvas) : null;
   const sp = new T.Vector3();
@@ -84,11 +90,47 @@ export function createRenderer(canvas) {
     g.userData.phase = Math.random() * 6;
     return g;
   }
+  const mergedTraffic = new Map();
   function makeTraffic(state, idx) {
     const type = TRAFFIC_TYPES[state.color ?? idx % 4];
     const seed = Math.abs(Math.floor((state.x ?? 0) * 7 + (state.y ?? 0) * 13));
     const paint = CAR_COLORS[seed % CAR_COLORS.length];
-    return makeCar(getTrafficGeo(type, paint), mats.car, { zf: type === "hatch" ? -1.4 : -1.75, zb: type === "hatch" ? 1.35 : 1.7 });
+    // One draw call per traffic car: wheels are baked into the body geometry (they don't need to spin).
+    const key = type + paint;
+    let geo = mergedTraffic.get(key);
+    if (!geo) {
+      const src = makeCar(getTrafficGeo(type, paint), mats.car, { zf: type === "hatch" ? -1.4 : -1.75, zb: type === "hatch" ? 1.35 : 1.7 });
+      src.updateMatrixWorld(true);
+      const parts = [];
+      src.traverse((m) => { if (m.isMesh) parts.push(m.geometry.clone().applyMatrix4(m.matrixWorld)); });
+      geo = mergeGeometries(parts);
+      mergedTraffic.set(key, geo);
+    }
+    const g = new T.Group();
+    const mesh = new T.Mesh(geo, mats.car);
+    mesh.castShadow = true;
+    g.add(mesh);
+    g.userData = { body: mesh, wheels: [], radius: 0.5 };
+    return g;
+  }
+  function mergeGeometries(list) {
+    const names = ["position", "normal", "aCol", "aMat", "aUv"];
+    let vCount = 0, iCount = 0;
+    for (const g of list) { vCount += g.attributes.position.count; iCount += g.index.count; }
+    const out = new T.BufferGeometry();
+    for (const n of names) {
+      const a0 = list[0].attributes[n];
+      const arr = new a0.array.constructor(vCount * a0.itemSize);
+      let off = 0;
+      for (const g of list) { arr.set(g.attributes[n].array, off); off += g.attributes[n].array.length; }
+      out.setAttribute(n, new T.BufferAttribute(arr, a0.itemSize, a0.normalized));
+    }
+    const idx = new Uint32Array(iCount);
+    let io = 0, vo = 0;
+    for (const g of list) { const src = g.index.array; for (let k = 0; k < src.length; k++) idx[io + k] = src[k] + vo; io += src.length; vo += g.attributes.position.count; }
+    out.setIndex(new T.BufferAttribute(idx, 1));
+    out.computeBoundingSphere();
+    return out;
   }
   function makeMark() {
     const m = new T.Mesh(barricadeGeo, mats.car);
@@ -150,7 +192,28 @@ export function createRenderer(canvas) {
   }
 
   // State
-  let lastTime = 0, cost = 16, scale = 1, slowFrames = 0, fastFrames = 0;
+  let lastTime = 0, cost = 16, slowFrames = 0, fastFrames = 0;
+  // Quality ladder (index 0 = best). Each step trades the least visible cost first.
+  const LADDER = [
+    { tier: 2, scale: 1, dpr: 1.6 },
+    { tier: 2, scale: 0.85, dpr: 1.4 },
+    { tier: 1, scale: 0.85, dpr: 1.3 },
+    { tier: 1, scale: 0.7, dpr: 1.2 },
+    { tier: 0, scale: 0.62, dpr: 1.1 },
+    { tier: 0, scale: 0.5, dpr: 1 },
+  ];
+  // Starting point from what the device tells us; the frame-time monitor then moves along the ladder.
+  const gpu = (() => {
+    try {
+      const gl = renderer.getContext(), ext = gl.getExtension("WEBGL_debug_renderer_info");
+      return String(ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER)).toLowerCase();
+    } catch { return ""; }
+  })();
+  const mobile = matchMedia("(pointer: coarse)").matches || /android|iphone|ipad|mobile/i.test(navigator.userAgent);
+  const weakGpu = /mali-[t4]|mali-g(31|51|52|57|68)|adreno \(tm\) [3-5]\d\d|adreno [3-5]\d\d|powervr|sgx|swiftshader|llvmpipe|intel\(r\) hd graphics [2-5]/.test(gpu);
+  const lowMem = (navigator.deviceMemory || 8) <= 3 || (navigator.hardwareConcurrency || 8) <= 4;
+  let rung = weakGpu || (mobile && lowMem) ? 4 : mobile ? 2 : 0;
+  let scale = LADDER[rung].scale;
   let prevGame = null, heading = 0, lastAngle = 0, steerVis = 0, eventIndex = 0, shake = 0, flash = 0, flashCol = new T.Color();
   let wheelRot = 0, skidTimer = 0, lastDrift = 0, endTime = 0, menuStart = 0, comboPulse = 0, paintKey = "";
   const seenTmp = new Set();
@@ -185,21 +248,41 @@ export function createRenderer(canvas) {
     return a > b ? 1 : -1;
   }
 
+  /** Headlights for other cars: twin-lobe beam on the road, and when they face the camera, lamp halos
+   * plus a wide anamorphic flare (strongest for oncoming cars). Tail lights glow from behind. */
+  function carLights(x, z, a, k) {
+    const cx = Math.cos(a), cz = Math.sin(a);
+    dyn.add(GLOW.CONE, x + cx * 2.6, 0.06, z + cz * 2.6, 2.6, 12, a, WARM, 0.24 * k);
+    camDir.set(camera.position.x - x, 0, camera.position.z - z).normalize();
+    const facing = cx * camDir.x + cz * camDir.z;
+    if (facing > 0.2) {
+      const f = (facing - 0.2) / 0.8;
+      for (const sd of [-1, 1]) dyn.add(GLOW.HALO, x + cx * 2.75 - cz * 0.85 * sd, 0.85, z + cz * 2.75 + cx * 0.85 * sd, 0.6, 0, 0, WARM, 0.55 * f * k);
+      dyn.add(GLOW.FLARE, x + cx * 2.9, 0.85, z + cz * 2.9, 4.5 + 3 * f, 0, 0, FLARE_COL, 0.35 * f * f * k);
+    } else if (facing < -0.2) {
+      for (const sd of [-1, 1]) dyn.add(GLOW.HALO, x - cx * 2.75 - cz * 0.85 * sd, 0.85, z - cz * 2.75 + cx * 0.85 * sd, 0.5, 0, 0, RED, 0.45 * k);
+    }
+    dyn.add(GLOW.STREAK, x - cx * 2.7, 0.06, z - cz * 2.7, 0.8, 5, 0, RED, 0.3 * k);
+  }
   function draw(game, t, opts = {}) {
     const { reducedMotion = false, low = false, seed = "", alpha = 0, countdown = 0, lockHigh = false } = opts;
     const dt = Math.max(0.0001, Math.min(0.1, (t - lastTime) / 1000));
     lastTime = t;
     SHARED.uTime.value = t / 1000;
     // Adaptive quality: keep steering responsive by trading resolution, shadows and bloom first.
-    cost += 0.05 * (dt * 1000 - cost);
-    if (cost > 34) { slowFrames++; fastFrames = 0; } else if (cost < 19) { fastFrames++; slowFrames = 0; } else { slowFrames = 0; fastFrames = 0; }
-    if (slowFrames > 90 && scale > 0.6 && !lockHigh) { scale = Math.max(0.6, scale - 0.15); slowFrames = 0; }
-    if (fastFrames > 240 && scale < 1) { scale = Math.min(1, scale + 0.1); fastFrames = 0; }
-    const tier = low ? 0 : scale < 0.8 ? 1 : 2;
+    cost += 0.08 * (dt * 1000 - cost);
+    // Step down quickly when frames are slow (about 1 s below ~40 fps), step up slowly when there is headroom.
+    if (cost > 25) { slowFrames++; fastFrames = 0; } else if (cost < 14.5) { fastFrames++; slowFrames = 0; } else { slowFrames = 0; fastFrames = Math.max(0, fastFrames - 1); }
+    if (lockHigh) rung = 0;
+    else if (slowFrames > (cost > 45 ? 25 : 60) && rung < LADDER.length - 1) { rung++; slowFrames = 0; }
+    else if (fastFrames > 420 && rung > 0) { rung--; fastFrames = 0; }
+    const step = low ? LADDER[Math.max(4, rung)] : LADDER[rung];
+    scale = step.scale;
+    const tier = step.tier;
     // Softer look: render closer to native resolution and let FXAA + smooth upscaling round the edges.
-    const dpr = Math.min(window.devicePixelRatio || 1, tier === 2 ? 1.6 : 1.3);
+    const dpr = Math.min(window.devicePixelRatio || 1, step.dpr);
     const cw = canvas.clientWidth || 390, ch = canvas.clientHeight || 780;
-    const k = (low ? 0.7 : scale) * dpr * Math.min(1, 1300 / ch);
+    const k = scale * dpr * Math.min(1, 1300 / ch);
     const w = Math.max(1, Math.round(cw * k)), h = Math.max(1, Math.round(ch * k));
     if (canvas.width !== w || canvas.height !== h) {
       renderer.setSize(w, h, false);
@@ -207,8 +290,8 @@ export function createRenderer(canvas) {
       camera.updateProjectionMatrix();
     }
     post.setSize(w, h);
-    renderer.shadowMap.enabled = tier === 2;
-    sunLight.castShadow = tier === 2;
+    renderer.shadowMap.enabled = tier === 2 && !mobile;
+    sunLight.castShadow = tier === 2 && !mobile;
     headSpot.visible = tier > 0;
     mats.glow.uniforms.uGlowScale.value = tier === 0 ? 0.8 : 1;
     post.uniforms.uInk.value = tier === 0 ? 0 : 1;
@@ -291,7 +374,7 @@ export function createRenderer(canvas) {
         dyn.add(GLOW.POOL, ox, 0.07, oz, 5.2, 5.2, 0, side > 0 ? RED : BLUE, k);
         dyn.add(GLOW.STREAK, ox, 0.06, oz, 1.4, 13, 0, side > 0 ? RED : BLUE, 1.2);
         const a = -o.rotation.y - Math.PI / 2;
-        dyn.add(GLOW.CONE, ox + Math.cos(a) * 2.6, 0.06, oz + Math.sin(a) * 2.6, 2.6, 11, a, WARM, 0.22);
+        carLights(ox, oz, a, 0.9);
       }
       if (i < 2 && tier > 0) {
         const l = beacons[beaconUsed++];
@@ -308,11 +391,14 @@ export function createRenderer(canvas) {
       const o = actorMap.get(s);
       const ex = playing ? alpha * TICK : 0;
       const sx = (s.x + Math.cos(s.angle) * s.speed * ex) / 10, sz = (s.y + Math.sin(s.angle) * s.speed * ex) / 10;
-      placeCar(o, sx, sz, s.angle, playing || !game ? s.speed / 10 : 0, dt);
-      if (o.position.distanceToSquared(heroPos) < 90 * 90) {
-        dyn.add(GLOW.CONE, sx + Math.cos(s.angle) * 2.6, 0.06, sz + Math.sin(s.angle) * 2.6, 2.4, 10, s.angle, WARM, 0.2);
-        dyn.add(GLOW.STREAK, sx - Math.cos(s.angle) * 2.7, 0.06, sz - Math.sin(s.angle) * 2.7, 0.8, 5, 0, RED, 0.35);
-      }
+      // Traffic turns 90° at junctions in the simulation; ease the drawn heading/lane change.
+      const ud = o.userData;
+      ud.va = ud.va === undefined ? s.angle : lerpAngle(ud.va, s.angle, 1 - Math.exp(-dt * 6));
+      const gap = ud.vx === undefined ? 1e9 : Math.hypot(ud.vx - sx, ud.vz - sz);
+      if (gap > 30 || gap < 1.2) { ud.vx = sx; ud.vz = sz; }
+      else { const kk = 1 - Math.exp(-dt * 10); ud.vx += (sx - ud.vx) * kk; ud.vz += (sz - ud.vz) * kk; }
+      placeCar(o, ud.vx, ud.vz, ud.va, playing || !game ? s.speed / 10 : 0, dt);
+      if (o.position.distanceToSquared(heroPos) < 90 * 90) carLights(ud.vx, ud.vz, ud.va, 0.75);
     }
     const markStates = game ? game.marks : [];
     sync("marks", markStates, makeMark, seenTmp);
@@ -336,11 +422,25 @@ export function createRenderer(canvas) {
     // ---------- hero lights ----------
     const ha = angle + yawOffset;
     const hx = Math.cos(ha), hz = Math.sin(ha);
-    dyn.add(GLOW.CONE, px + hx * 2.8, 0.07, pz + hz * 2.8, 3.6, 15, ha, WARM, 0.32);
-    dyn.add(GLOW.POOL, px, 0.07, pz, 1.9, 3.4, ha, t % 1600 < 800 || reducedMotion ? CYAN : PINK, 0.42);
-    dyn.add(GLOW.STREAK, px - hx * 2.85 - hz * 0.85, 0.06, pz - hz * 2.85 + hx * 0.85, 0.55, 7, 0, RED, 1);
-    dyn.add(GLOW.STREAK, px - hx * 2.85 + hz * 0.85, 0.06, pz - hz * 2.85 - hx * 0.85, 0.55, 7, 0, RED, 1);
-    dyn.add(GLOW.HALO, px - hx * 2.85, 0.9, pz - hz * 2.85, 1.6, 0, 0, RED, 0.25);
+    // Natural lights: soft twin-lobe beam, small warm halo per lamp, tail lights brighten as you brake.
+    if (speed > 0 && speed < prevSpeed - 0.05) brake = Math.min(1, brake + dt * 6); else brake = Math.max(0, brake - dt * 3);
+    if (drift > 0.6) brake = Math.max(brake, 0.6);
+    prevSpeed = speed;
+    dyn.add(GLOW.CONE, px + hx * 2.7, 0.07, pz + hz * 2.7, 3.4, 17, ha, WARM, 0.36);
+    dyn.add(GLOW.POOL, px, 0.07, pz, 1.9, 3.4, ha, t % 1600 < 800 || reducedMotion ? CYAN : PINK, 0.32);
+    for (const sd of [-1, 1]) {
+      const lx = px - hx * 2.82 - hz * 0.85 * sd, lz = pz - hz * 2.82 + hx * 0.85 * sd;
+      dyn.add(GLOW.STREAK, lx, 0.06, lz, 0.5, 6 + brake * 3, 0, RED, 0.7 + brake * 0.6);
+      dyn.add(GLOW.HALO, lx, 0.86, lz, 0.75 + brake * 0.35, 0, 0, RED, 0.4 + brake * 0.5);
+      dyn.add(GLOW.HALO, px + hx * 2.78 - hz * 0.92 * sd, 0.83, pz + hz * 2.78 + hx * 0.92 * sd, 0.55, 0, 0, WARM, 0.35);
+    }
+    // Tail-light trails at speed (always faint, bright at top speed or in a drift).
+    {
+      const top = speed * 10 > 255 ? 1 : 0;
+      topSpeedT = top ? topSpeedT + dt : 0;
+      const k = reducedMotion || !game ? 0 : Math.min(1, 0.25 + top * 0.5 + drift * 0.6) * (playing ? 1 : 0);
+      trails.update(dt, [[px - hx * 2.85 - hz * 0.85, 0.86, pz - hz * 2.85 + hx * 0.85], [px - hx * 2.85 + hz * 0.85, 0.86, pz - hz * 2.85 - hx * 0.85]], tier === 0 ? 0 : k, camera.position);
+    }
     headSpot.position.set(px + hx * 2.2, 1.3, pz + hz * 2.2);
     headSpot.target.position.set(px + hx * 14, 0, pz + hz * 14);
 
@@ -416,8 +516,8 @@ export function createRenderer(canvas) {
     threats.push({ x: px, z: pz, vx: Math.cos(angle) * speed, vz: Math.sin(angle) * speed });
     for (const s of policeStates) threats.push({ x: s.x / 10, z: s.y / 10, vx: Math.cos(s.angle) * (s.speed ?? 0) / 10, vz: Math.sin(s.angle) * (s.speed ?? 0) / 10 });
     for (const s of trafficStates) threats.push({ x: s.x / 10, z: s.y / 10, vx: Math.cos(s.angle) * s.speed / 10, vz: Math.sin(s.angle) * s.speed / 10 });
-    if (game !== pedGame) { peds.clear(); pedGame = game; comic?.clear(); comicQueue.length = 0; }
-    peds.update(Math.min(dt, 0.05), t / 1000, px, pz, Math.cos(game ? heading : angle), Math.sin(game ? heading : angle), threats, reducedMotion, low ? 30 : tier === 1 ? 52 : 80);
+    if (game !== pedGame) { peds.clear(); pedGame = game; comic?.clear(); comicQueue.length = 0; trails.clear(); driftHeld = 0; }
+    peds.update(Math.min(dt, 0.05), t / 1000, px, pz, Math.cos(game ? heading : angle), Math.sin(game ? heading : angle), threats, reducedMotion, tier === 0 ? 28 : tier === 1 ? 50 : 80, cityMap(game?.seed ?? seed));
     dyn.flush();
 
     // ---------- camera director ----------
@@ -515,6 +615,21 @@ export function createRenderer(canvas) {
       }
       comicQueue.length = 0;
       if (fxOn && playing) comic.speedLines(post.uniforms.uSpeed.value);
+      // Street-art state feedback: graffiti streaks off the back at top speed, a tag for a long drift.
+      if (fxOn && playing && topSpeedT > 0.6) {
+        for (const sd of [-1, 1]) {
+          const [nx, ny, vis] = toScreen(px - hx * 2.9 - hz * 1.05 * sd, 0.9, pz - hz * 2.9 + hx * 1.05 * sd);
+          const [ex, ey] = toScreen(px - hx * 7 - hz * 1.6 * sd, 0.9, pz - hz * 7 + hx * 1.6 * sd);
+          if (vis) comic.tail(nx, ny, ex - nx, ey - ny);
+        }
+      }
+      driftHeld = drift > 0.75 && speed > 0 ? driftHeld + dt : 0;
+      if (fxOn && driftHeld > 1.1 && !perfectShown) {
+        perfectShown = true;
+        const [nx, ny, vis] = toScreen(px, 2.4, pz);
+        if (vis) comic.tag(nx, ny - 0.05, "PERFECT");
+      }
+      if (driftHeld === 0) perfectShown = false;
       comic.frame(dt);
     }
 

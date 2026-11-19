@@ -326,3 +326,11 @@ dialog.share-sheet { width: min(380px, 94vw); max-height: 96dvh; overflow: auto;
 .hud-health.hit { animation: shake 0.3s steps(3); }
 .hud-health.regen .hp-fill { box-shadow: 0 0 10px #3ed99a; filter: brightness(1.15); }
 .hud-health.regen .hp-ico { animation: blink 0.6s steps(2) infinite; }
+
+/* minimap */
+.minimap { position: relative; width: clamp(118px, 34vw, 150px); height: clamp(108px, 30vw, 138px); pointer-events: none; box-shadow: 0 0 0 2px var(--ink), 0 0 0 4px var(--violet), 0 0 0 6px var(--ink), 4px 6px 0 4px rgba(10, 2, 20, 0.4); }
+.minimap canvas { display: block; width: 100%; height: 100%; }
+.mm-count { position: absolute; left: 50%; top: 3px; transform: translateX(-50%); display: flex; align-items: baseline; gap: 4px; padding: 0 6px; background: rgba(27, 11, 43, 0.8); }
+.mm-count b { font: 400 22px/1 var(--px); color: var(--gold); text-shadow: 1px 1px 0 var(--ink); }
+.mm-count small { font-size: 10px; color: var(--muted); }
+.controls { align-items: flex-end; }

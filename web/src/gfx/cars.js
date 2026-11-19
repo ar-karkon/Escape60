@@ -85,7 +85,7 @@ export function heroBody(body = C.hero, stripe = 0xfff1de) {
   b.box(0, 0.8, -2.75, 1.25, 0.3, 0.08, 0x0b0910, { n: 0 });
   for (const y of [0.74, 0.86]) b.box(0, y, -2.79, 1.15, 0.03, 0.03, CHROME, { p: P.CHROME });
   for (const s of [-1, 1]) {
-    b.box(s * 0.92, 0.83, -2.75, 0.5, 0.24, 0.1, 0xfff6dc, { p: P.LIGHT, e: 3.2, n: 0 });
+    b.box(s * 0.92, 0.83, -2.75, 0.5, 0.24, 0.1, 0xfff1d2, { p: P.LIGHT, e: 2.1, n: 0 });
     b.box(s * 0.92, 0.83, -2.73, 0.6, 0.32, 0.06, CHROME, { p: P.CHROME });
     b.box(s * 1.2, 0.6, -2.76, 0.18, 0.1, 0.06, 0xffb347, { p: P.LIGHT, e: 3, n: 0 });
   }
@@ -128,7 +128,7 @@ function sedanBody(paint, opts = {}) {
   b.box(0, (opts.cabinTop ?? 1.9) + 0.02, 0.4, 1.8, 0.06, 1.15, roof, po);
   // lights
   for (const s of [-1, 1]) {
-    b.box(s * 0.85, 0.82, -hl - 0.03, 0.5, 0.2, 0.08, 0xfff3d6, { p: P.LIGHT, e: 5, n: 0 });
+    b.box(s * 0.85, 0.82, -hl - 0.03, 0.5, 0.2, 0.08, 0xfff1d2, { p: P.LIGHT, e: 2.6, n: 0 });
     b.box(s * 0.88, 0.85, hl + 0.03, 0.5, 0.18, 0.06, 0xff2d4a, { p: P.LIGHT, e: 3.5, n: 0 });
   }
   b.box(0, 0.62, -hl - 0.02, 2.5, 0.28, 0.12, TRIM);
@@ -152,7 +152,7 @@ export function policeBody(heavy = false) {
         for (const s of [-1, 1]) {
           v.box(s * 1.22, 0.62, -1.7, 0.32, 0.8, 1.2, 0x0e0c14, { n: 0 });
           v.box(s * 1.22, 0.62, 1.8, 0.32, 0.8, 1.2, 0x0e0c14, { n: 0 });
-          v.box(s * 0.9, 1.0, -2.88, 0.5, 0.22, 0.08, 0xfff3d6, { p: P.LIGHT, e: 5, n: 0 });
+          v.box(s * 0.9, 1.0, -2.88, 0.5, 0.22, 0.08, 0xfff1d2, { p: P.LIGHT, e: 2.6, n: 0 });
           v.box(s * 1.0, 1.0, 2.88, 0.4, 0.3, 0.06, 0xff2d4a, { p: P.LIGHT, e: 3.5, n: 0 });
         }
         // push bar
@@ -203,7 +203,7 @@ export function trafficBody(type, paint) {
       b.box(s * 1.31, 1.2, 1.2, 0.03, 0.5, 2.6, shade(paint, 0.8));
       b.box(s * 1.17, 0.6, -1.85, 0.3, 0.72, 1.1, 0x0e0c14, { n: 0 });
       b.box(s * 1.17, 0.6, 1.85, 0.3, 0.72, 1.1, 0x0e0c14, { n: 0 });
-      b.box(s * 0.85, 0.95, -2.88, 0.45, 0.22, 0.08, 0xfff3d6, { p: P.LIGHT, e: 5, n: 0 });
+      b.box(s * 0.85, 0.95, -2.88, 0.45, 0.22, 0.08, 0xfff1d2, { p: P.LIGHT, e: 2.6, n: 0 });
       b.box(s * 1.05, 1.0, 2.83, 0.3, 0.5, 0.06, 0xff2d4a, { p: P.LIGHT, e: 3, n: 0 });
     }
     return b.geometry();

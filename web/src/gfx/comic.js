@@ -5,7 +5,7 @@ const INK = "#1b0b2b", GOLD = "#f6d36b", CREAM = "#fff4e6", PINK = "#ff5d95", CY
 export function createComic(canvas) {
   const ctx = canvas.getContext("2d");
   const items = [];
-  let W = 1, H = 1, S = 1;
+  let W = 1, H = 1, S = 1, dirty = false;
   const rand = (a, b) => a + Math.random() * (b - a);
   function add(it) { if (items.length > 70) items.shift(); items.push(it); }
   function jagged(x, y, ang, len, kinks) {
@@ -42,6 +42,19 @@ export function createComic(canvas) {
         add({ type: "bolt", pts: jagged(x + Math.cos(a) * 18 * S, y + Math.sin(a) * 18 * S, a, rand(30, 60) * S, 3), age: 0, life: rand(0.22, 0.35), color: kind === "hit" ? GOLD : color });
       }
     },
+    /** Graffiti swoosh trailing off a tail light at top speed. */
+    tail(nx, ny, dx, dy) {
+      if (Math.random() > 0.5) return;
+      const x = nx * W, y = ny * H, len = Math.hypot(dx * W, dy * H) || 1, ux = (dx * W) / len, uy = (dy * H) / len;
+      const pts = [];
+      for (let k = 0; k <= 5; k++) { const t = k / 5, wob = Math.sin(k * 1.9 + Math.random()) * 7 * S * t; pts.push([x + ux * t * 110 * S - uy * wob, y + uy * t * 110 * S + ux * wob]); }
+      add({ type: "bolt", pts, age: 0, life: 0.22, color: Math.random() < 0.5 ? CYAN : PINK });
+    },
+    /** Big sprayed word for a state change (e.g. a perfect drift). */
+    tag(nx, ny, text) {
+      add({ type: "word", x: nx * W, y: ny * H, text, age: 0, life: 0.9, rot: (Math.random() - 0.5) * 0.3 });
+      add({ type: "star", x: nx * W, y: ny * H, r: 46 * S, spikes: 14, age: 0, life: 0.45, color: PINK, rot: Math.random() * 6 });
+    },
     speedLines(k) {
       if (Math.random() > k * 0.6) return;
       const a = rand(0, Math.PI * 2), r0 = Math.max(W, H) * rand(0.42, 0.52);
@@ -49,6 +62,9 @@ export function createComic(canvas) {
       add({ type: "line", x0: cx + Math.cos(a) * r0, y0: cy + Math.sin(a) * r0, x1: cx + Math.cos(a) * (r0 + rand(60, 140) * S), y1: cy + Math.sin(a) * (r0 + rand(60, 140) * S), age: 0, life: 0.16 });
     },
     frame(dt) {
+      // Skip all canvas work while nothing is on screen (saves fill-rate on weak phones).
+      if (!items.length) { if (dirty) { ctx.clearRect(0, 0, W, H); dirty = false; } return; }
+      dirty = true;
       ctx.clearRect(0, 0, W, H);
       ctx.lineJoin = "miter"; ctx.lineCap = "square";
       for (let i = items.length - 1; i >= 0; i--) {
@@ -94,6 +110,14 @@ export function createComic(canvas) {
           ctx.closePath();
           ctx.lineWidth = 6 * S; ctx.strokeStyle = INK; ctx.stroke();
           ctx.fillStyle = it.color; ctx.fill();
+        } else if (it.type === "word") {
+          const sc = t < 0.15 ? 0.6 + t / 0.15 * 0.6 : 1.2 - Math.min(0.2, (t - 0.15));
+          ctx.save(); ctx.translate(it.x, it.y - t * 30 * S); ctx.rotate(it.rot); ctx.scale(sc, sc);
+          ctx.globalAlpha = 1 - Math.max(0, t - 0.7) / 0.3;
+          ctx.font = `400 ${38 * S}px "Jersey 10", monospace`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+          ctx.lineWidth = 9 * S; ctx.strokeStyle = INK; ctx.strokeText(it.text, 0, 0);
+          ctx.fillStyle = GOLD; ctx.fillText(it.text, 0, 0);
+          ctx.restore();
         } else if (it.type === "line") {
           ctx.globalAlpha = 0.55 * (1 - t);
           ctx.beginPath(); ctx.moveTo(it.x0, it.y0); ctx.lineTo(it.x1, it.y1);

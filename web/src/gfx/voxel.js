@@ -153,17 +153,20 @@ void pattern(int pid, inout vec3 base, inout vec3 emit, inout float refl, inout 
       float u=uv.x, v=uv.y, len=fw;
       float au=abs(u); vec3 paint=vec3(.86,.8,.74);
       bool mark=false;
-      if(v>.4&&v<3.2&&au<8.3&&fract(u/1.25)<.55)mark=true;
-      if(v>len-3.2&&v<len-.4&&au<8.3&&fract(u/1.25)<.55)mark=true;
+      // q bit 1: junction at the v=0 end, bit 2: junction at the v=len end (crosswalks, stop lines, arrows)
+      bool j0=mod(q,2.)>=1., j1=mod(floor(q/2.),2.)>=1.;
+      if(j0&&v>.4&&v<3.2&&au<8.3&&fract(u/1.25)<.55)mark=true;
+      if(j1&&v>len-3.2&&v<len-.4&&au<8.3&&fract(u/1.25)<.55)mark=true;
       if(v>3.8&&v<len-3.8){
         if(au<.13&&fract((v-3.8)/5.)<.5)mark=true;
         if(au>8.35&&au<8.62)mark=true;
       }
       float lu=u>0.?u-4.3:-u-4.3, lv=u>0.?v:len-v;
-      if(abs(lu)<.17&&lv>5.7&&lv<7.9)mark=true;
-      if(lv>4.3&&lv<5.7&&abs(lu)<(lv-4.3)*.6)mark=true;
-      if(v>3.4&&v<3.75&&u>0.&&u<8.3){mark=true;}
-      if(v>len-3.75&&v<len-3.4&&u<0.&&u>-8.3){mark=true;}
+      bool jj=u>0.?j0:j1;
+      if(jj&&abs(lu)<.17&&lv>5.7&&lv<7.9)mark=true;
+      if(jj&&lv>4.3&&lv<5.7&&abs(lu)<(lv-4.3)*.6)mark=true;
+      if(j0&&v>3.4&&v<3.75&&u>0.&&u<8.3){mark=true;}
+      if(j1&&v>len-3.75&&v<len-3.4&&u<0.&&u>-8.3){mark=true;}
       if(mark){base=paint*(.85+.15*h12(pix));emit+=paint*.05;wet*=.5;}
       float crack=step(.985,h12(floor(wp.xz*3.)))*step(au,7.);
       base*=1.-crack*.35;
@@ -502,7 +505,7 @@ export class VoxelBuilder {
 }
 
 /* ---------------- Additive glow decals (light pools, wet reflections, cones, halos) ---------------- */
-export const GLOW = { POOL: 0, STREAK: 1, CONE: 2, HALO: 3, BEAM: 4 };
+export const GLOW = { POOL: 0, STREAK: 1, CONE: 2, HALO: 3, BEAM: 4, FLARE: 5 };
 const GLOW_VERT = /* glsl */ `
 attribute vec3 aCenter; attribute vec4 aSize; attribute vec2 aCorner; attribute vec3 aColor;
 varying vec2 vC; varying vec3 vColor; varying float vKind; varying float vLen; varying vec3 vW;
@@ -522,6 +525,10 @@ void main(){
     vec3 right=vec3(viewMatrix[0][0],viewMatrix[1][0],viewMatrix[2][0]);
     vec3 up=vec3(viewMatrix[0][1],viewMatrix[1][1],viewMatrix[2][1]);
     p+=right*aCorner.x*aSize.x+up*aCorner.y*aSize.x;
+  }else if(kind>4.5){ // anamorphic flare: wide horizontal streak in screen space, faded by facing
+    vec3 right=vec3(viewMatrix[0][0],viewMatrix[1][0],viewMatrix[2][0]);
+    vec3 up=vec3(viewMatrix[0][1],viewMatrix[1][1],viewMatrix[2][1]);
+    p+=right*aCorner.x*aSize.x+up*aCorner.y*aSize.x*.07;
   }else{ // vertical beam from c (top) down to ground along dir length
     vec3 tc=normalize(vec3(cameraPosition.x-c.x,0.,cameraPosition.z-c.z));
     vec3 side=normalize(cross(vec3(0.,1.,0.),tc));
@@ -543,8 +550,13 @@ void main(){
     a=pow(max(1.-x,0.),1.6)*pow(1.-t,1.3);
     float band=step(.35,fract(t*vLen*.9+hh(vec2(floor(t*vLen*.9),floor(vW.x)))*.5));
     a*=.35+.65*band;}
-  else if(vKind<2.5){float t=vC.y*.5+.5;a=pow(max(1.-abs(vC.x),0.),2.)*pow(1.-t,1.6)*smoothstep(0.,.18,t);}
-  else if(vKind<3.5){float r=length(vC);a=pow(max(1.-r,0.),2.2);}
+  else if(vKind<2.5){float t=vC.y*.5+.5;float x=vC.x;
+    // two soft overlapping lamp lobes that merge further out, warm centre, gentle long falloff
+    float lobes=max(exp(-pow((x-.32)*3.2,2.)),exp(-pow((x+.32)*3.2,2.)));
+    float body=mix(lobes,exp(-x*x*2.2),smoothstep(.1,.7,t));
+    a=body*pow(1.-t,1.25)*smoothstep(0.,.12,t);}
+  else if(vKind<3.5){float r=length(vC);a=pow(max(1.-r,0.),2.2)+pow(max(1.-r*3.,0.),2.)*.8;}
+  else if(vKind>4.5){float x=abs(vC.x),y=abs(vC.y);a=pow(max(1.-x,0.),3.)*pow(max(1.-y,0.),1.5)+pow(max(1.-length(vC*vec2(6.,1.)),0.),2.)*.6;}
   else{float t=vC.y*.5+.5;a=pow(max(1.-abs(vC.x),0.),1.5)*(1.-t*.6);}
   float d=length(vW-cameraPosition);
   float f=1.-exp(-max(d-uFogStart,0.)*uFogDensity);

@@ -30,13 +30,14 @@ The same 3D city renders the menu, race and finish. Each 520-unit simulation blo
 - **Camera:** close rear three-quarter chase (~9.4 up, 14 behind) with speed FOV, damping, steer roll and hit shake; buildings in front of the car dissolve. Off-screen police show as an edge arrow.
 - **Quality:** adaptive resolution / shadows / bloom; «گرافیک سبک» in settings; `?q=high` or `?q=low` pins a tier for benchmarks.
 
-The 1.3.0 simulation schedules pursuit changes at 10, 25, 40 and 55 seconds, uses a 0–100 health bar where damage scales with how hard you hit (with slow regeneration), spawns traffic and police outside the visible range, and keeps the skill chain: near misses and roadblock dodges in quick succession multiply points up to ×5 (any hit resets it). Everything is verified by the same server replay. Downtown increases traffic frequency and highway driving has a higher speed cap. Local and server rankings use version-specific keys. The static bundle includes Three.js, the fonts (Rooyin Free, Jersey 10, Vazirmatn — SIL OFL) and their licenses, so gameplay needs no CDN requests.
+The 1.4.0 simulation builds a real street network per seed (avenues every third street, T-junctions, dead ends, closed blocks that become parks, plazas, malls and car parks), drives traffic along it, adds patrols at 8, 18, 30, 42 and 52 seconds with roadblocks from 20 seconds, uses a 0–100 health bar where damage scales with how hard you hit (with slow regeneration), spawns traffic and police outside the visible range, and keeps the skill chain: near misses and roadblock dodges in quick succession multiply points up to ×5 (any hit resets it). Everything is verified by the same server replay. Downtown increases traffic frequency and highway driving has a higher speed cap. Local and server rankings use version-specific keys. The static bundle includes Three.js, the fonts (Rooyin Free, Jersey 10, Vazirmatn — SIL OFL) and their licenses, so gameplay needs no CDN requests.
 
 Real 390×780 engine screenshots: [Menu](docs/screenshots/menu.png) · [Driving](docs/screenshots/coastal.png) · [High-pressure chase](docs/screenshots/pursuit.png) · [Results](docs/screenshots/results.png) · [Share sheet](docs/screenshots/share-sheet.png) · share cards [Story](docs/screenshots/share-story.jpg) / [Post](docs/screenshots/share-post.jpg) / [Wide](docs/screenshots/share-wide.jpg) · [Side by side with the concept references](docs/screenshots/comparison.jpg). Concept references live in `design/references/`; the remaining visual gaps are listed in `docs/25_VISUAL_QUALITY_AUDIT_FA.md`.
 
 ## Delivered
 
 - Deterministic seeded 60Hz game loop, escalating police AI (chasers from behind, head-on interceptors), busy traffic that enters out of view, buildings, roadblocks, impact-scaled health bar with regeneration, drift/near-miss/dodge scoring with a ×5 skill chain, 60-second win condition.
+- Real street network with dead ends and a heading-up minimap (streets, dead ends, police, roadblocks); automatic quality for weak phones.
 - Walking pedestrians that cross streets and leap clear of cars; softer rendering with comic ink outlines, halftone shading and graffiti-style drift effects; Persian UI in the Rooyin pixel font.
 - 3D voxel tropical neon city with HDR bloom, pixel UI, countdown, combo meter, event popups, pause on tab hide, touch and keyboard controls.
 - **Music & sound:** five synthwave/retrowave tracks (menu, three rotating chase tracks, results) and recorded SFX — engine, tyre squeal, police siren with stereo position, helicopter, crash, whooshes, horn, combo/level stingers — all CC0 / CC-BY from OpenGameArt, credited in-game and in `web/assets/audio/CREDITS.md`. Separate music / SFX switches.
@@ -52,10 +53,12 @@ Real 390×780 engine screenshots: [Menu](docs/screenshots/menu.png) · [Driving]
 ```text
 web/                    static HTML/CSS/WebGL2 browser game
 web/src/simulation.js   deterministic rules imported by game AND Node score verifier
+web/src/map.js          seeded street network (shared by simulation, server replay, renderer, minimap)
 web/src/main.js         UI flow, controls, countdown, fixed-timestep loop, share and API handling
 web/src/render.js       camera director, tile streaming, actors, lights and FX orchestration
 web/src/gfx/            voxel builder + shader patterns, city kit, props, cars, sky, FX, HDR post
 web/src/ui/icons.js     original pixel icon set
+web/src/ui/minimap.js   heading-up minimap
 web/src/audio.js        music streaming, SFX buffers, engine/siren/squeal/heli mix, ducking
 web/src/meta.js         XP, levels, paints, daily missions, streak, friend-challenge parsing
 web/src/share.js        social share cards (story/post/wide) with QR, native share and network links
