@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="assets/branding/github-header.svg" width="100%" alt="فرار ۶۰" />
+  <img src="assets/branding/github-header.webp" width="100%" alt="فرار ۶۰" />
 
   ## 🚔 فرار ۶۰ — یه دقیقه فرار، یه دنیا کری!
 
@@ -28,6 +28,14 @@
 </p>
 
 <sub>این تصاویر واقعیِ مرورگر هستند؛ پوسترهای تبلیغاتی و کانسپت‌آرت با اسکرین‌شات بازی فرق دارند.</sub>
+
+## 🎨 پوستر رسمی بازی
+
+<p align="center">
+  <img src="assets/branding/competition-cover.webp" width="94%" alt="پوستر تبلیغاتی فرار ۶۰ برای Edge Games" />
+  <br />
+  <sub>این تصویر پوستر تبلیغاتی است و اسکرین‌شات گیم‌پلی نیست.</sub>
+</p>
 
 ## 🎮 کنترل‌ها
 
@@ -65,4 +73,4 @@ npm run build
 
 این یک پروژه **مستقل ساخته‌شده برای مسابقه Edge Games آروان** است؛ استفاده از نام آروان به معنی حمایت یا تأیید رسمی این بازی نیست. ریپو عمومی است ولی فعلاً مجوز آزاد برای استفاده مجدد از کد و تصاویر اختصاصی ندارد. اعتبار موسیقی و افکت‌ها در [فهرست منابع صوتی](web/assets/audio/CREDITS.md) آمده.
 
-<div align="center"><img src="assets/branding/github-footer.svg" width="100%" alt="Escape 60" /></div>
+<div align="center"><img src="assets/branding/github-footer.webp" width="100%" alt="Escape 60" /></div>

@@ -1,6 +1,6 @@
 <div align="center">
   <a href="https://escape60.lavanai2525-3qem7.arvanedge.ir/">
-    <img src="assets/branding/github-header.svg" width="100%" alt="Escape 60 — Sunset Bay" />
+    <img src="assets/branding/github-header.webp" width="100%" alt="Escape 60 — Sunset Bay" />
   </a>
 
   <br />
@@ -59,6 +59,16 @@ npm run test:browser   # mobile smoke test incl. a real verified run (needs npm 
 npm run capture        # real screenshots into docs/screenshots (needs npm start)
 npm run deploy         # release to Arvan from your computer (asks for the storage keys)
 ```
+
+## 🎨 Game artwork
+
+<div align="center">
+  <a href="assets/branding/competition-cover.webp"><img src="assets/branding/competition-cover.webp" width="90%" alt="Escape 60 — neon coastal car chase promotional cover, made for Arvan Edge Games" /></a>
+  <br />
+  <sub>Promotional illustration · separate from the actual game captures above.</sub>
+  <br />
+  <a href="assets/branding/game-icon.webp"><img src="assets/branding/game-icon.webp" width="128" alt="Escape 60 square game icon" /></a>
+</div>
 
 ## 🎮 Controls
 
@@ -134,7 +144,7 @@ Want to improve the game? Open an [issue](https://github.com/ar-karkon/Escape60/
 The repository is public but there is currently **no explicit open-source license**. All game art is original procedural code; car shapes are inspired by real cars but carry no brands, names or logos. Fonts (Rooyin Free, Jersey 10, Vazirmatn — SIL OFL) and audio (CC0 / CC-BY) keep their own licenses.
 
 <div align="center">
-  <img src="assets/branding/github-footer.svg" width="100%" alt="Escape 60 — Made for Arvan Edge Games" />
+  <img src="assets/branding/github-footer.webp" width="100%" alt="Escape 60 — Made for Arvan Edge Games" />
   <br />
   <sub>🌴 An original Sunset Bay escape. Built for the thrill of the chase.</sub>
 </div>

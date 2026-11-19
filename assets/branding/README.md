@@ -1,13 +1,17 @@
-# Escape 60 · Brand assets
+# Escape 60 — repository visuals
 
-This directory contains standalone **SVG GitHub fallback graphics** inspired by Sunset Bay's sunset/neon palette. The repository owner has also provided final illustrated PNG artwork for a competition cover, GitHub header, GitHub footer and square icon. These raster files can replace the fallback assets when uploaded to this folder.
+This directory contains the **owner-supplied illustrated artwork**, optimized for GitHub without altering the composition:
 
-Expected filenames:
-- `competition-cover.png` — 16:9 marketing cover
-- `github-header.png` — wide README header
-- `github-footer.png` — narrow README footer
-- `game-icon.png` — square icon
+| File | Purpose |
+| --- | --- |
+| [github-header.webp](github-header.webp) | 2560 × 640 README hero |
+| [github-footer.webp](github-footer.webp) | 2560 × 320 README footer |
+| [competition-cover.webp](competition-cover.webp) | 16:9 promotional / Edge Games poster |
+| [game-icon.webp](game-icon.webp) | 1024 × 1024 game icon |
+| [github-social-preview.jpg](github-social-preview.jpg) | 1280 × 640 image for GitHub's **Settings → General → Social preview** |
 
-**Note:** GitHub's repo **Social preview** is a separate setting under **Settings → General → Social preview**, and is not changed by editing README. Upload the competition cover there as well.
+The two SVG files are self-contained fallbacks, kept for future use.
 
-The game is independent. “Made for Arvan Edge Games” is competition context, **not ArvanCloud endorsement**. Marketing art must not be described as actual gameplay.
+**Brand use:** ArvanCloud logos and references indicate the Edge Games competition context; this does **not** mean ArvanCloud sponsors, endorses or owns the game. The poster and icon are concept/marketing art, **not captured gameplay**. Actual gameplay screenshots are in [docs/screenshots](../../docs/screenshots/).
+
+**Note:** The repository's About description, topics and Social Preview are GitHub repository settings; editing README cannot change them.
