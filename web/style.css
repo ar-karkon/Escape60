@@ -552,3 +552,104 @@ dialog.dlg[open] { display: flex; flex-direction: column; gap: 10px; }
 }
 [dir="rtl"] #garage-back svg { transform: scaleX(-1); }
 .results:not(.legend) .title-ribbon .ti { display: none; }
+
+/* ======================================================================
+   v3.2 mobile layout: half-screen steering, vertical bars on both edges,
+   one centred bottom cluster (brake/drift · speed · nitro). Sizes on a 4 px grid.
+   ====================================================================== */
+#controls.controls { position: absolute; inset: 0; left: 0; right: 0; bottom: 0; z-index: 2; display: block; padding: 0; pointer-events: none; }
+.hud { z-index: 3; }
+.steer-zone { position: absolute; inset: 0; pointer-events: auto; touch-action: none; -webkit-user-select: none; user-select: none; }
+.zone-hint { position: absolute; bottom: calc(var(--safe-b) + 32px); width: 28px; height: 24px; opacity: 0.28; transition: opacity 0.08s steps(2), transform 0.08s steps(2); filter: drop-shadow(0 2px 0 var(--ink)); }
+.zone-hint.left { left: 6px; } .zone-hint.right { right: 6px; }
+.zone-hint > span { width: 100%; height: 100%; }
+.zone-hint.on { opacity: 1; transform: scale(1.15); filter: drop-shadow(0 0 6px var(--gold)) drop-shadow(0 2px 0 var(--ink)); }
+
+/* vertical health (left) and nitro (right) */
+.vbar { --b: 2px; position: absolute; top: calc(var(--safe-t) + 228px); bottom: calc(var(--safe-b) + 132px); width: 40px; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 6px 0; background: rgba(27, 11, 43, 0.78);
+  box-shadow: 0 -2px 0 0 var(--edge), 0 2px 0 0 var(--edge), -2px 0 0 0 var(--edge), 2px 0 0 0 var(--edge), 0 -4px 0 0 var(--ink), 0 4px 0 0 var(--ink), -4px 0 0 0 var(--ink), 4px 0 0 0 var(--ink), -2px -2px 0 0 var(--ink), 2px -2px 0 0 var(--ink), -2px 2px 0 0 var(--ink), 2px 2px 0 0 var(--ink), 0 8px 0 0 rgba(10, 2, 20, 0.4); }
+.vbar-health { left: 8px; --edge: #3ed99a; }
+.vbar-nitro { right: 8px; --edge: var(--cyan); }
+.vb-ico { width: 20px; height: 20px; flex: none; }
+.vb-track { position: relative; flex: 1; width: 16px; min-height: 60px; background: #2a1840; box-shadow: inset 0 0 0 2px var(--ink); overflow: hidden; }
+.vb-track i { position: absolute; left: 2px; right: 2px; bottom: 2px; height: 0; max-height: calc(100% - 4px); width: auto; }
+.vb-track::after { content: ""; position: absolute; inset: 0; background: repeating-linear-gradient(0deg, transparent 0 calc(10% - 2px), var(--ink) calc(10% - 2px) 10%); pointer-events: none; }
+.vbar .hp-trail { background: var(--cream); }
+.vbar .hp-fill { background: linear-gradient(90deg, #9dffcf 0 30%, #3ed99a 30% 70%, #23a874 70%); }
+.vbar-health[data-level="warn"] { --edge: var(--gold); }
+.vbar-health[data-level="warn"] .hp-fill { background: linear-gradient(90deg, #fff3a8 0 30%, var(--gold) 30% 70%, #e0a92e 70%); }
+.vbar-health[data-level="crit"] { --edge: var(--hot); }
+.vbar-health[data-level="crit"] .hp-fill { background: linear-gradient(90deg, #ff9fb3 0 30%, var(--hot) 30% 70%, #b51e45 70%); animation: blink 0.4s steps(2) infinite; }
+.vbar-health.hit { animation: shake 0.3s steps(3); }
+.vbar .nitro-fill { inset: auto 2px 2px 2px; background: linear-gradient(90deg, #b6f7ff 0 30%, var(--cyan) 30% 70%, #1d6fa0 70%); box-shadow: 0 0 8px var(--cyan); }
+.vbar-nitro.full .nitro-fill { animation: blink 0.5s steps(2) infinite; }
+.vbar-nitro.on { --edge: #5dffb0; }
+.vbar-nitro.on .nitro-fill { background: linear-gradient(90deg, #d9ffe9 0 30%, #5dffb0 30% 70%, #1f9e6a 70%); box-shadow: 0 0 10px #5dffb0; }
+.vbar b { font: 400 20px/1 var(--px); color: var(--cream); text-shadow: 2px 2px 0 var(--ink); direction: ltr; }
+.vbar .repairs { display: flex; flex-direction: column; gap: 4px; margin: 0; }
+.vbar .repairs span { width: 16px; height: 14px; }
+
+/* bottom cluster */
+.cluster { position: absolute; left: 50%; bottom: calc(var(--safe-b) + 12px); transform: translateX(-50%); display: flex; align-items: stretch; gap: 12px; pointer-events: none; }
+.cluster .act { --b: 3px; pointer-events: auto; touch-action: none; position: relative; width: 88px; height: 88px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; background: linear-gradient(180deg, rgba(70, 36, 112, 0.92) 0 12%, rgba(36, 18, 62, 0.9) 12%); grid-column: auto; grid-row: auto; }
+.cluster .act small { font-size: 10px; font-weight: 800; white-space: nowrap; }
+.cluster .act.brake { --edge: var(--hot); }
+.cluster .act.brake [data-icon] { width: 30px; height: 24px; }
+.cluster .act.nitro { --edge: var(--cyan); }
+.cluster .act.nitro [data-icon] { width: 30px; height: 34px; filter: drop-shadow(0 0 6px var(--cyan)); }
+.cluster .act.down { --edge: var(--gold); color: var(--ink); background: linear-gradient(180deg, #fff6b8 0 12%, var(--gold) 12%); }
+.cluster .act.nitro.on { --edge: #5dffb0; background: linear-gradient(180deg, #2f8f6a 0 12%, #1b5e45 12%); animation: blink 0.35s steps(2) infinite; }
+.cluster .act.nitro .ring { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.cluster .act.nitro .ring rect { fill: none; stroke-width: 6; }
+.cluster .act.nitro .ring .track { stroke: rgba(255, 255, 255, 0.08); }
+.cluster .act.nitro .ring .fill { stroke: var(--cyan); stroke-dasharray: 360; stroke-dashoffset: 360; }
+.cluster .speedo { --b: 3px; --edge: var(--pink); width: 128px; height: 88px; display: grid; grid-template-columns: 1fr auto; grid-template-rows: 1fr auto; column-gap: 4px; align-items: end; padding: 6px 10px 8px; background: rgba(27, 11, 43, 0.82); }
+.cluster .speedo b { font: 400 52px/0.82 var(--px); min-width: 0; }
+.cluster .speed-meta { padding-bottom: 2px; }
+.cluster .rpm { grid-column: 1 / 3; margin-top: 6px; height: 8px; }
+.pit-arrow { top: calc(var(--safe-t) + 112px); right: auto; left: 50%; transform: translateX(-50%); }
+.banner { top: calc(var(--safe-t) + 148px); }
+.howto { top: calc(var(--safe-t) + 236px); width: calc(100% - 128px); max-width: 440px; }
+body.no-touch .cluster .act, body.no-touch #controls { display: none !important; }
+body.no-touch .vbar { bottom: calc(var(--safe-b) + 24px); }
+body.no-touch .cluster { bottom: calc(var(--safe-b) + 16px); }
+@media (orientation: landscape) and (min-width: 600px) {
+  .vbar { top: calc(var(--safe-t) + 196px); bottom: calc(var(--safe-b) + 20px); }
+  .minimap { top: auto; right: auto; bottom: calc(var(--safe-b) + 16px); left: 64px; width: 150px; height: 130px; }
+  body.no-touch .minimap { left: 64px; }
+  .pit-arrow { top: calc(var(--safe-t) + 112px); bottom: auto; left: 50%; }
+  body.no-touch .pit-arrow { left: 50%; }
+  .howto { top: calc(var(--safe-t) + 120px); }
+  .zone-hint { bottom: 50%; }
+}
+@media (max-height: 680px) and (orientation: portrait) {
+  .vbar { top: calc(var(--safe-t) + 212px); bottom: calc(var(--safe-b) + 116px); }
+  .cluster .act, .cluster .speedo { height: 80px; } .cluster .act { width: 80px; } .cluster .speedo { width: 120px; }
+  .cluster .speedo b { font-size: 46px; }
+}
+/* steering feedback: the held half glows along its screen edge */
+.zone-hint { top: 0; bottom: 0; width: 56px; height: auto; opacity: 0; transform: none; filter: none; }
+.zone-hint > span { display: none; }
+.zone-hint.left { left: 0; background: linear-gradient(90deg, rgba(255, 93, 149, 0.55), transparent); }
+.zone-hint.right { right: 0; background: linear-gradient(270deg, rgba(255, 93, 149, 0.55), transparent); }
+.zone-hint.on { opacity: 1; transform: none; filter: none; }
+@media (orientation: landscape) and (min-width: 600px) { .zone-hint { bottom: 0; } }
+@media (orientation: landscape) and (min-width: 600px) {
+  .vbar { top: calc(var(--safe-t) + 120px); bottom: calc(var(--safe-b) + 16px); }
+  .combo { left: 160px; top: calc(var(--safe-t) + 50px); }
+  .vb-track { min-height: 40px; }
+  .vbar .repairs { gap: 2px; }
+  .vbar .repairs span { width: 14px; height: 12px; }
+}
+@media (orientation: landscape) and (max-height: 520px) {
+  .cluster { gap: 8px; bottom: calc(var(--safe-b) + 10px); }
+  .cluster .act { width: 72px; height: 72px; }
+  .cluster .act small { font-size: 9px; }
+  .cluster .act [data-icon] { transform: scale(0.85); }
+  .cluster .speedo { width: 112px; height: 72px; padding: 4px 8px 6px; }
+  .cluster .speedo b { font-size: 42px; }
+  .minimap { width: 120px; height: 104px; bottom: calc(var(--safe-b) + 10px); }
+  .hud-timer b { font-size: 36px; }
+  .vbar { width: 36px; top: calc(var(--safe-t) + 112px); bottom: calc(var(--safe-b) + 10px); }
+}
+.mm-count, .mm-count small { white-space: nowrap; }

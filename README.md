@@ -18,7 +18,7 @@ npm run test:browser   # mobile smoke test incl. a real verified run (needs npm 
 npm run capture        # real screenshots into docs/screenshots (needs npm start)
 ```
 
-**Controls** — touch: ◀ ▶ steer · DRIFT (handbrake) · NITRO · BRAKE. Keyboard: ← → / A D steer · ↓ / S brake · Space handbrake · Shift / ↑ / W nitro · P pause · Enter retry. Gamepad: stick steer · A handbrake · RT / X nitro · LT / B brake · Start pause.
+**Controls** — touch: hold the left or right half of the screen to steer · BRAKE (drifts with the handbrake while you steer) · tap NITRO to boost (tap again to stop). Keyboard: ← → / A D steer · ↓ / S brake · Space handbrake · Shift / ↑ / W nitro · P pause · Enter retry. Gamepad: stick steer · A handbrake · RT / X nitro · LT / B brake · Start pause.
 
 ## What's in the game
 

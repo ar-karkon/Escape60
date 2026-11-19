@@ -1,5 +1,10 @@
 # Changelog
 
+## 3.2 — mobile controls and HUD layout — 2026-11-19
+- Touch steering: hold the left / right half of the screen (edge glow shows the held side); the steering buttons are gone.
+- Vertical health (left edge, with the three repair icons) and nitro (right edge) bars.
+- One centred bottom cluster on a 4 px grid: BRAKE · DRIFT (handbrake while steering, brake when straight), speedometer with gear and rev segments, NITRO (tap to toggle, ring shows the tank). Tighter landscape layout.
+
 ## 3.1 — identity merge — 2026-11-19
 - Restored the original Sunset Bay soul on top of every 3.0 feature: pixel logo, Rooyin Free + Jersey 10 fonts, pixel icon set (plus new pixel icons for nitro, brake, wrench, globe, sun…), pixel-frame panels, buttons and cards, the yellow START ESCAPE button, the gold pixel timer, sirens, combo box, segmented health bar and square minimap.
 - Magenta/purple synthwave palette with the striped retro sun and pixel clouds; purple-shadow / pink-highlight grade; sunset-orange hero with racing stripe; original paint names.

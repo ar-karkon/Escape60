@@ -12,7 +12,7 @@ import * as api from './api.js';
 import { createMinimap } from './ui/minimap.js';
 
 const $ = (id) => document.getElementById(id);
-const VERSION = 'v3.1';
+const VERSION = 'v3.2';
 hydrateIcons();
 applyI18n();
 const canvas = $('game'), render = createRenderer(canvas);
@@ -43,7 +43,7 @@ let seed = initialSeed, game = null, paused = false, runTicket = null, trace = [
 let lastEvent = -1, finishQueued = false, online = false, lastResult = null, view = 'loading', ready = false;
 let frozen = false;
 const persisted = (() => { try { return JSON.parse(localStorage.getItem('escape60-bests-' + SIM_VERSION) || '{}'); } catch { return {}; } })();
-const input = { left: false, right: false, tl: false, tr: false, brake: false, hand: false, nitro: false, kb: { brake: false, hand: false, nitro: false }, pad: { x: 0, brake: false, hand: false, nitro: false } };
+const input = { left: false, right: false, tl: false, tr: false, brake: false, nitroLatch: false, kb: { brake: false, hand: false, nitro: false }, pad: { x: 0, brake: false, hand: false, nitro: false } };
 if (qs.has('capture')) window.__escape60 = { render, freeze: (v) => { frozen = !!v; }, state: () => game && { ticks: game.ticks, state: game.state, hp: game.health, repairs: game.repairs, points: game.points, end: game.end, view }, info: () => render.info(), input,
   map: { sample, pointAt, edges, stations }, game: () => game, override: null,
   /** run n simulation ticks immediately (test tooling) */ fast(n) { countdown = 0; for (let i = 0; i < n && game?.state === 'playing'; i++) tick(); updateHud(0); } };
@@ -178,9 +178,9 @@ const click = () => audio.play('click', { gain: 0.5 });
 
 function renderHealth(hp, dt) {
   const v = Math.max(0, Math.min(100, hp));
-  $('hp-fill').style.width = v + '%';
+  $('hp-fill').style.height = v + '%';
   if (v > trailHp) trailHp = v; else if (trailHold > 0) trailHold -= dt; else trailHp = Math.max(v, trailHp - dt * 40);
-  $('hp-trail').style.width = trailHp + '%';
+  $('hp-trail').style.height = trailHp + '%';
   $('hp-num').textContent = Math.ceil(v);
   $('health').dataset.level = v > 60 ? 'ok' : v > 30 ? 'warn' : 'crit';
   $('hurt').classList.toggle('low', v < 30 && game?.state === 'playing');
@@ -200,9 +200,12 @@ function updateHud(dt) {
   $('speed').textContent = Math.round(kmh);
   $('gear').textContent = g.gear;
   const rpm = $('rpm-arc'); rpm.style.width = `${g.rpm * 100}%`; rpm.className = p.boost ? 'boost' : g.rpm > 0.85 ? 'red' : '';
-  $('nitro-fill').style.width = `${game.nitro * 100}%`;
-  document.querySelector('.bar.nitro').classList.toggle('full', game.nitro > 0.98);
-  $('nitro-ring').style.strokeDashoffset = String(352 * (1 - game.nitro));
+  $('nitro-fill').style.height = `${game.nitro * 100}%`;
+  $('nitro-num').textContent = Math.round(game.nitro * 100);
+  $('nitro-bar').classList.toggle('full', game.nitro > 0.98);
+  $('nitro-bar').classList.toggle('on', p.boost);
+  $('nitro').classList.toggle('on', input.nitroLatch);
+  $('nitro-ring').style.strokeDashoffset = String(360 * (1 - game.nitro));
   $('nitro').classList.toggle('ready', game.nitro > 0.25);
   if (game.health < shownHp - 0.5) { const h = $('health'); h.classList.remove('hit'); void h.offsetWidth; h.classList.add('hit'); trailHold = 0.4; }
   shownHp = game.health;
@@ -233,7 +236,7 @@ function begin() {
   audio.unlock();
   applyLook();
   game = createGame(seed, { car: profile.car });
-  trace = []; paused = false; finishQueued = false; lastEvent = -1; runTicket = null; countdown = 3; countStep = -1; acc = 0;
+  trace = []; paused = false; finishQueued = false; input.nitroLatch = false; input.brake = false; lastEvent = -1; runTicket = null; countdown = 3; countStep = -1; acc = 0;
   shownHp = 100; trailHp = 100; trailHold = 0; shownMult = 1; shownHeat = 0; lastSecond = -1; msTimer = 0;
   bestPassed = !persisted[seed]; targetPassed = !challenge || seed !== initialSeed;
   pops.textContent = ''; $('banner').classList.add('hidden'); $('milestone').classList.add('hidden');
@@ -256,9 +259,13 @@ function showCount(step) {
 }
 function currentInput() {
   if (window.__escape60?.override) return window.__escape60.override(game);
-  const steer = (input.left || input.tl ? -1 : 0) + (input.right || input.tr ? 1 : 0);
-  const s = Math.abs(input.pad.x) > 0.15 ? input.pad.x : steer;
-  return encodeInput(Math.round(s * 3), input.brake || input.kb.brake || input.pad.brake, input.hand || input.kb.hand || input.pad.hand, input.nitro || input.kb.nitro || input.pad.nitro);
+  const touchSteer = (input.tl ? -1 : 0) + (input.tr ? 1 : 0);
+  const steer = (input.left ? -1 : 0) + (input.right ? 1 : 0) + touchSteer;
+  const s = Math.abs(input.pad.x) > 0.15 ? input.pad.x : Math.max(-1, Math.min(1, steer));
+  // touch: the brake button drifts (handbrake) while you steer, and brakes when you go straight
+  const touchHand = input.brake && touchSteer !== 0, touchBrake = input.brake && touchSteer === 0;
+  if (input.nitroLatch && game && game.nitro <= 0.002) input.nitroLatch = false;
+  return encodeInput(Math.round(s * 3), touchBrake || input.kb.brake || input.pad.brake, touchHand || input.kb.hand || input.pad.hand, input.nitroLatch || input.kb.nitro || input.pad.nitro);
 }
 let wasBoost = false;
 function tick() {
@@ -499,12 +506,25 @@ button('copy-link', async () => {
 button('close-share', () => $('share-sheet').close());
 
 /* ---------- input ---------- */
-function hold(id, key) {
-  const el = $(id);
-  el.addEventListener('pointerdown', (e) => { e.preventDefault(); el.setPointerCapture(e.pointerId); skipCountdown(); input[key] = true; el.classList.add('down'); });
-  for (const ty of ['pointerup', 'pointercancel', 'lostpointercapture']) el.addEventListener(ty, () => { input[key] = false; el.classList.remove('down'); });
+/* touch: hold the left / right half of the screen to steer; brake (drift while steering); tap nitro to boost */
+const zone = $('steer-zone'), touches = new Map();
+function updateTouchSteer() {
+  let l = false, r = false;
+  for (const side of touches.values()) { if (side < 0) l = true; else r = true; }
+  input.tl = l; input.tr = r;
+  $('hint-left').classList.toggle('on', l); $('hint-right').classList.toggle('on', r);
 }
-hold('left', 'tl'); hold('right', 'tr'); hold('brake', 'brake'); hold('hand', 'hand'); hold('nitro', 'nitro');
+const sideOf = (e) => (e.clientX < window.innerWidth / 2 ? -1 : 1);
+zone.addEventListener('pointerdown', (e) => { e.preventDefault(); try { zone.setPointerCapture(e.pointerId); } catch {} touches.set(e.pointerId, sideOf(e)); skipCountdown(); updateTouchSteer(); });
+zone.addEventListener('pointermove', (e) => { if (!touches.has(e.pointerId)) return; touches.set(e.pointerId, sideOf(e)); updateTouchSteer(); });
+for (const ty of ['pointerup', 'pointercancel', 'lostpointercapture']) zone.addEventListener(ty, (e) => { touches.delete(e.pointerId); updateTouchSteer(); });
+{
+  const b = $('brake');
+  b.addEventListener('pointerdown', (e) => { e.preventDefault(); try { b.setPointerCapture(e.pointerId); } catch {} skipCountdown(); input.brake = true; b.classList.add('down'); });
+  for (const ty of ['pointerup', 'pointercancel', 'lostpointercapture']) b.addEventListener(ty, () => { input.brake = false; b.classList.remove('down'); });
+  const n = $('nitro');
+  n.addEventListener('pointerdown', (e) => { e.preventDefault(); skipCountdown(); if (game && (game.nitro > 0.05 || input.nitroLatch)) { input.nitroLatch = !input.nitroLatch; vibrate(12); } });
+}
 const KEYS = { ArrowLeft: 'left', KeyA: 'left', ArrowRight: 'right', KeyD: 'right' };
 window.addEventListener('keydown', (e) => {
   if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Space'].includes(e.code)) e.preventDefault();
@@ -522,7 +542,7 @@ window.addEventListener('keyup', (e) => {
   if (e.code === 'Space') input.kb.hand = false;
   if (e.code === 'ShiftLeft' || e.code === 'ShiftRight' || e.code === 'ArrowUp' || e.code === 'KeyW' || e.code === 'KeyN') input.kb.nitro = false;
 });
-window.addEventListener('blur', () => { for (const k of ['left', 'right', 'tl', 'tr', 'brake', 'hand', 'nitro']) input[k] = false; input.kb = { brake: false, hand: false, nitro: false }; });
+window.addEventListener('blur', () => { for (const k of ['left', 'right', 'tl', 'tr', 'brake', 'nitroLatch']) input[k] = false; touches.clear(); input.kb = { brake: false, hand: false, nitro: false }; });
 let padStart = false;
 function pollPad() {
   const pads = navigator.getGamepads ? navigator.getGamepads() : [];

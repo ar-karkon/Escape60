@@ -136,16 +136,25 @@
       <div id="mult-box" class="combo off"><b id="mult">×1</b><div class="combo-bar"><i id="chain-fill"></i></div><small data-i18n="chain">CHAIN</small></div>
       <div class="minimap"><canvas id="minimap"></canvas><div class="mm-count"><b id="mm-count">60</b><small id="mm-label"></small></div></div>
       <div id="pit-arrow" class="pit-arrow hidden"><span class="arw" data-icon="wrench"></span><small id="pit-dist"></small></div>
-      <div class="hud-bottom">
-        <div class="bars">
-          <div class="hud-health bar" id="health"><span class="hp-ico" data-icon="shield"></span><div class="hp-bar"><i class="hp-trail" id="hp-trail"></i><i class="hp-fill" id="hp-fill"></i></div><b id="hp-num">100</b></div>
-          <div class="hud-nitro bar nitro"><span class="hp-ico" data-icon="bolt"></span><div class="hp-bar"><i class="nitro-fill" id="nitro-fill"></i></div><span class="repairs" id="repairs"></span></div>
-        </div>
+      <div class="vbar vbar-health" id="health" role="meter" aria-label="health">
+        <span class="vb-ico" data-icon="shield"></span>
+        <div class="vb-track"><i class="hp-trail" id="hp-trail"></i><i class="hp-fill" id="hp-fill"></i></div>
+        <b id="hp-num">100</b>
+        <span class="repairs" id="repairs"></span>
+      </div>
+      <div class="vbar vbar-nitro nitro" id="nitro-bar" role="meter" aria-label="nitro">
+        <span class="vb-ico" data-icon="bolt"></span>
+        <div class="vb-track"><i class="nitro-fill" id="nitro-fill"></i></div>
+        <b id="nitro-num">60</b>
+      </div>
+      <div class="cluster">
+        <button id="brake" class="act brake"><span data-icon="brake"></span><small data-i18n="brakeDrift">BRAKE · DRIFT</small></button>
         <div class="speedo">
           <b id="speed">0</b>
           <div class="speed-meta"><span class="gear" id="gear">1</span><small data-i18n="kmh">KM/H</small></div>
           <div class="rpm"><i id="rpm-arc"></i></div>
         </div>
+        <button id="nitro" class="act nitro"><svg viewBox="0 0 100 100" class="ring"><rect x="5" y="5" width="90" height="90" class="track"/><rect id="nitro-ring" x="5" y="5" width="90" height="90" class="fill"/></svg><span data-icon="bolt"></span><small data-i18n="nitro">NITRO</small></button>
       </div>
       <div id="bust" class="bust hidden"><b data-i18n="busting">BUSTING</b><i><u id="bust-fill"></u></i></div>
       <div id="popups" class="popups" aria-hidden="true"></div>
@@ -161,15 +170,10 @@
       <p id="howto" class="howto panel hidden"></p>
     </section>
     <span id="threat" class="threat" aria-hidden="true" hidden></span>
-    <nav id="controls" class="controls hidden">
-      <div class="steer-pad">
-        <button id="left" class="steer" data-i18n-label="left"><span data-icon="arrowL"></span></button>
-        <button id="right" class="steer" data-i18n-label="right"><span data-icon="arrowL" data-mirror></span></button>
-      </div>
-      <div class="act-pad">
-        <button id="brake" class="act brake"><span data-icon="brake"></span><small data-i18n="brake">BRAKE</small></button>
-        <button id="hand" class="act hand"><span data-icon="drift"></span><small data-i18n="handbrake">DRIFT</small></button>
-        <button id="nitro" class="act nitro"><svg viewBox="0 0 100 100" class="ring"><rect x="6" y="6" width="88" height="88" class="track"/><rect id="nitro-ring" x="6" y="6" width="88" height="88" class="fill"/></svg><span data-icon="bolt"></span><small data-i18n="nitro">NITRO</small></button>
+    <nav id="controls" class="controls hidden" aria-label="steering">
+      <div id="steer-zone" class="steer-zone">
+        <span class="zone-hint left" id="hint-left"><span data-icon="arrowL"></span></span>
+        <span class="zone-hint right" id="hint-right"><span data-icon="arrowL" data-mirror></span></span>
       </div>
     </nav>
 
