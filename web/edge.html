@@ -66,6 +66,10 @@
     .ep-foot { display: flex; justify-content: center; }
     .ep-foot .btn { text-decoration: none; }
     .ep-empty { color: var(--muted); font-size: 13px; }
+    .ep-brief { --b: 2px; --edge: var(--gold); margin-bottom: 16px; padding: 10px 12px; background: rgba(46, 34, 10, 0.55); display: grid; gap: 6px; font-size: 13.5px; line-height: 1.6; }
+    .ep-brief b { font: 400 26px/1 var(--px); color: var(--gold); }
+    .ep-brief small { color: var(--muted); font-size: 12px; }
+    .ep-brief code { font: 400 15px var(--px); color: var(--cyan); direction: ltr; unicode-bidi: isolate; }
   </style>
 </head>
 <body class="edge-page">
@@ -87,6 +91,13 @@
       <p data-t="countersSub"></p>
       <div class="ep-tools" style="margin-bottom:14px"><button class="chip on" data-scope="today" data-t="today"></button><button class="chip" data-scope="total" data-t="total"></button></div>
       <div class="ep-grid" id="ep-counters"></div>
+    </section>
+
+    <section class="panel ep-sec">
+      <h2 data-t="aiTitle"></h2>
+      <p data-t="aiSub"></p>
+      <div class="ep-brief" id="ep-brief"></div>
+      <div class="ep-grid" id="ep-ai"></div>
     </section>
 
     <section class="panel ep-sec">

@@ -14,14 +14,19 @@
      its inputs, which the browser re-simulates bit-exactly as a ghost car.
    - Share cards: a pixel-art PNG of a verified run, drawn and encoded on the edge, plus /r/<id>
      link previews (Open Graph) that open the game on the same route with a verified target.
-   - Percentile, daily stats and edge telemetry for the /edge dashboard. */
+   - Percentile, daily stats and edge telemetry for the /edge dashboard.
+   - With AIaaS (edge/ai.mjs): the daily city briefing (contracts + police tactics the simulation
+     plays by, frozen per day), the police-radio bank, a dispatcher call per run and the crew chief
+     after each verified run. Handwritten fallbacks keep everything working without the model. */
 import { createGame, gameResult, replayChunk, advanceTrace, tracePrefix, restoreGame, snapshotGame, traceTicks, compareResult, hashSeed, spawnIndex, stepGame, encodeInput, SIM_VERSION, MAX_TICKS, TICK_RATE } from '../web/src/simulation.js';
 import { CARS, carById } from '../web/src/cars.js';
 import { drawCard } from './card.mjs';
+import { createAI } from './ai.mjs';
+import { fallbackDirector, rulesOf, fallbackChief, FALLBACK_RADIO } from '../web/src/director.js';
 import { createMetrics } from './metrics.mjs';
 
-export const API_VERSION = '4.0.0';
-export const FEATURES = ['tickets', 'live-referee', 'pacing-proof', 'live-rank', 'chunked-replay', 'ghost-rival', 'edge-cards', 'link-previews', 'percentile', 'telemetry', 'precompressed-static'];
+export const API_VERSION = '4.1.0';
+export const FEATURES = ['tickets', 'live-referee', 'pacing-proof', 'live-rank', 'chunked-replay', 'ghost-rival', 'edge-cards', 'link-previews', 'percentile', 'telemetry', 'precompressed-static', 'ai-director', 'ai-radio', 'ai-dispatch', 'ai-crew-chief'];
 const enc = new TextEncoder();
 const seedValid = (s) => typeof s === 'string' && /^[a-zA-Z0-9_-]{2,64}$/.test(s);
 const idValid = (s) => typeof s === 'string' && /^[a-f0-9]{12}$/.test(s);
@@ -39,7 +44,7 @@ export const PACE = 1.1, PACE_SLACK_TICKS = 3 * TICK_RATE;
 const histBin = (points) => Math.floor(Math.sqrt(Math.max(0, points)) / 4);
 const bad = (status, message, reason) => Object.assign(Error(message), { status, reason });
 
-export function createApp({ env = {}, store, now = () => Date.now(), log = () => {}, loadIndex = null }) {
+export function createApp({ env = {}, store, now = () => Date.now(), log = () => {}, loadIndex = null, aiFetch }) {
   const minPlayRatio = Number(env.MIN_PLAY_RATIO ?? 0.78);
   // Each request gets a small CPU budget on the edge, so long replays are split into signed chunks.
   const chunkTicks = Math.max(60, Number(env.REPLAY_CHUNK || 300));
@@ -89,6 +94,58 @@ export function createApp({ env = {}, store, now = () => Date.now(), log = () =>
     throw Error('storage contention');
   }
   const metrics = createMetrics({ now, update, readJson, log });
+  const ai = createAI({ env, fetchImpl: aiFetch, metrics, log });
+  const aiCap = Number(env.AI_DAILY_CAP || 4000);
+  const briefs = new Map(), radios = new Map(), inflight = new Map();
+  /** Run `fn` once per key per isolate at a time. */
+  const once = (k, fn) => { if (!inflight.has(k)) inflight.set(k, fn().finally(() => inflight.delete(k))); return inflight.get(k); };
+  /** The city briefing of a UTC day: read the frozen copy, or write it (model, else handwritten) — first writer wins. */
+  async function directorFor(date, { generate = false } = {}) {
+    const memo = briefs.get(date);
+    if (memo) return memo;
+    return once(`d|${date}`, async () => {
+      const k = `director/v1/${date}.json`;
+      let d = (await readJson(k).catch(() => null))?.value || null;
+      if (!d && generate) {
+        let cand = null;
+        if (ai.configured) { try { cand = await ai.director(date); } catch (e) { log('director', e.message); } }
+        cand ||= fallbackDirector(date);
+        cand.generatedAt = new Date(now()).toISOString();
+        d = (await store.put(k, JSON.stringify(cand), { ifNoneMatch: '*' })) ? cand : (await readJson(k))?.value || cand;
+        metrics.add(d.source === 'ai' ? 'briefsAi' : 'briefsFallback');
+      }
+      if (d) { briefs.set(date, d); if (briefs.size > 6) briefs.delete(briefs.keys().next().value); }
+      return d;
+    });
+  }
+  const dailyDate = (seed) => /^daily-(\d{4}-\d{2}-\d{2})$/.exec(seed)?.[1] || null;
+  /** Rules for a route: daily routes play by that day's briefing (generated only for today). */
+  async function rulesForSeed(seed) {
+    const date = dailyDate(seed);
+    if (!date) return null;
+    return rulesOf(await directorFor(date, { generate: date === dayOf(now()) }));
+  }
+  async function radioFor(date) {
+    if (radios.has(date)) return radios.get(date);
+    return once(`r|${date}`, async () => {
+      const k = `radio/v1/${date}.json`;
+      let r = (await readJson(k).catch(() => null))?.value || null;
+      const d = await directorFor(date, { generate: date === dayOf(now()) });
+      if (!r && d && date === dayOf(now())) {
+        const bank = { en: FALLBACK_RADIO.en, fa: FALLBACK_RADIO.fa }, src = { en: 'fallback', fa: 'fallback' };
+        if (ai.configured) await Promise.all(['en', 'fa'].map(async (lang) => { try { bank[lang] = { ...FALLBACK_RADIO[lang], ...(await ai.radio(d, lang)) }; src[lang] = 'ai'; } catch (e) { log('radio', lang, e.message); } }));
+        const cand = { date, id: d.id, source: src, radio: bank };
+        r = (await store.put(k, JSON.stringify(cand), { ifNoneMatch: '*' })) ? cand : (await readJson(k))?.value || cand;
+      }
+      r ||= { date, source: { en: 'fallback', fa: 'fallback' }, radio: d?.radio || FALLBACK_RADIO };
+      radios.set(date, r); if (radios.size > 6) radios.delete(radios.keys().next().value);
+      return r;
+    });
+  }
+  async function aiBudgetLeft() {
+    const c = (await metrics.snapshot()).today.c;
+    return (c.ai_dispatch || 0) + (c.ai_chief || 0) < aiCap;
+  }
   async function bump(date, fn) {
     try { await update(`stats/v2/${date}.json`, (s = { date, runs: 0, escapes: 0, verifyMs: 0, bestPoints: 0, bestTimeMs: 0, live: 0 }) => { fn(s); return s; }); }
     catch (e) { log('stats', e.message); }
@@ -143,13 +200,15 @@ export function createApp({ env = {}, store, now = () => Date.now(), log = () =>
       if (!(await macOk(ckText(ticket.r, await prefixHash(b.trace, c.t), c), c.sig))) throw bad(401, 'Invalid checkpoint', 'checkpoint');
       let game;
       try { game = restoreGame(c.state); } catch { throw bad(400, 'Invalid checkpoint', 'checkpoint'); }
-      if (game.seed !== ticket.s || game.car !== ticket.c || game.spawn !== ticket.p || game.ticks !== c.t) throw bad(401, 'Invalid checkpoint', 'checkpoint');
+      if (game.seed !== ticket.s || game.car !== ticket.c || game.spawn !== ticket.p || game.ticks !== c.t || (game.rules?.id || 0) !== (ticket.d || 0)) throw bad(401, 'Invalid checkpoint', 'checkpoint');
       if (total - c.seen > ((t - c.at) / 1000) * TICK_RATE * PACE + PACE_SLACK_TICKS) throw bad(422, 'Inputs arrived faster than real time', 'pacing');
       return { game, ms: c.ms, n: c.n };
     }
     if (!ticket.l && (await store.get(runKey(ticket)))) throw bad(409, 'Run already submitted', 'replayed');
     if (total > ((t - ticket.t) / 1000) * TICK_RATE * PACE + PACE_SLACK_TICKS) throw bad(422, 'Inputs arrived faster than real time', 'pacing');
-    return { game: createGame(ticket.s, { car: ticket.c, spawn: ticket.p }), ms: 0, n: 0 };
+    const rules = ticket.d ? await rulesForSeed(ticket.s) : null;
+    if ((rules?.id || 0) !== (ticket.d || 0)) throw bad(409, 'Daily briefing changed — please reload', 'version');
+    return { game: createGame(ticket.s, { car: ticket.c, spawn: ticket.p, rules }), ms: 0, n: 0 };
   }
   const runKey = (ticket) => `runs/${SIM_VERSION}/${dayOf(ticket.t)}/${ticket.r}.json`;
   function replayWith(fn, game, trace) {
@@ -164,7 +223,9 @@ export function createApp({ env = {}, store, now = () => Date.now(), log = () =>
   /* ---------- routes ---------- */
   async function today() {
     const date = dayOf(now());
-    return json({ seed: `daily-${date}`, version: SIM_VERSION, api: API_VERSION, expiresAt: `${date}T23:59:59Z`, live: { every: chunkTicks } });
+    const d = await directorFor(date, { generate: true });
+    const { radio, ...brief } = d;
+    return json({ seed: `daily-${date}`, version: SIM_VERSION, api: API_VERSION, expiresAt: `${date}T23:59:59Z`, live: { every: chunkTicks }, brief, rules: rulesOf(d) });
   }
   async function start(req, ip) {
     if (limited(ip, 'start', 40, 60000)) return fail(429, 'Please slow down');
@@ -173,10 +234,12 @@ export function createApp({ env = {}, store, now = () => Date.now(), log = () =>
     if (!seedValid(seed)) throw bad(400, 'Invalid seed', 'seed');
     const car = CARS.some((c) => c.id === b.car) ? b.car : CARS[0].id;
     const spawn = spawnIndex(seed, b.spawn);
+    const rules = await rulesForSeed(seed);
+    if ((b.rules || 0) !== (rules?.id || 0)) throw bad(409, 'Daily briefing changed — please reload', 'version');
     const runId = crypto.randomUUID();
-    const token = await sign({ r: runId, s: seed, c: car, p: spawn, t, v: SIM_VERSION, ...(lab ? { l: 1 } : {}) });
+    const token = await sign({ r: runId, s: seed, c: car, p: spawn, t, v: SIM_VERSION, ...(rules ? { d: rules.id } : {}), ...(lab ? { l: 1 } : {}) });
     metrics.add(lab ? 'labStarts' : 'starts');
-    return json({ runId, token, seed, car, spawn, issuedAt: t, version: SIM_VERSION, live: { every: chunkTicks } });
+    return json({ runId, token, seed, car, spawn, rules: rules?.id || null, issuedAt: t, version: SIM_VERSION, live: { every: chunkTicks } });
   }
   /** Live referee: replay the newest inputs while the run is still being driven. */
   async function live(req, ip) {
@@ -205,7 +268,7 @@ export function createApp({ env = {}, store, now = () => Date.now(), log = () =>
       return json({ continue: true, progress: complete ? 100 : Math.round((100 * game.ticks) / total), checkpoint: await checkpoint(ticket.r, b.trace, game, r.ms + cpu, total, r.n) }, 202);
     }
     const result = gameResult(game), c = b.result;
-    if (c.version !== SIM_VERSION || c.seed !== ticket.s || c.car !== ticket.c || c.spawn !== result.spawn || c.timeMs !== result.timeMs || c.points !== result.points || c.health !== result.health || c.end !== result.end) throw bad(422, 'Result does not match authoritative replay', 'mismatch');
+    if (c.version !== SIM_VERSION || c.seed !== ticket.s || c.car !== ticket.c || c.spawn !== result.spawn || (c.rules || null) !== (result.rules || null) || c.timeMs !== result.timeMs || c.points !== result.points || c.health !== result.health || c.end !== result.end) throw bad(422, 'Result does not match authoritative replay', 'mismatch');
     if (now() - ticket.t < result.timeMs * minPlayRatio) throw bad(422, 'Run finished too quickly', 'pacing');
     if (ticket.l) { metrics.add('labRuns'); return json({ accepted: true, lab: true, stored: false, result, verifyMs, ticks: game.ticks, live: r.n, verification: 'edge-replay-v4' }); }
     const date = dayOf(ticket.t), at = now(), label = callsign(ticket.r), id = ticket.r.replace(/-/g, '').slice(0, 12);
@@ -215,15 +278,15 @@ export function createApp({ env = {}, store, now = () => Date.now(), log = () =>
     const rows = await update(`leaderboard/${SIM_VERSION}/${ticket.s}.json`, (list = []) => { const next = list.filter((e) => e.id !== entry.id); next.push(entry); next.sort((a, x) => compareResult(a, x) || a.at - x.at); return next.slice(0, 100); });
     boards.delete(ticket.s);
     const idx = rows.findIndex((e) => e.id === id), rank = idx >= 0 ? idx + 1 : null;
-    const doc = { id, seed: ticket.s, car: ticket.c, spawn: ticket.p, label, result, trace: b.trace, at, live: r.n, verifyMs, rank, of: rows.length };
+    const doc = { id, seed: ticket.s, car: ticket.c, spawn: ticket.p, rules: ticket.d || null, label, result, trace: b.trace, at, live: r.n, verifyMs, rank, of: rows.length, cdone: game.contracts.map((k) => k.done) };
     const [hist] = await Promise.all([
       update(`hist/${SIM_VERSION}/${ticket.s}.json`, (h = { n: 0, b: {} }) => { const k = histBin(result.points); h.n++; h.b[k] = (h.b[k] || 0) + 1; return h; }).catch(() => null),
       store.put(`runs-by-id/${SIM_VERSION}/${id}.json`, JSON.stringify(doc)),
       bump(date, (s) => { s.runs++; if (result.escaped) s.escapes++; if (r.n) s.live = (s.live || 0) + 1; s.verifyMs += verifyMs; s.bestTimeMs = Math.max(s.bestTimeMs, result.timeMs); s.bestPoints = Math.max(s.bestPoints, result.points); }),
     ]);
-    docs.set(id, doc);
     let better = null;
     if (hist && hist.n > 1) { const k = histBin(result.points); let below = 0; for (const [bin, cnt] of Object.entries(hist.b)) if (Number(bin) < k) below += cnt; better = Math.round((100 * (below + ((hist.b[k] || 1) - 1) / 2)) / (hist.n - 1)); }
+    doc.better = better; docs.set(id, doc);
     metrics.add('runs'); if (r.n) metrics.add('liveRuns');
     metrics.recent({ label, car: ticket.c, points: result.points, timeMs: result.timeMs, end: result.end, live: r.n, verifyMs, ticks: game.ticks, rank, at });
     return json({ accepted: true, rank, of: rows.length, label, result, verification: 'edge-replay-v4', verifyMs, ticks: game.ticks, live: r.n, better, runs: hist?.n || null, id, share: `/r/${id}` });
@@ -235,7 +298,7 @@ export function createApp({ env = {}, store, now = () => Date.now(), log = () =>
     const rows = await boardRows(seed);
     return json({ seed, total: rows.length, entries: rows.slice(0, limit).map((e, i) => ({ rank: i + 1, timeMs: e.timeMs, points: e.points, car: e.car, label: e.label, ghost: !!e.g })), verified: true }, 200, { 'Cache-Control': 'public, max-age=5' });
   }
-  const rivalOf = (doc, extra = {}) => ({ id: doc.id, rank: doc.rank, of: doc.of, label: doc.label, car: doc.car, spawn: doc.spawn, points: doc.result.points, timeMs: doc.result.timeMs, end: doc.result.end, trace: doc.trace, ...extra });
+  const rivalOf = (doc, extra = {}) => ({ id: doc.id, rank: doc.rank, of: doc.of, label: doc.label, car: doc.car, spawn: doc.spawn, points: doc.result.points, timeMs: doc.result.timeMs, end: doc.result.end, trace: doc.trace, taunt: doc.chief?.taunt || null, ...extra });
   /** The edge picks your rival: the verified run just above your best (or a mid-table run).
       With `spawn`, only runs that started at that position qualify (the ghost must start with you). */
   async function rival(url) {
@@ -276,8 +339,8 @@ export function createApp({ env = {}, store, now = () => Date.now(), log = () =>
     const doc = await runDoc(id);
     if (!doc || !loadIndex) return new Response(null, { status: 302, headers: { Location: '/' } });
     const r = doc.result, img = `${url.origin}/api/v1/card/${id}.png`;
-    const title = `${doc.label} scored ${fmt(r.points)} in ESCAPE 60`;
-    const desc = `Survived ${fmtTime(r.timeMs)} · ${r.takedowns} takedowns${doc.rank ? ` · #${doc.rank} today` : ''}. Verified run — can you beat it?`;
+    const title = doc.chief?.headline?.en ? `${doc.chief.headline.en} — ESCAPE 60` : `${doc.label} scored ${fmt(r.points)} in ESCAPE 60`;
+    const desc = `${doc.label}: ${fmt(r.points)} pts · survived ${fmtTime(r.timeMs)} · ${r.takedowns} takedowns${doc.rank ? ` · #${doc.rank} today` : ''}. Verified run — can you beat it?`;
     const head = `<base href="/">
 <meta property="og:type" content="website"><meta property="og:title" content="${esc(title)}"><meta property="og:description" content="${esc(desc)}">
 <meta property="og:image" content="${esc(img)}"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="628">
@@ -288,6 +351,39 @@ export function createApp({ env = {}, store, now = () => Date.now(), log = () =>
     metrics.add('previews');
     return new Response(html, { headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'public, max-age=60', 'X-Content-Type-Options': 'nosniff' } });
   }
+  async function radioRoute(url) {
+    const date = /^\d{4}-\d{2}-\d{2}$/.test(url.searchParams.get('date') || '') ? url.searchParams.get('date') : dayOf(now());
+    const r = await radioFor(date);
+    return json({ date, source: r.source, radio: r.radio }, 200, { 'Cache-Control': 'public, max-age=120' });
+  }
+  /** The dispatcher's call for one run, in the player's language (fallback: a line from the day's radio bank). */
+  async function dispatch(req, ip) {
+    if (limited(ip, 'dispatch', 12, 60000)) return fail(429, 'Please slow down');
+    const b = await body(req), date = dailyDate(b.seed) || dayOf(now());
+    const lang = b.lang === 'fa' ? 'fa' : 'en', zone = Number.isInteger(b.zone) && b.zone >= 0 && b.zone < 10 ? b.zone : 0;
+    const car = CARS.some((c) => c.id === b.car) ? b.car : CARS[0].id;
+    const last = b.last && Number.isFinite(b.last.points) && Number.isFinite(b.last.timeMs) ? { points: Math.round(b.last.points), timeMs: Math.round(b.last.timeMs), end: ['wrecked', 'busted', 'legend'].includes(b.last.end) ? b.last.end : 'wrecked' } : null;
+    const d = (await directorFor(date, { generate: date === dayOf(now()) })) || fallbackDirector(date);
+    if (ai.configured && (await aiBudgetLeft())) {
+      try { return json({ who: d.dispatcher[lang], line: await ai.dispatch({ d, car, zone, lang, last }), source: 'ai' }); } catch { /* fall through */ }
+    }
+    return json({ who: d.dispatcher[lang], line: null, source: 'fallback' });
+  }
+  /** Crew chief for a verified run: generated once, then cached in the run document. */
+  async function debrief(req, ip) {
+    if (limited(ip, 'debrief', 10, 60000)) return fail(429, 'Please slow down');
+    const b = await body(req), doc = await runDoc(b.id);
+    if (!doc) return fail(404, 'Unknown run');
+    if (!doc.chief) {
+      const date = dailyDate(doc.seed), d = date ? await directorFor(date) : null;
+      let chief = null;
+      if (ai.configured && (await aiBudgetLeft())) { try { chief = await ai.chief({ result: doc.result, car: doc.car, rank: doc.rank, of: doc.of, better: doc.better, d, zone: doc.result.zone, cdone: doc.cdone }); } catch { /* rules below */ } }
+      doc.chief = chief || fallbackChief(doc.result);
+      if (doc.chief.source === 'ai') await store.put(`runs-by-id/${SIM_VERSION}/${doc.id}.json`, JSON.stringify(doc)).catch(() => {});
+      docs.set(doc.id, doc);
+    }
+    return json({ id: doc.id, chief: doc.chief });
+  }
   async function statsRoute() {
     const date = dayOf(now());
     const s = (await readJson(`stats/v2/${date}.json`))?.value || { date, runs: 0, escapes: 0, verifyMs: 0, bestPoints: 0, bestTimeMs: 0, live: 0 };
@@ -295,7 +391,9 @@ export function createApp({ env = {}, store, now = () => Date.now(), log = () =>
   }
   async function edgeRoute() {
     const snap = await metrics.snapshot();
-    return json({ api: API_VERSION, version: SIM_VERSION, features: FEATURES, storage: store.kind, secured: !!(env.RUN_SECRET || env.S3_SECRET_KEY), chunk: chunkTicks, pace: PACE, ...snap, time: new Date(now()).toISOString() });
+    const d = briefs.get(dayOf(now())) || null;
+    const ai2 = { configured: ai.configured, model: ai.model, brief: d && { id: d.id, source: d.source, theme: d.theme, genMs: d.genMs ?? null, contracts: d.contracts.map((c) => ({ type: c.type, goal: c.goal, zone: c.zone, reward: c.reward })), tactics: d.tactics } };
+    return json({ api: API_VERSION, version: SIM_VERSION, features: FEATURES, storage: store.kind, secured: !!(env.RUN_SECRET || env.S3_SECRET_KEY), chunk: chunkTicks, pace: PACE, ai: ai2, ...snap, time: new Date(now()).toISOString() });
   }
   /** Measures this edge node: steps the real simulation for up to 600 ticks. */
   function bench(url) {
@@ -313,7 +411,7 @@ export function createApp({ env = {}, store, now = () => Date.now(), log = () =>
     if (path.startsWith('/r/') && method === 'GET') return preview(path.slice(3), url);
     if (!path.startsWith('/api/')) return null;
     metrics.add('api');
-    if (path === '/api/v1/health' && method === 'GET') return json({ status: 'ok', api: API_VERSION, version: SIM_VERSION, storage: store.kind, secured: !!(env.RUN_SECRET || env.S3_SECRET_KEY), maxTicks: MAX_TICKS, features: FEATURES, time: new Date(now()).toISOString() });
+    if (path === '/api/v1/health' && method === 'GET') return json({ status: 'ok', api: API_VERSION, version: SIM_VERSION, storage: store.kind, secured: !!(env.RUN_SECRET || env.S3_SECRET_KEY), ai: { configured: ai.configured, model: ai.model }, maxTicks: MAX_TICKS, features: FEATURES, time: new Date(now()).toISOString() });
     if (path === '/api/v1/challenges/today' && method === 'GET') return today();
     if (path === '/api/v1/runs/start' && method === 'POST') return start(req, ip);
     if (path === '/api/v1/runs/live' && method === 'POST') return live(req, ip);
@@ -321,6 +419,9 @@ export function createApp({ env = {}, store, now = () => Date.now(), log = () =>
     if (path === '/api/v1/leaderboard' && method === 'GET') return leaderboard(url);
     if (path === '/api/v1/rival' && method === 'GET') return rival(url);
     if (path === '/api/v1/stats' && method === 'GET') return statsRoute();
+    if (path === '/api/v1/radio' && method === 'GET') return radioRoute(url);
+    if (path === '/api/v1/dispatch' && method === 'POST') return dispatch(req, ip);
+    if (path === '/api/v1/runs/debrief' && method === 'POST') return debrief(req, ip);
     if (path === '/api/v1/edge' && method === 'GET') return edgeRoute();
     if (path === '/api/v1/edge/bench' && method === 'GET') return limited(ip, 'bench', 10, 60000) ? fail(429, 'Please slow down') : bench(url);
     const m = /^\/api\/v1\/card\/([a-f0-9]{12})\.png$/.exec(path);

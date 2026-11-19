@@ -11,6 +11,7 @@ import { t, num, applyI18n, setLang, getLang } from './i18n.js';
 import * as api from './api.js';
 import { createMinimap } from './ui/minimap.js';
 import { createThreats } from './ui/threats.js';
+import { pickRadio, fillRadio, contractText, targetText, fallbackChief } from './director.js';
 
 const $ = (id) => document.getElementById(id);
 const VERSION = 'v3.4';
@@ -48,12 +49,16 @@ let seed = initialSeed, game = null, paused = false, runTicket = null, trace = [
 let lastEvent = -1, finishQueued = false, online = false, lastResult = null, view = 'loading', ready = false;
 let frozen = false;
 let live = null, ghost = null, lastShareUrl = null; // edge referee state, rival ghost, verified share link
+let brief = null, briefRules = null, radioBank = null; // today's city briefing (contracts + tactics) and police-radio bank
+let target = null, targetHitDone = false, dispatchShown = false, bustSaid = false;
 const persisted = (() => { try { return JSON.parse(localStorage.getItem('escape60-bests-' + SIM_VERSION) || '{}'); } catch { return {}; } })();
 const input = { left: false, right: false, tl: false, tr: false, brake: false, nitroLatch: false, kb: { brake: false, hand: false, nitro: false }, pad: { x: 0, brake: false, hand: false, nitro: false } };
 if (qs.has('capture')) window.__escape60 = { render, freeze: (v) => { frozen = !!v; }, state: () => game && { ticks: game.ticks, state: game.state, hp: game.health, repairs: game.repairs, points: game.points, end: game.end, view }, info: () => render.info(), input,
   map: { sample, pointAt, edges, stations }, game: () => game, override: null, ghost: () => ghostPose(), live: () => live && { rank: live.rank, checks: !!live.checkpoint },
   /** run n simulation ticks immediately (test tooling) */ fast(n) { countdown = 0; for (let i = 0; i < n && game?.state === 'playing'; i++) tick(); updateHud(0); } };
 $('ver').textContent = `${VERSION} · SIM ${SIM_VERSION}`;
+const howLink = () => { $('how-built').href = `https://github.com/ar-karkon/Escape60/blob/main/docs/TECHNOLOGY${getLang() === 'fa' ? '.fa' : ''}.md`; };
+howLink();
 
 const fmtTime = (ms) => { const s = ms / 1000, m = Math.floor(s / 60); return `${m}:${(s - m * 60).toFixed(2).padStart(5, '0')}`; };
 const hex = (c) => '#' + c.toString(16).padStart(6, '0');
@@ -97,12 +102,19 @@ function renderHome() {
   $('mode-label').textContent = sanitizedSeed && seed === initialSeed ? t('friend') : seed.startsWith('daily-') ? t('daily') : t('random');
   const open = profile.missions.list.filter((m) => !m.done).length;
   $('missions-badge').textContent = open; $('missions-badge').classList.toggle('hidden', open === 0);
+  renderBrief();
   if (challenge) { const b = $('challenge-banner'); b.classList.remove('hidden'); b.innerHTML = `<span>${iconSVG('flame')}</span><p>${t('friendBanner', { score: fmtN(challenge.points), time: fmtTime(challenge.timeMs) })}${challengeRun ? ` <b class="verified">✓ ${t('verifiedTag')}</b>` : ''}</p>`; }
 }
 
 /* ---------- online ---------- */
 async function checkOnline() {
-  try { const res = await api.today(); online = !!res.seed; $('online-state').textContent = t('online'); $('online-state').className = 'status online'; if (online && !nextRival) prefetchRival(); }
+  try {
+    const res = await api.today(); online = !!res.seed; $('online-state').textContent = t('online'); $('online-state').className = 'status online';
+    brief = res.brief || null; briefRules = res.rules || null;
+    if (brief) api.radio(brief.date).then((r) => { radioBank = r.radio; }).catch(() => {});
+    if (view === 'home') renderBrief();
+    if (online && !nextRival) prefetchRival();
+  }
   catch { online = false; $('online-state').textContent = t('offline'); $('online-state').className = 'status'; }
 }
 checkOnline();
@@ -231,6 +243,7 @@ function updateHud(dt) {
     $('rival-tag').textContent = `${ghost.out ? t('rivalTarget') : t('rivalTag')} #${ghost.info.rank}`;
   }
   $('bust').classList.toggle('hidden', game.bust < 0.05 || game.state !== 'playing');
+  if (game.bust > 0.55 && !bustSaid) { bustSaid = true; radioEvent('bust', game.ticks, 2); } else if (game.bust < 0.1) bustSaid = false;
   $('bust-fill').style.width = `${game.bust * 100}%`;
   // nearest pit stop when damaged
   const pa = $('pit-arrow');
@@ -294,7 +307,7 @@ function prefetchRival() {
   api.rival(seed, rivalQuery()).then(({ rival }) => { if (ask === rivalAsk && forSeed === seed) nextRival = rival?.trace?.length ? { ...rival, forSeed } : null; }).catch(() => {});
 }
 function setGhost(rv) {
-  ghost = { info: rv, game: createGame(seed, { car: rv.car, spawn: rv.spawn }), item: 0, used: 0, out: false, beaten: false, endTick: 0 };
+  ghost = { info: rv, game: createGame(seed, { car: rv.car, spawn: rv.spawn, rules: rulesFor(seed) }), item: 0, used: 0, out: false, beaten: false, endTick: 0 };
   render.setGhost(rv.car);
   $('ghost-name').textContent = rv.self ? t('rivalSelf') : `${rv.label} · #${rv.rank}`;
   $('rival-name').textContent = rv.self ? t('rivalSelf') : rv.label;
@@ -327,6 +340,58 @@ function placeGhostTag(gp) {
 /* ---------- pursuit reveal (the renderer calls this when a cop first locks onto your tail) ---------- */
 render.onReveal = () => { if (view !== 'game') return; banner(t('tailBanner'), '', 1900); audio.sirenWhoop(); audio.duckMusic(0.5, 900); vibrate(35); };
 
+/* ---------- city briefing, police radio, contracts, crew chief ---------- */
+const rulesFor = (s) => (brief && briefRules && s === brief.seed ? briefRules : null);
+function renderBrief() {
+  const el = $('brief'), lang = getLang();
+  if (!brief || seed !== brief.seed) { el.classList.add('hidden'); return; }
+  el.classList.remove('hidden');
+  $('brief-tag').textContent = t('briefTag'); $('brief-theme').textContent = brief.theme[lang] || brief.theme.en;
+  $('brief-text').textContent = brief.briefing[lang] || brief.briefing.en;
+  $('brief-list').innerHTML = (briefRules?.contracts || []).map((c, i) => `<span><span><em>${esc(brief.contracts[i]?.title?.[lang] || '')}</em> · ${esc(contractText(c, lang))}</span><b>+${fmtN(c.reward)}</b></span>`).join('');
+}
+$('brief').addEventListener('click', () => { const el = $('brief'); el.classList.toggle('open'); el.setAttribute('aria-expanded', String(el.classList.contains('open'))); click(); });
+const esc = (x) => String(x).replace(/[&<>"']/g, (ch) => `&#${ch.charCodeAt(0)};`);
+let radioUntil = 0, radioPrio = 0, radioTimer = 0;
+/** One line on the police radio; a more important line may cut in, a less important one waits its turn. */
+function say(text, who, cls = '', prio = 1, ms = 3400) {
+  if (!text || settings.radio === false) return;
+  const now = performance.now();
+  if (now < radioUntil && prio < radioPrio) return;
+  const el = $('radio');
+  who ||= t('dispatchWho');
+  const lead = text.toLowerCase().startsWith(who.toLowerCase()) ? text.slice(who.length).replace(/^\s*[:：،\-—]\s*/, '') : text;
+  $('radio-who').textContent = who; $('radio-text').textContent = lead || text;
+  el.className = 'radio-line ' + cls; void el.offsetWidth; el.classList.add('show');
+  radioUntil = now + ms; radioPrio = prio;
+  audio.play('beep', { rate: 2.4, gain: 0.16 });
+  clearTimeout(radioTimer); radioTimer = setTimeout(() => el.classList.add('hidden'), ms);
+}
+function radioEvent(event, salt = 0, prio = 1, ms) {
+  if (!game) return;
+  const lang = getLang(), line = pickRadio({ id: brief?.id || seed, radio: radioBank }, event, lang, salt + game.ticks);
+  say(fillRadio(line, { zone: game.zone, car: carById(profile.car).name, lang }), brief?.dispatcher?.[lang] || t('dispatchWho'), '', prio, ms);
+}
+function renderContracts(el, list) {
+  if (!list?.length) { el.classList.add('hidden'); return; }
+  const lang = getLang();
+  el.classList.remove('hidden');
+  el.innerHTML = list.map((c, i) => `<div class="pc-row ${c.done ? 'done' : ''}"><i></i><span>${esc(brief?.contracts?.[i]?.title?.[lang] ? brief.contracts[i].title[lang] + ' · ' : '')}${esc(contractText(c, lang))}${c.done ? '' : ` <small>${fmtN(Math.min(c.value, c.goal))}/${fmtN(c.goal)}</small>`}</span><b>+${fmtN(c.reward)}</b></div>`).join('');
+}
+const targetValue = (tg) => ({ points: game.points, survive: Math.floor(game.ticks / TICK_RATE), drift: game.stats.driftPts, near: game.stats.near, takedown: game.stats.takedowns, chain: game.bestChain })[tg.type] ?? 0;
+/** Crew chief on the results screen: rule-based at once, the written one when it arrives. */
+function showChief(chief, r, loading) {
+  const lang = getLang(), el = $('chief');
+  el.classList.remove('hidden'); el.classList.toggle('loading', loading);
+  $('chief-who').textContent = t('chiefWho');
+  $('chief-tip').textContent = loading ? t('chiefWait') : chief.tip[lang] || chief.tip.en;
+  if (chief.next) {
+    $('chief-next').textContent = t('nextTarget', { t: targetText(chief.next, lang) });
+    profile.nextTarget = { ...chief.next, seed: r.seed }; saveProfile(profile);
+  } else $('chief-next').textContent = '';
+  if (loading) setTimeout(() => { if (el.classList.contains('loading') && lastResult === r) { el.classList.remove('loading'); $('chief-tip').textContent = chief.tip[lang] || chief.tip.en; } }, runTicket ? 10000 : 300);
+}
+
 /* ---------- run flow ---------- */
 /** Every run starts somewhere new in the city (a friend challenge starts where the friend did). */
 let lastSpawn = -1;
@@ -344,7 +409,7 @@ function begin() {
   audio.unlock();
   applyLook();
   const spawn = pickSpawn();
-  game = createGame(seed, { car: profile.car, spawn });
+  game = createGame(seed, { car: profile.car, spawn, rules: rulesFor(seed) });
   trace = []; paused = false; finishQueued = false; input.nitroLatch = false; input.brake = false; lastEvent = -1; runTicket = null; countdown = INTRO; countStep = -1; acc = 0;
   $('countdown').classList.add('hidden');
   placeId = district(game.player.x, game.player.y); placeCand = placeId; placeT = 0; introWhoosh = false;
@@ -361,9 +426,16 @@ function begin() {
   if (pre && pre.forSeed === seed && pre.spawn === game.spawn) setGhost(pre);
   if (online) {
     const started = game;
-    api.startRun(seed, profile.car, spawn).then((r) => { if (game === started && !finishQueued) { runTicket = r; live.every = r.live?.every || 300; renderLive('sync'); } }).catch(() => {});
+    api.startRun(seed, profile.car, spawn, rulesFor(seed)?.id).then((r) => { if (game === started && !finishQueued) { runTicket = r; live.every = r.live?.every || 300; renderLive('sync'); } }).catch(() => {});
     // no rival prefetched for this start: ask the edge for one that started here too
     if (!ghost) api.rival(seed, { ...rivalQuery(), spawn }).then(({ rival }) => { if (game === started && !finishQueued && !ghost && rival?.trace?.length && rival.spawn === game.spawn) setGhost(rival); }).catch(() => {});
+  }
+  // police radio: the dispatcher announces you (written for this run when the service is reachable)
+  $('radio').classList.add('hidden'); radioUntil = 0; dispatchShown = false; bustSaid = false;
+  target = profile.nextTarget && profile.nextTarget.seed === seed ? profile.nextTarget : null; targetHitDone = false;
+  if (online) {
+    const started = game, last = lastResult && lastResult.seed === seed ? { points: lastResult.points, timeMs: lastResult.timeMs, end: lastResult.end } : null;
+    api.dispatch({ seed, car: profile.car, zone: game.zone, lang: getLang(), last }).then((x) => { if (game === started && x.line && !dispatchShown && game.ticks < 600) { dispatchShown = true; say(x.line, x.who, '', 3, 5200); } }).catch(() => {});
   }
   audio.nextChaseTrack(); audio.setMode('chase');
   if (profile.runs < 3) { const h = $('howto'); h.innerHTML = `<b>${t('howTo')}</b><br>${touch ? t('howTouch') : t('howKeys')}<br>${t('howGoal')}`; h.classList.remove('hidden'); clearTimeout(howtoTimer); howtoTimer = setTimeout(() => h.classList.add('hidden'), 6500); }
@@ -423,6 +495,10 @@ function tick() {
   if (e.length > 200) { e.splice(0, e.length - 50); lastEvent = e.length - 1; }
   const ms = (game.ticks * 1000) / TICK_RATE;
   if (!bestPassed && persisted[seed] && game.points > persisted[seed].points) { bestPassed = true; popup(t('newRecord'), '', 'good'); audio.play('levelup', { gain: 0.6 }); }
+  if (game.ticks === 30 && !dispatchShown) { dispatchShown = true; radioEvent('start', 0, 3, 4600); }
+  if (game.ticks === 300 && ghost?.info.taunt) { const tt = ghost.info.taunt[getLang()] || ghost.info.taunt.en; if (tt) say(`“${tt}”`, ghost.info.self ? t('rivalSelf') : ghost.info.label, 'rival', 2, 3800); }
+  if (game.ticks === 90 && target) say(t('nextTarget', { t: targetText(target, getLang()) }), t('chiefWho'), 'chief', 1, 3600);
+  if (target && !targetHitDone && game.ticks % 30 === 0 && targetValue(target) >= target.goal) { targetHitDone = true; popup(t('targetHit'), targetText(target, getLang()), 'hot'); audio.play('levelup', { gain: 0.6 }); }
   if (ghost && !ghost.beaten && game.points > ghost.info.points) { ghost.beaten = true; $('rival').classList.add('beaten'); popup(t('rivalBeaten'), ghost.info.label, 'hot'); audio.play('levelup'); vibrate(40); }
   if (!targetPassed && game.points > challenge.points) { targetPassed = true; popup(t('friendWon'), '', 'hot'); audio.play('levelup'); }
   const sec = Math.floor(ms / 1000);
@@ -437,6 +513,12 @@ function onEvent(ev) {
       audio.play('near', { rate: 1 + 0.08 * (m - 1), gain: 0.7 }); audio.play('whoosh', { gain: 0.6, rate: 0.9 + Math.random() * 0.2 });
       if (m >= 2) audio.play('combo', { rate: 0.85 + 0.08 * m, gain: 0.55, delay: 0.05 });
       vibrate(m >= 3 ? 25 : 12); break;
+    }
+    case 'contract': {
+      const c = game.contracts[ev.i], title = brief?.contracts?.[ev.i]?.title?.[getLang()] || t('contractTag');
+      popup(`+${fmtN(ev.reward)}`, `${t('contractTag')} ✓ ${title}`, 'hot');
+      if (c) banner(`${t('contractTag')} ✓ ${contractText(c, getLang())}`, 'info', 2200);
+      audio.play('win', { gain: 0.45 }); vibrate(40); radioEvent('contract', ev.i, 2); break;
     }
     case 'drift': popup(`+${fmtN(ev.pts)}`, `${t('drift')}${ev.mult > 1 ? ' ×' + ev.mult : ''}`, 'drift'); audio.play('coin', { gain: 0.4, rate: 1.1 }); break;
     case 'driftLost': popup(`-${fmtN(ev.pts)}`, t('driftLost'), 'bad'); break;
@@ -465,6 +547,9 @@ function onEvent(ev) {
     default: break;
   }
   if (ev.type === 'police' && ev.tick > 5) audio.play('horn', { gain: 0.25, rate: 0.8 });
+  // police radio reacts to the chase
+  const R = { heat: ev.heat > 1 && ['heat', 1], roadblock: ['roadblock', 1], takedown: ['takedown', 2], near: ev.cop && ev.tick % 3 === 0 && ['nearCop', 0], hit: ev.dmg >= 12 && ['hit', 1], repair: ['pit', 1], milestone: ['milestone', 3], wrecked: ['wrecked', 4], busted: ['busted', 4] }[ev.type];
+  if (R) radioEvent(R[0], ev.tick, R[1]);
 }
 function finish() {
   if (finishQueued) return;
@@ -508,6 +593,8 @@ function finish() {
     const who = { name: ghost.info.self ? t('rivalSelf') : ghost.info.label, rank: num(ghost.info.rank), n: num(ghost.info.points - r.points) };
     $('res-rival-text').textContent = t(won ? 'rivalWon' : r.points === ghost.info.points ? 'rivalTie' : 'rivalAhead', who);
   } else $('res-rival').classList.add('hidden');
+  renderContracts($('res-contracts'), game.contracts);
+  showChief(fallbackChief(r), r, true);
   lastShareUrl = null;
   if (runTicket) {
     const finished = game, ticket = runTicket, inputs = encodeTrace(trace), lv = live;
@@ -520,6 +607,7 @@ function finish() {
       if (x.share) lastShareUrl = new URL(x.share, location.href).href;
       if (x.id && persisted[seed] && persisted[seed].points === r.points) { persisted[seed].id = x.id; try { localStorage.setItem('escape60-bests-' + SIM_VERSION, JSON.stringify(persisted)); } catch {} }
       prefetchRival(); // the next retry races the run just above this one, from its start
+      if (x.id) api.debrief(x.id).then(({ chief }) => { if (game === finished && chief) showChief(chief, r, false); }).catch(() => { if (game === finished) $('chief').classList.remove('loading'); });
     }).catch(() => { if (game === finished) $('rank').textContent = t('rankFail'); });
   }
 }
@@ -575,6 +663,7 @@ function togglePause(force) {
   if (!game || game.state !== 'playing' || view !== 'game') return;
   paused = force ?? !paused;
   $('pause').classList.toggle('hidden', !paused);
+  if (paused) renderContracts($('pause-contracts'), game.contracts);
   last = performance.now(); acc = 0;
   audio.pause(paused);
 }
@@ -611,7 +700,7 @@ function openSettings() {
   $('music-toggle').checked = audio.musicOn; $('sfx-toggle').checked = audio.sfxOn; $('shake-toggle').checked = settings.shake; $('motion').checked = settings.motion;
   $('config').showModal();
 }
-$('lang-seg').addEventListener('click', (e) => { const b = e.target.closest('button'); if (!b) return; setLang(b.dataset.v); click(); openSettings(); if (view === 'home') renderHome(); if (view === 'garage') renderGarage(); checkOnline(); });
+$('lang-seg').addEventListener('click', (e) => { const b = e.target.closest('button'); if (!b) return; setLang(b.dataset.v); howLink(); click(); openSettings(); if (view === 'home') renderHome(); if (view === 'garage') renderGarage(); checkOnline(); });
 $('tod-seg').addEventListener('click', (e) => { const b = e.target.closest('button'); if (!b) return; settings.tod = b.dataset.v; saveSettings(); render.setTOD(settings.tod); click(); openSettings(); });
 $('gfx-seg').addEventListener('click', (e) => { const b = e.target.closest('button'); if (!b) return; settings.gfx = b.dataset.v; saveSettings(); render.setQuality(settings.gfx); click(); openSettings(); });
 $('music-toggle').onchange = () => audio.setMusicEnabled($('music-toggle').checked);

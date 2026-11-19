@@ -140,5 +140,43 @@ test('all 14 cars run deterministically under the autopilot', () => {
     assert.ok(g.ticks > 0);
     if (g.state === 'ended') assert.deepEqual(replayTrace('cars-' + c.id, encodeTrace(inputs), c.id), gameResult(g));
   }
-  assert.equal(SIM_VERSION, '2.1.0');
+  assert.equal(SIM_VERSION, '2.2.0');
+});
+
+/* ---------- daily rules (city briefing): contracts + police tactics ---------- */
+import { cleanRules, contractReward, DEFAULT_TACTICS } from '../web/src/rules.js';
+import { advanceTrace } from '../web/src/simulation.js';
+function driveRules(seed, opts, n = 2400) {
+  const g = createGame(seed, opts), steps = [];
+  for (let i = 0; i < n && g.state === 'playing'; i++) { const v = encodeInput(Math.round(Math.sin(i / 40) * 3), i % 200 > 185, i % 300 > 270, i % 500 < 40); steps.push(v); stepGame(g, v); g.events.length = 0; }
+  return { g, trace: encodeTrace(steps) };
+}
+test('rules are bounded, quantised and rewarded by formula', () => {
+  const r = cleanRules({ id: 'd-x<script>', contracts: [{ type: 'drift', goal: 1e9, zone: 3 }, { type: 'drift', goal: 5 }, { type: 'warp', goal: 1 }, { type: 'speed', goal: 171.3 }, { type: 'near', goal: -4, zone: 99 }, { type: 'chain', goal: 4 }], tactics: { pace: 9, patrol: 'x', spikes: 3.4, traffic: 0 } });
+  assert.equal(r.id, 'd-xscript');
+  assert.deepEqual(r.contracts.map((c) => [c.type, c.goal, c.zone]), [['drift', 3000, 3], ['speed', 170, -1], ['near', 4, -1]]);
+  assert.equal(r.contracts[0].reward, contractReward(r.contracts[0]));
+  assert.deepEqual(r.tactics, { ...DEFAULT_TACTICS, pace: 1.2, spikes: 3, traffic: 12 });
+  assert.equal(cleanRules(null), null);
+});
+test('contracts pay out inside the simulation and replay identically', () => {
+  const rules = { id: 'd-test', contracts: [{ type: 'survive', goal: 45 }, { type: 'explore', goal: 2 }, { type: 'speed', goal: 170 }], tactics: { pace: 1.2, blocks: 1.4, spikes: 3 } };
+  const a = driveRules('rules-a', { car: 'raiden', rules });
+  const base = driveRules('rules-a', { car: 'raiden' });
+  assert.ok(a.g.contracts.some((c) => c.done), 'at least one contract completed');
+  const paid = a.g.contracts.filter((c) => c.done).reduce((s, c) => s + c.reward, 0);
+  assert.equal(gameResult(a.g).contracts, a.g.contracts.filter((c) => c.done).length);
+  assert.ok(paid > 0);
+  assert.notDeepEqual(gameResult(a.g), gameResult(base.g), 'rules change the run');
+  // replay from the trace, and across a snapshot/restore, is bit-exact
+  const b = createGame('rules-a', { car: 'raiden', rules });
+  advanceTrace(b, a.trace, 900);
+  const c = restoreGame(snapshotGame(b));
+  advanceTrace(c, a.trace);
+  assert.deepEqual(gameResult(c), gameResult(a.g));
+});
+test('tactics change the pursuit: faster heat with a higher pace', () => {
+  assert.equal(heatAt(15 * 60), 2);
+  assert.equal(heatAt(13 * 60, 1.2), 2);
+  assert.equal(heatAt(13 * 60), 1);
 });

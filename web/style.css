@@ -43,7 +43,7 @@ canvas#ink { position: absolute; inset: 0; width: 100%; height: 100%; pointer-ev
 [data-icon] { display: inline-block; flex: none; }
 
 /* ---------- pixel frame primitives ---------- */
-.panel, .card, .btn, .chip, .hud-pause, .steer, .act, .stat, .rank-row, .status-chip, .banner, dialog, .hud-timer, .ribbon, .title-ribbon, .icon-btn, .car-card, .tab, .speedo, .live-chip, .rival-chip, .ghost-tag, .rival-result, .place {
+.panel, .card, .btn, .chip, .hud-pause, .steer, .act, .stat, .rank-row, .status-chip, .banner, dialog, .hud-timer, .ribbon, .title-ribbon, .icon-btn, .car-card, .tab, .speedo, .live-chip, .rival-chip, .ghost-tag, .rival-result, .place, .brief, .radio-line, .chief, .res-contracts {
   --b: 3px; --edge: var(--violet); --line: var(--ink);
   box-shadow:
     0 calc(var(--b) * -1) 0 0 var(--edge), 0 var(--b) 0 0 var(--edge),
@@ -200,7 +200,7 @@ body:not([data-view="game"]) canvas#threats { display: none; }
 @keyframes place-out { to { opacity: 0; transform: translate(-50%, -10px); } }
 /* aerial intro: the HUD steps away so the city can show off, then slides back in for the countdown */
 .hud > *:not(#place):not(#countdown) { transition: opacity 0.35s steps(4), transform 0.35s steps(4); }
-body.intro .hud > *:not(#place):not(#countdown) { opacity: 0; }
+body.intro .hud > *:not(#place):not(#countdown):not(#radio) { opacity: 0; }
 body.intro .hud-top, body.intro .minimap { transform: translateY(-24px); }
 body.intro .cluster { transform: translate(-50%, 24px); }
 body.intro #controls .zone-hint { opacity: 0; }
@@ -714,3 +714,42 @@ body.no-touch .vbar { bottom: auto; }
 .rival-result.won { --edge: var(--gold); color: var(--gold); }
 @media (max-height: 680px) and (orientation: portrait) { .edge-stack { right: 40px; width: 112px; top: calc(var(--safe-t) + 74px + clamp(98px, 26vw, 132px)); gap: 8px; } }
 @media (orientation: landscape) and (min-width: 600px) { .edge-stack { top: calc(var(--safe-t) + 66px); right: 46px; width: 132px; } }
+/* v3.5: city briefing (home), police radio (HUD), contracts (pause/results), crew chief (results) */
+.brief { --b: 2px; --edge: var(--gold); display: flex; flex-direction: column; gap: 5px; padding: 7px 10px 8px; text-align: start; background: linear-gradient(180deg, rgba(60, 26, 90, 0.94), rgba(30, 14, 52, 0.94)); }
+.br-head { display: flex; align-items: center; gap: 7px; min-width: 0; }
+.br-ico { width: 20px; height: 18px; flex: none; }
+.br-head small { font: 400 14px/1 var(--px); letter-spacing: 1px; color: var(--muted); white-space: nowrap; }
+.br-head b { font: 400 22px/0.9 var(--px); color: var(--gold); letter-spacing: 1px; text-shadow: 2px 2px 0 var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+html[lang="fa"] .br-head b { font: 800 17px/1.2 var(--fa); }
+.br-text { display: none; font-size: 12.5px; line-height: 1.6; color: var(--cream); }
+.brief.open .br-text { display: block; }
+.br-list { display: flex; flex-direction: column; gap: 3px; }
+.br-list span { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center; font-size: 12px; color: #e6d8f7; }
+.br-list span b { color: #5dffb0; font: 400 16px/1 var(--px); direction: ltr; }
+.br-list span em { font-style: normal; color: var(--cyan); }
+.radio-line { --b: 2px; --edge: var(--cyan); position: absolute; left: 0; right: 0; margin: 0 auto; width: fit-content; bottom: calc(var(--safe-b) + 118px); max-width: min(84vw, 460px); display: flex; align-items: flex-start; gap: 7px; padding: 5px 10px 6px; background: rgba(10, 30, 46, 0.86); color: #dffbff; font-size: 13px; line-height: 1.45; pointer-events: none; }
+.radio-line .rd-ico { width: 18px; height: 16px; flex: none; margin-top: 2px; }
+.radio-line b { flex: none; font: 400 15px/1.2 var(--px); letter-spacing: 1px; color: var(--cyan); white-space: nowrap; }
+.radio-line.show { animation: radio-in 0.25s steps(3) both; }
+.radio-line.rival { --edge: var(--pink); background: rgba(46, 10, 34, 0.86); }
+.radio-line.rival b { color: var(--pink); }
+.radio-line.chief { --edge: var(--gold); background: rgba(46, 34, 10, 0.86); }
+.radio-line.chief b { color: var(--gold); }
+@keyframes radio-in { from { opacity: 0; transform: translateY(8px); } }
+@media (orientation: landscape) and (min-width: 600px) { .radio-line { bottom: auto; top: calc(var(--safe-t) + 104px); max-width: 52vw; } }
+.pause-contracts, .res-contracts { --b: 2px; --edge: var(--violet); display: flex; flex-direction: column; gap: 4px; padding: 6px 10px; background: rgba(27, 11, 43, 0.82); font-size: 12.5px; }
+.pause-contracts.hidden, .res-contracts.hidden { display: none; }
+.pc-row { display: grid; grid-template-columns: 16px 1fr auto; gap: 7px; align-items: center; }
+.pc-row i { width: 12px; height: 12px; box-shadow: inset 0 0 0 2px var(--muted); }
+.pc-row.done i { background: #5dffb0; box-shadow: none; }
+.pc-row.done { color: #b8ffd9; }
+.pc-row b { font: 400 16px/1 var(--px); color: var(--gold); direction: ltr; }
+.pc-row small { color: var(--muted); font: 400 14px/1 var(--px); direction: ltr; }
+.chief { --b: 2px; --edge: var(--gold); display: grid; grid-template-columns: 30px 1fr; gap: 8px; align-items: start; padding: 6px 10px 7px; background: rgba(46, 34, 10, 0.72); }
+.chief .ch-ico { width: 26px; height: 26px; }
+.chief small { font: 400 14px/1 var(--px); letter-spacing: 1px; color: var(--gold); }
+.chief p { margin: 3px 0 2px; font-size: 12.5px; line-height: 1.55; color: var(--cream); }
+.chief b { font-size: 12px; color: #5dffb0; }
+.chief.loading p { opacity: 0.55; }
+.how-link { color: var(--cyan); text-decoration: none; border-bottom: 2px dotted var(--cyan); }
+.challenge .verified { color: #5dffb0; }

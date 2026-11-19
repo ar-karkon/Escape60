@@ -12,6 +12,8 @@ const S = {
     title: 'EDGE REFEREE', sub: 'Every rank, rival and share card in ESCAPE 60 is decided on Arvan Edge Compute — while you drive. The browser only sends its inputs; the edge re-simulates the game and is the only judge.',
     countersTitle: 'Live edge telemetry', countersSub: 'Real counters merged from every edge isolate into object storage (no personal data).', today: 'Today', total: 'All time',
     runs: 'Runs verified', live: 'Live checks', drive: 'Driving re-simulated', cpu: 'Edge CPU for replays', rejects: 'Cheats refused', rivals: 'Ghost rivals served', cards: 'PNG cards drawn', previews: 'Link previews', saved: 'Bytes saved (Brotli)', statics: 'Files served', api: 'API calls', isolates: 'Edge isolates', ticksSub: '{n} ticks at 60 Hz', liveRunsSub: '{n} verified live while driven', cpuSub: '{n} µs per simulated tick',
+    aiTitle: 'City director & crew chief (AIaaS)', aiSub: 'A language model on Arvan AIaaS writes the day\'s briefing — contracts and police tactics the simulation plays by, frozen for everyone — plus the police radio, a dispatcher call per run and a crew-chief report per verified run. Every answer is validated and clamped on the edge; handwritten fallbacks keep the game running without it.',
+    aiCalls: 'Model calls', aiTokens: 'Tokens', aiLatency: 'Avg model latency', aiDispatch: 'Dispatcher calls', aiChief: 'Crew-chief reports', aiFails: 'Failures → fallback', briefSource: 'Source', briefContracts: 'Contracts', briefTactics: 'Police tactics', notConfigured: 'AIaaS key not configured — handwritten briefing in use.',
     pipeTitle: 'What the edge does for every run', pipeSub: 'Stateless: everything the edge needs travels inside HMAC-signed tickets and checkpoints, so any edge node can answer any request.',
     steps: [
       ['Run ticket', 'An HMAC-signed ticket binds run id, route, car and start time.'],
@@ -34,6 +36,8 @@ const S = {
     title: 'داور لبه', sub: 'همه‌ی رتبه‌ها، رقیب‌ها و کارت‌های اشتراک فرار ۶۰ روی پردازش لبه‌ی آروان تعیین می‌شوند — همان لحظه که رانندگی می‌کنی. مرورگر فقط ورودی‌هایش را می‌فرستد؛ لبه بازی را دوباره شبیه‌سازی می‌کند و تنها داور است.',
     countersTitle: 'آمار زنده‌ی لبه', countersSub: 'شمارنده‌های واقعی که از همه‌ی ایزوله‌های لبه در فضای ذخیره‌سازی جمع می‌شوند (بدون داده‌ی شخصی).', today: 'امروز', total: 'از ابتدا',
     runs: 'رانندگی تأییدشده', live: 'بررسی زنده', drive: 'رانندگی بازشبیه‌سازی‌شده', cpu: 'پردازنده‌ی لبه برای بازپخش', rejects: 'تقلب ردشده', rivals: 'رقیب شبح ارسال‌شده', cards: 'کارت PNG ساخته‌شده', previews: 'پیش‌نمایش لینک', saved: 'صرفه‌جویی حجم (Brotli)', statics: 'فایل ارسال‌شده', api: 'درخواست API', isolates: 'ایزوله‌های لبه', ticksSub: '{n} تیک ۶۰ هرتزی', liveRunsSub: '{n} مورد حین رانندگی زنده تأیید شد', cpuSub: '{n} میکروثانیه برای هر تیک',
+    aiTitle: 'مدیر شهر و سرمکانیک (AIaaS)', aiSub: 'یک مدل زبانی روی AIaaS آروان گزارش روزانه را می‌نویسد — قراردادها و تاکتیک‌های پلیس که شبیه‌ساز با آن‌ها بازی می‌کند و برای همه یکسان قفل می‌شود — به‌علاوه‌ی بی‌سیم پلیس، تماس مرکز برای هر رانندگی و گزارش سرمکانیک برای هر رانندگی تأییدشده. هر پاسخ روی لبه اعتبارسنجی و محدود می‌شود و بدون مدل هم بازی با متن‌های دست‌نویس کار می‌کند.',
+    aiCalls: 'فراخوانی مدل', aiTokens: 'توکن', aiLatency: 'میانگین تأخیر مدل', aiDispatch: 'تماس مرکز', aiChief: 'گزارش سرمکانیک', aiFails: 'خطا ← جایگزین', briefSource: 'منبع', briefContracts: 'قراردادها', briefTactics: 'تاکتیک پلیس', notConfigured: 'کلید AIaaS تنظیم نشده — گزارش دست‌نویس فعال است.',
     pipeTitle: 'لبه برای هر رانندگی چه می‌کند', pipeSub: 'بدون حالت: هر چیزی که لبه لازم دارد داخل بلیت‌ها و نقطه‌های بازبینی امضاشده با HMAC جابه‌جا می‌شود، پس هر گره‌ی لبه می‌تواند به هر درخواستی جواب بدهد.',
     steps: [
       ['بلیت رانندگی', 'یک بلیت امضاشده (HMAC) شناسه، مسیر، ماشین و زمان شروع را قفل می‌کند.'],
@@ -103,7 +107,14 @@ function renderStats(d) {
   $('ep-recent').innerHTML = rec.length ? `<table class="ep-table"><tr>${th.map((h) => `<th>${esc(h)}</th>`).join('')}</tr>${rec.map((r) => `<tr><td>${esc(r.label)}</td><td>${esc(carById(r.car).name)}</td><td class="n">${fmtN(r.points)}</td><td>${fmtTime(r.timeMs)}</td><td>${r.live || 0}×</td><td>${r.verifyMs} ms</td></tr>`).join('')}</table>` : `<p class="ep-empty">${esc(T('none'))}</p>`;
   const rj = Object.entries(d.today?.rejects || {}).sort((a, b) => b[1] - a[1]), max = Math.max(1, ...rj.map((x) => x[1]));
   $('ep-rejects').innerHTML = rj.length ? rj.map(([k, n]) => `<div class="ep-bar"><span>${esc(T('reasons')[k] || k)}</span><i><u style="width:${(100 * n) / max}%"></u></i><b>${n}</b></div>`).join('') : `<p class="ep-empty">—</p>`;
-  $('ep-status').textContent = `API ${d.api} · SIM ${d.version} · ${d.storage}${d.secured ? ' · signed' : ''}`;
+  $('ep-status').textContent = `API ${d.api} · SIM ${d.version} · ${d.storage}${d.secured ? ' · signed' : ''}${d.ai?.configured ? ` · ${d.ai.model}` : ''}`;
+  const br = d.ai?.brief;
+  $('ep-brief').innerHTML = br ? `<b>${esc(br.theme?.[lang] || br.theme?.en || '')}</b><small>${esc(T('briefSource'))}: <code>${esc(br.source)}${br.genMs ? ` · ${br.genMs} ms` : ''}</code> · id <code>${esc(br.id)}</code></small>
+    <span>${esc(T('briefContracts'))}: ${br.contracts.map((c) => `<code>${esc(c.type)} ${c.goal}${c.zone >= 0 ? ' @' + c.zone : ''} +${c.reward}</code>`).join(' · ')}</span>
+    <span>${esc(T('briefTactics'))}: ${Object.entries(br.tactics).map(([k, v]) => `<code>${k} ${v}</code>`).join(' · ')}</span>${d.ai.configured ? '' : `<small>${esc(T('notConfigured'))}</small>`}` : `<small>${esc(d.ai?.configured ? '…' : T('notConfigured'))}</small>`;
+  const a = s.c || {};
+  $('ep-ai').innerHTML = [['aiCalls', fmtN(a.aiCalls), d.ai?.model || '', 'cy'], ['aiTokens', fmtN(a.aiTokens), '', ''], ['aiLatency', a.aiCalls ? `${Math.round(a.aiMs / a.aiCalls)} ms` : '—', '', ''], ['aiDispatch', fmtN(a.ai_dispatch), '', 'gr'], ['aiChief', fmtN(a.ai_chief), '', 'gr'], ['aiFails', fmtN(a.aiFails), '', 'hot']]
+    .map(([k, v, sub, cls]) => `<div class="ep-tile ${cls}"><small>${esc(T(k))}</small><b>${esc(v)}</b><i>${esc(sub)}</i></div>`).join('');
 }
 async function poll() {
   try { last = await api('/edge'); renderStats(last); } catch { $('ep-status').textContent = T('l').offline; }

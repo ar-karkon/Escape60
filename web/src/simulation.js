@@ -6,17 +6,20 @@
  * does not stop at 60 s: the 60 s mark is a milestone with a bonus, then the heat keeps rising until
  * the car is wrecked, busted, or the 10 minute cap is reached. Each run starts at one of the map's
  * start positions (any district); the start index is part of the run and of its signed ticket.
+ * Daily routes can carry bounded rules (rules.js): contracts with point rewards judged here, and the
+ * police tactics of the day. They are part of the state, so every replay uses exactly the same ones.
  *
  * Only + - * /, Math.sqrt/floor/round/min/max/abs and dmath's sin/cos/atan2 are used so every JS
  * engine produces the same run from the same input trace. Units: metres, seconds, radians. */
-import { sample, pointAt, edges, nodes, stations, spawnPoint, routeFrom, SPAWN_COUNT } from './map.js';
+import { sample, pointAt, edges, nodes, stations, spawnPoint, routeFrom, SPAWN_COUNT, district } from './map.js';
+import { cleanRules, DEFAULT_TACTICS } from './rules.js';
 import { carById, POLICE, POLICE_TYPES, TRAFFIC } from './cars.js';
 import { dsin, dcos, datan2 } from './dmath.js';
 
 export const TICK_RATE = 60;
 export const MILESTONE_TICKS = 60 * TICK_RATE;
 export const MAX_TICKS = 10 * 60 * TICK_RATE;
-export const SIM_VERSION = '2.1.0';
+export const SIM_VERSION = '2.2.0';
 export const MAX_HEALTH = 100;
 export const REPAIRS = 3;
 export const COMBO_WINDOW = 4;
@@ -53,7 +56,7 @@ const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 function norm(a) { while (a > PI) a -= TAU; while (a < -PI) a += TAU; return a; }
 const R = {}, R2 = {}, PT = {}, PT2 = {};
 
-export function heatAt(ticks) { const t = ticks / TICK_RATE; let h = 1; for (let i = 1; i < HEAT_AT.length; i++) if (t >= HEAT_AT[i]) h = i + 1; return h; }
+export function heatAt(ticks, pace = 1) { const t = (ticks / TICK_RATE) * pace; let h = 1; for (let i = 1; i < HEAT_AT.length; i++) if (t >= HEAT_AT[i]) h = i + 1; return h; }
 
 /** Valid start index for a run: the one asked for, or one picked from the seed. */
 export function spawnIndex(seed, spawn) { return Number.isInteger(spawn) && spawn >= 0 && spawn < SPAWN_COUNT ? spawn : hashSeed(seed) % SPAWN_COUNT; }
@@ -65,15 +68,17 @@ export function createGame(seed = 'daily', opts = {}) {
   const spawn = spawnIndex(seed, opts.spawn);
   const sp = spawnPoint(spawn);
   const heading = datan2(sp.ty, sp.tx);
+  const rules = cleanRules(opts.rules), tac = rules ? rules.tactics : { ...DEFAULT_TACTICS }, zone = district(sp.x, sp.y);
   const s = {
-    seed: String(seed), version: SIM_VERSION, car: car.id, spawn, ticks: 0, rs: (h ^ Math.imul(spawn + 1, 0x9e3779b1)) >>> 0 || 0x9e3779b9,
+    seed: String(seed), version: SIM_VERSION, car: car.id, spawn, rules: rules ? { id: rules.id } : null, tac, zone, visited: 1 << zone,
+    contracts: rules ? rules.contracts.map((c) => ({ ...c, value: 0, done: false })) : [], ticks: 0, rs: (h ^ Math.imul(spawn + 1, 0x9e3779b1)) >>> 0 || 0x9e3779b9,
     state: 'playing', end: '', health: MAX_HEALTH, repairs: REPAIRS, invuln: 0, points: 0,
     chain: 0, comboTimer: 0, bestChain: 0, nitro: 0.6, heat: 1, bust: 0, milestone: false,
     player: { x: sp.x, y: sp.y, h: heading, a: heading, v: 26, slip: 0, steer: 0, yaw: 0, boost: false, brake: false, hand: false, drifting: false, wallCd: 0, spike: 0 },
     drift: { acc: 0, time: 0, idle: 0 },
-    stats: { near: 0, takedowns: 0, driftPts: 0, top: 0, hits: 0, repairs: 0, dodges: 0, nitroTicks: 0, dist: 0 },
+    stats: { near: 0, takedowns: 0, driftPts: 0, top: 0, hits: 0, repairs: 0, dodges: 0, nitroTicks: 0, dist: 0, contracts: 0 },
     police: [], traffic: [], blocks: [], stationCd: stations.map(() => 0), emptyCd: 0,
-    nextPolice: 4 * TICK_RATE, nextTraffic: 0, nextBlock: HEAT_AT[2] * TICK_RATE + 2 * TICK_RATE, pid: 0, tid: 0,
+    nextPolice: 4 * TICK_RATE, nextTraffic: 0, nextBlock: Math.round((HEAT_AT[2] / tac.pace) * TICK_RATE) + 2 * TICK_RATE, pid: 0, tid: 0,
     route: null, routeAt: -1, events: [],
   };
   attachRandom(s);
@@ -187,7 +192,7 @@ function wallBounce(o, out) {
 function spawnPolice(s, first = false) {
   const p = s.player;
   let r = null;
-  if (!first && s.heat >= 2 && s.random() < 0.35) {
+  if (!first && s.heat >= 2 && s.random() < s.tac.intercept) {
     // interceptor: ahead on the player's road, driving toward them
     sample(p.x, p.y, R);
     if (R.e >= 0) {
@@ -260,6 +265,7 @@ function bankDrift(s) {
   if (d.acc >= 40) {
     const mult = comboMult(s), pts = Math.round(d.acc) * mult;
     s.points += pts; s.stats.driftPts += pts;
+    for (const c of s.contracts) if (c.type === 'drift' && !c.done && (c.zone < 0 || c.zone === s.zone)) c.value += pts;
     if (s.comboTimer > 0) s.comboTimer = COMBO_WINDOW;
     s.events.push({ type: 'drift', tick: s.ticks, pts, mult, time: Math.round(d.time * 100) / 100 });
   }
@@ -283,6 +289,30 @@ function takedown(s, c, how) {
   s.stats.takedowns++;
   s.nitro = Math.min(1, s.nitro + 0.3);
   skill(s, 800, 'takedown', { id: c.id, how });
+}
+
+/* ---------------------------------------------------------------- contracts ---------- */
+function nearContract(s) { for (const c of s.contracts) if (c.type === 'near' && !c.done && (c.zone < 0 || c.zone === s.zone)) c.value++; }
+function bits(m) { let n = 0; while (m) { n += m & 1; m >>>= 1; } return n; }
+/** Judge the day's contracts; a completed one pays its reward once. */
+function checkContracts(s) {
+  for (let i = 0; i < s.contracts.length; i++) {
+    const c = s.contracts[i];
+    if (c.done) continue;
+    switch (c.type) {
+      case 'takedown': c.value = s.stats.takedowns; break;
+      case 'dodge': c.value = s.stats.dodges; break;
+      case 'speed': c.value = s.stats.top; break;
+      case 'chain': c.value = s.bestChain; break;
+      case 'survive': c.value = Math.floor(s.ticks / TICK_RATE); break;
+      case 'explore': c.value = bits(s.visited); break;
+      default: break;
+    }
+    if (c.value >= c.goal) {
+      c.done = true; s.points += c.reward; s.stats.contracts++;
+      s.events.push({ type: 'contract', tick: s.ticks, i, reward: c.reward });
+    }
+  }
 }
 
 /** Elastic-ish collision between two moving circles. Returns closing speed. a/b: { x, y, vx, vy }. */
@@ -313,7 +343,7 @@ export function stepGame(s, input = 3) {
   if (s.emptyCd > 0) s.emptyCd = Math.max(0, s.emptyCd - DT);
   if (s.comboTimer > 0) { s.comboTimer = Math.max(0, s.comboTimer - DT); if (s.comboTimer === 0) s.chain = 0; }
   const prevHeat = s.heat;
-  s.heat = heatAt(s.ticks);
+  s.heat = heatAt(s.ticks, s.tac.pace);
   if (s.heat !== prevHeat) s.events.push({ type: 'heat', tick: s.ticks, heat: s.heat });
 
   // ---- player car ----
@@ -387,15 +417,15 @@ export function stepGame(s, input = 3) {
   if (s.state !== 'playing') return s;
 
   // ---- director: police, traffic, roadblocks ----
-  const elapsed = s.ticks / TICK_RATE;
+  const elapsed = (s.ticks / TICK_RATE) * s.tac.pace;
   let cap = POLICE_CAP[s.heat - 1] + (s.heat >= 5 ? Math.floor((elapsed - HEAT_AT[4]) / 25) : 0);
   if (cap > 10) cap = 10;
   let alive = 0; for (const q of s.police) if (!q.wreck) alive++;
-  if (s.ticks >= s.nextPolice && alive < cap) { spawnPolice(s); s.nextPolice = s.ticks + Math.round((s.heat >= 4 ? 3 : 5) * TICK_RATE); }
-  const trafficCap = 18;
+  if (s.ticks >= s.nextPolice && alive < cap) { spawnPolice(s); s.nextPolice = s.ticks + Math.round(((s.heat >= 4 ? 3 : 5) * TICK_RATE) / s.tac.patrol); }
+  const trafficCap = s.tac.traffic;
   if (s.ticks >= s.nextTraffic) { if (s.traffic.length < trafficCap) spawnTraffic(s, 230, 460); s.nextTraffic = s.ticks + 18; }
   if (s.heat >= 3 && s.ticks >= s.nextBlock) {
-    if (spawnRoadblock(s)) s.nextBlock = s.ticks + Math.round((s.heat >= 5 ? 10 : 14) * TICK_RATE);
+    if (spawnRoadblock(s)) s.nextBlock = s.ticks + Math.round(((s.heat >= 5 ? 10 : 14) * TICK_RATE) / s.tac.blocks);
     else s.nextBlock = s.ticks + 2 * TICK_RATE;
   }
   if (s.routeAt < 0 || s.ticks - s.routeAt >= 30) {
@@ -455,7 +485,7 @@ export function stepGame(s, input = 3) {
     // near miss / proximity
     const dx = p.x - q.x, dy = p.y - q.y, dd = Math.sqrt(dx * dx + dy * dy);
     if (dd < 11) closeCops++;
-    if (dd < 6.2 && imp < 0 && !q.near && p.v > 22) { q.near = true; s.stats.near++; s.nitro = Math.min(1, s.nitro + 0.1); skill(s, 220, 'near', { cop: 1 }); }
+    if (dd < 6.2 && imp < 0 && !q.near && p.v > 22) { q.near = true; s.stats.near++; nearContract(s); s.nitro = Math.min(1, s.nitro + 0.1); skill(s, 220, 'near', { cop: 1 }); }
     if (dd > 14) q.near = false;
     if (dd > 760) { q.wreck = -1; q.gone = 1; s.nextPolice = Math.min(s.nextPolice, s.ticks + 60); }
   }
@@ -509,7 +539,7 @@ export function stepGame(s, input = 3) {
       t.loose = 8; t.turn = null; t.x = OB.x; t.y = OB.y; t.vx = OB.vx; t.vy = OB.vy; t.spin = (s.random() - 0.5) * (2 + imp * 0.15);
     } else {
       const dx = p.x - t.x, dy = p.y - t.y, dd = dx * dx + dy * dy;
-      if (dd < 5.6 * 5.6 && !t.near && !t.loose && p.v > 24) { t.near = true; s.stats.near++; s.nitro = Math.min(1, s.nitro + 0.08); skill(s, 150, 'near'); }
+      if (dd < 5.6 * 5.6 && !t.near && !t.loose && p.v > 24) { t.near = true; s.stats.near++; nearContract(s); s.nitro = Math.min(1, s.nitro + 0.08); skill(s, 150, 'near'); }
     }
   }
   if (hitAny) { p.x = PB.x; p.y = PB.y; const v2 = Math.sqrt(PB.vx * PB.vx + PB.vy * PB.vy); if (v2 > 0.3) { const na = datan2(PB.vy, PB.vx); p.h = norm(p.h + norm(na - p.a) * 0.5); p.a = na; } p.v = v2; }
@@ -568,6 +598,10 @@ export function stepGame(s, input = 3) {
   else s.bust = Math.max(0, s.bust - DT / 1.3);
   if (s.bust >= 1 && s.state === 'playing') { s.state = 'ended'; s.end = 'busted'; s.events.push({ type: 'busted', tick: s.ticks }); return s; }
 
+  // ---- districts + contracts ----
+  if (s.ticks % 15 === 0) { const z = district(p.x, p.y); if (z !== s.zone) { s.zone = z; s.visited |= 1 << z; } }
+  if (s.contracts.length) checkContracts(s);
+
   // ---- time ----
   if (s.ticks % TICK_RATE === 0) s.points += 10 * s.heat;
   if (s.ticks === MILESTONE_TICKS && !s.milestone) {
@@ -576,7 +610,7 @@ export function stepGame(s, input = 3) {
     s.events.push({ type: 'milestone', tick: s.ticks, points: s.points, health: Math.round(s.health) });
   }
   if (s.ticks >= MAX_TICKS && s.state === 'playing') { bankDrift(s); s.state = 'ended'; s.end = 'legend'; s.events.push({ type: 'legend', tick: s.ticks }); }
-  if (s.state === 'ended' && s.drift.acc > 0) bankDrift(s);
+  if (s.state === 'ended' && s.drift.acc > 0) { bankDrift(s); if (s.contracts.length) checkContracts(s); }
   return s;
 }
 
@@ -597,7 +631,7 @@ function spawnRoadblock(s) {
   const from = -gapSide * hw, to = gapSide * (hw - gap);
   const n = Math.max(2, Math.round(Math.abs(to - from) / 3.2));
   for (let i = 0; i <= n; i++) { const o = from + ((to - from) * i) / n; units.push({ x: PT.x + nx * o, y: PT.y + ny * o, r: 1.5 }); }
-  const spike = s.heat >= 4;
+  const spike = s.heat >= s.tac.spikes;
   const go = gapSide * (hw - gap / 2);
   s.blocks.push({ id: s.ticks, x: PT.x, y: PT.y, tx, ty, units, ttl: 24, side: 1, gapSide, hit: false, near: false, passed: false,
     spike, spiked: false, sx: PT.x + nx * go + tx * 2, sy: PT.y + ny * go + ty * 2, sw: gap / 2, hw });
@@ -609,7 +643,8 @@ function spawnRoadblock(s) {
 export function gameResult(s) {
   return { version: SIM_VERSION, seed: s.seed, car: s.car, spawn: s.spawn, timeMs: Math.round((s.ticks * 1000) / TICK_RATE), points: s.points, health: Math.round(s.health),
     end: s.end, escaped: s.ticks >= MILESTONE_TICKS, near: s.stats.near, takedowns: s.stats.takedowns, driftPts: s.stats.driftPts, bestChain: s.bestChain,
-    topSpeed: s.stats.top, repairs: s.stats.repairs, hits: s.stats.hits, dodges: s.stats.dodges, dist: Math.round(s.stats.dist), heat: s.heat };
+    topSpeed: s.stats.top, repairs: s.stats.repairs, hits: s.stats.hits, dodges: s.stats.dodges, dist: Math.round(s.stats.dist), heat: s.heat,
+    contracts: s.stats.contracts, zone: s.zone, rules: s.rules ? s.rules.id : null };
 }
 export function compareResult(a, b) { return (b.points - a.points) || (b.timeMs - a.timeMs); }
 export function encodeTrace(values) {

@@ -7,8 +7,14 @@ export async function request(path, options = {}, ms = 6500) {
     const data = await res.json(); if (!res.ok) throw Object.assign(Error(data.error || 'Request failed'), { status: res.status }); return data;
   } finally { clearTimeout(timeout); }
 }
-export const today = () => request('/challenges/today');
-export const startRun = (seed, car, spawn) => request('/runs/start', { method: 'POST', body: JSON.stringify({ seed, car, spawn }) });
+/** Today's route and city briefing (the first request of a day may wait while the briefing is written). */
+export const today = () => request('/challenges/today', {}, 20000);
+export const startRun = (seed, car, spawn, rules) => request('/runs/start', { method: 'POST', body: JSON.stringify({ seed, car, spawn, rules }) });
+export const radio = (date) => request(`/radio?date=${encodeURIComponent(date)}`, {}, 20000);
+/** The dispatcher's call for this run. */
+export const dispatch = (payload) => request('/dispatch', { method: 'POST', body: JSON.stringify(payload) }, 7000);
+/** Crew chief for a verified run. */
+export const debrief = (id) => request('/runs/debrief', { method: 'POST', body: JSON.stringify({ id }) }, 12000);
 /** Live referee: the edge re-simulates the newest inputs while the run is still being driven. */
 export const liveCheck = (runId, token, trace, checkpoint) => request('/runs/live', { method: 'POST', body: JSON.stringify({ runId, token, trace, checkpoint }) }, 6000);
 /** Final verdict. Starts from the last live checkpoint when there is one (only the last seconds are

@@ -2,7 +2,7 @@
    event, `env` global — with dist/web served as the static bucket. Lets you test the exact deploy
    artefact before pasting it into the panel:
      npm run build && npm run edge:local          → http://localhost:4174 (game, /edge, /r/<id>, API)
-   Env: PORT (4174), BUCKET_PORT (4180), any edge variable (RUN_SECRET, REPLAY_CHUNK, PRECOMPRESSED…). */
+   Env: PORT (4174), BUCKET_PORT (4180), edge variables (RUN_SECRET, REPLAY_CHUNK, PRECOMPRESSED, AI_API_KEY, AI_BASE…). */
 import http from 'node:http';
 import { readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
@@ -29,7 +29,7 @@ http.createServer(async (req, res) => {
 }).listen(BUCKET_PORT, '127.0.0.1');
 
 // the edge runtime
-globalThis.env = { STATIC_ORIGIN: `http://127.0.0.1:${BUCKET_PORT}`, ...Object.fromEntries(['RUN_SECRET', 'REPLAY_CHUNK', 'PRECOMPRESSED', 'MIN_PLAY_RATIO'].filter((k) => process.env[k]).map((k) => [k, process.env[k]])) };
+globalThis.env = { STATIC_ORIGIN: `http://127.0.0.1:${BUCKET_PORT}`, ...Object.fromEntries(['RUN_SECRET', 'REPLAY_CHUNK', 'PRECOMPRESSED', 'MIN_PLAY_RATIO', 'AI_API_KEY', 'AI_BASE', 'AI_MODEL', 'AI_DAILY_CAP'].filter((k) => process.env[k]).map((k) => [k, process.env[k]])) };
 let onFetch = null;
 globalThis.addEventListener = (type, fn) => { if (type === 'fetch') onFetch = fn; };
 await import(pathToFileURL(worker).href);

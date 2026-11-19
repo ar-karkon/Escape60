@@ -47,6 +47,11 @@
           <div class="car-name"><b id="home-car">Kaze S15</b><small id="home-tag"></small></div>
           <div class="fx-chips" id="home-fx"></div>
         </div>
+        <button id="brief" class="brief hidden" type="button" aria-expanded="false">
+          <span class="br-head"><span class="br-ico" data-icon="radio"></span><small id="brief-tag"></small><b id="brief-theme"></b></span>
+          <span class="br-text" id="brief-text"></span>
+          <span class="br-list" id="brief-list"></span>
+        </button>
         <p class="chip chip-daily" id="mode-label"></p>
         <button id="play" class="btn btn-primary btn-xl">
           <span class="btn-ico" data-icon="play"></span>
@@ -113,7 +118,9 @@
         <div class="xp-row"><b class="lvl" id="lvl2">LV 1</b><div class="xpbar"><i id="xp-fill2"></i></div><b class="xp-gain" id="xp-gain">+0 XP</b></div>
         <p class="unlocks hidden" id="res-unlocks"></p>
         <p class="rival-result hidden" id="res-rival"><span data-icon="ghost"></span><b id="res-rival-text"></b></p>
+        <div class="res-contracts hidden" id="res-contracts"></div>
         <div class="rank-row"><span data-icon="bars"></span><p class="rank" id="rank"></p></div>
+        <div class="chief hidden" id="chief"><span class="ch-ico" data-icon="coach"></span><div class="ch-body"><small id="chief-who"></small><p id="chief-tip"></p><b id="chief-next"></b></div></div>
         <div class="actions">
           <button id="share" class="btn btn-secondary btn-share"><span class="btn-ico" data-icon="share"></span><b data-i18n="share">SHARE</b></button>
           <button id="replay" class="btn btn-primary"><span class="btn-ico" data-icon="play"></span><b data-i18n="retry">RETRY</b></button>
@@ -142,6 +149,7 @@
         <div id="rival" class="rival-chip hidden"><span class="rv-ico" data-icon="ghost"></span><small id="rival-tag">RIVAL</small><small id="rival-name" class="rv-name"></small><b id="rival-delta">+0</b></div>
       </div>
       <div id="ghost-tag" class="ghost-tag hidden"><b id="ghost-name"></b></div>
+      <div id="radio" class="radio-line hidden" aria-live="polite"><span class="rd-ico" data-icon="radio"></span><b id="radio-who"></b><span id="radio-text"></span></div>
       <div id="pit-arrow" class="pit-arrow hidden"><span class="arw" data-icon="wrench"></span><small id="pit-dist"></small></div>
       <div class="vbar vbar-health" id="health" role="meter" aria-label="health">
         <span class="vb-ico" data-icon="shield"></span>
@@ -189,6 +197,7 @@
       <div class="panel pause-card">
         <p class="ribbon">PAUSED</p>
         <h2 data-i18n="pause">PAUSED</h2>
+        <div class="pause-contracts hidden" id="pause-contracts"></div>
         <button id="resume" class="btn btn-primary"><span class="btn-ico" data-icon="play"></span><b data-i18n="resume">RESUME</b></button>
         <button id="restart" class="btn btn-secondary"><span class="btn-ico" data-icon="retry"></span><b data-i18n="restart">RESTART</b></button>
         <button id="pause-settings" class="btn btn-secondary"><span class="btn-ico" data-icon="gear"></span><b data-i18n="settings">SETTINGS</b></button>
@@ -248,6 +257,7 @@
         <p><b>Fonts</b> Rooyin Free — Mohamad Darvishi · Jersey 10 — Sarah Cadigan-Fried · Vazirmatn — Saber Rastikerdar (SIL OFL)</p>
         <p><b>Engine</b> Three.js (MIT). Cars, city and effects are original procedural designs; car shapes are inspired by classic road cars and carry no brands.</p>
         <p>Full details: assets/audio/CREDITS.md</p>
+        <p><a id="how-built" class="how-link" href="https://github.com/ar-karkon/Escape60/blob/main/docs/TECHNOLOGY.md" target="_blank" rel="noopener"><span data-i18n="howBuilt">How it's built</span> ↗</a></p>
       </div>
       <button id="close-credits" class="btn btn-primary"><b data-i18n="close">CLOSE</b></button>
     </dialog>
