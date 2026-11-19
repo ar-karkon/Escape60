@@ -19,15 +19,58 @@ test('pursuit director opens the first and final block at their scheduled ticks'
  assert.ok(barriers.some(e=>e.tick===55*60));
  assert.equal(game.events.find(e=>e.type==='police').tick,10*60);
 });
-test('a barrier hit slows the car and protects it from repeated damage',()=>{
- const game=createGame('training',{noPolice:true});
+test('a barrier hit costs a fixed slice of the health bar and protects from repeat damage',()=>{
+ const game=createGame('training',{noPolice:true,noTraffic:true});
  game.marks.push({x:0,y:-4,ttl:2});
  stepGame(game);
  assert.equal(game.player.speed,205);
- assert.equal(game.health,2);
+ assert.equal(game.health,70);
  stepGame(game);
- assert.equal(game.health,2);
+ assert.equal(game.health,70);
  assert.equal(game.hits,1);
+});
+test('damage scales with closing speed: head-on hurts more than a rear-end tap',()=>{
+ const headOn=createGame('dmg-a',{noPolice:true,noTraffic:true}); headOn.nextTraffic=1e9;
+ headOn.traffic.push({x:0,y:-10,angle:Math.PI/2,speed:80,passed:false,color:0});
+ stepGame(headOn);
+ const rear=createGame('dmg-b',{noPolice:true,noTraffic:true}); rear.nextTraffic=1e9;
+ rear.traffic.push({x:0,y:-10,angle:-Math.PI/2,speed:80,passed:false,color:0});
+ stepGame(rear);
+ const a=100-headOn.health, b=100-rear.health;
+ assert.ok(a>b && b>=14 && a<=32, `head-on ${a} vs rear ${b}`);
+});
+test('health recovers slowly after a calm period, never above the maximum',async()=>{
+ const { MAX_HEALTH, REGEN_DELAY } = await import('../web/src/simulation.js');
+ const game=createGame('regen',{noPolice:true,noTraffic:true}); game.nextTraffic=1e9; game.nextPolice=1e9;
+ game.marks.push({x:0,y:-4,ttl:2}); stepGame(game);
+ const after=game.health;
+ for(let i=0;i<Math.round(REGEN_DELAY*60)-5;i++)stepGame(game);
+ assert.equal(game.health,after);
+ for(let i=0;i<180;i++)stepGame(game);
+ assert.ok(game.health>after && game.health<=MAX_HEALTH);
+ for(let i=0;i<60*40;i++){ if(game.state!=='playing')break; stepGame(game); }
+ assert.ok(game.health<=MAX_HEALTH);
+});
+test('wall bumps cost a little health with a cooldown and never a combo',()=>{
+ const game=createGame('wall',{noPolice:true,noTraffic:true}); game.nextTraffic=1e9;
+ game.player.x=100; game.player.y=-260; game.player.angle=0; // drive into the block face
+ game.chain=2; game.comboTimer=2;
+ for(let i=0;i<30;i++)stepGame(game);
+ assert.ok(game.scrapes>=1 && game.scrapes<=2, 'scrapes '+game.scrapes);
+ assert.equal(game.health,100-3*game.scrapes);
+ assert.equal(game.hits,0);
+});
+test('traffic and police enter outside the forward view',()=>{
+ for(const seed of ['view-a','view-b','view-c']){
+   const game=createGame(seed);
+   for(const c of game.traffic) assert.ok(Math.hypot(c.x,c.y)>=370, 'initial car too close');
+   const before=new Set(game.traffic);
+   for(let i=0;i<20*60&&game.state==='playing';i++){
+     stepGame(game);
+     const p=game.player;
+     for(const c of game.traffic) if(!before.has(c)){ before.add(c); assert.ok(Math.hypot(c.x-p.x,c.y-p.y)>=900, 'traffic spawned in view'); }
+   }
+ }
 });
 test('old town alleys are passable between solid storefronts',()=>{
  const districtStart=3*520;
@@ -37,7 +80,7 @@ test('old town alleys are passable between solid storefronts',()=>{
 
 test('near-miss chain multiplies skill points and a hit resets it', async () => {
   const { comboMult, COMBO_WINDOW } = await import('../web/src/simulation.js');
-  const game = createGame('combo', { noPolice: true });
+  const game = createGame('combo', { noPolice: true, noTraffic: true });
   game.nextTraffic = 1e9;
   game.traffic.push({ x: 45, y: -10, angle: 0, speed: 0, passed: false, color: 0 });
   stepGame(game);
@@ -54,7 +97,7 @@ test('near-miss chain multiplies skill points and a hit resets it', async () => 
   assert.equal(comboMult(game), 1);
   assert.equal(game.bestChain, 2);
   // the chain also expires on its own
-  const g2 = createGame('combo-expire', { noPolice: true });
+  const g2 = createGame('combo-expire', { noPolice: true, noTraffic: true });
   g2.nextTraffic = 1e9;
   g2.traffic.push({ x: 45, y: -10, angle: 0, speed: 0, passed: false, color: 0 });
   stepGame(g2);
@@ -62,11 +105,11 @@ test('near-miss chain multiplies skill points and a hit resets it', async () => 
   assert.equal(g2.chain, 0);
 });
 test('a close roadblock dodge scores and counts once', () => {
-  const game = createGame('dodge', { noPolice: true });
+  const game = createGame('dodge', { noPolice: true, noTraffic: true });
   game.nextTraffic = 1e9;
   game.marks.push({ x: 55, y: -20, ttl: 5, angle: 0 });
   stepGame(game); stepGame(game);
   assert.equal(game.dodges, 1);
   assert.equal(game.points, 120);
-  assert.equal(game.health, 3);
+  assert.equal(game.health, 100);
 });

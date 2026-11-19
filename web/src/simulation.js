@@ -1,7 +1,12 @@
 /** Deterministic 60 FPS game simulation. Shared by browser and authoritative Node replay. */
 export const TICK_RATE = 60;
 export const MAX_TICKS = 60 * TICK_RATE;
-export const SIM_VERSION = '1.2.0';
+export const SIM_VERSION = '1.3.0';
+// Health bar: damage scales with how hard you hit; small wall bumps cost a little; health slowly
+// recovers after a calm period. Traffic and police enter from outside the camera's view.
+export const MAX_HEALTH = 100;
+export const REGEN_DELAY = 5;
+export const REGEN_RATE = 1.5;
 // Skill chain: each near miss / roadblock dodge inside COMBO_WINDOW raises the multiplier (x1..x5);
 // hard drifting keeps the chain alive; any hit resets it.
 export const COMBO_WINDOW = 3.5;
@@ -62,50 +67,79 @@ export function circleHitsBuilding(x, y, radius = 18) {
 function newPolice(s, idx) {
   const p = s.player;
   const q = s.random();
-  const radius = 365 + s.random() * 110;
-  const a = s.random() * TAU;
-  let x = p.x + Math.cos(a) * radius, y = p.y + Math.sin(a) * radius;
-  // Spawn on a clear road: snap along the nearest road centerline.
-  if (q < 0.5) x = Math.round(x / BLOCK) * BLOCK;
-  else y = Math.round(y / BLOCK) * BLOCK;
+  let x, y;
+  if (idx % 2 === 0) {
+    // Chasers join from behind the player, outside the forward camera view, so they never pop in.
+    const radius = 420 + s.random() * 140;
+    const a = p.angle + Math.PI + (s.random() - 0.5) * 1.6;
+    x = p.x + Math.cos(a) * radius; y = p.y + Math.sin(a) * radius;
+    if (q < 0.5) x = Math.round(x / BLOCK) * BLOCK;
+    else y = Math.round(y / BLOCK) * BLOCK;
+  } else {
+    // Interceptors drive at you down your street from beyond the visible range: steer to dodge.
+    const ahead = 980 + s.random() * 220;
+    const hx = Math.cos(p.angle), hy = Math.sin(p.angle);
+    x = p.x + hx * ahead; y = p.y + hy * ahead;
+    if (Math.abs(hx) > Math.abs(hy)) y = Math.round(y / BLOCK) * BLOCK + (s.random() - 0.5) * 60;
+    else x = Math.round(x / BLOCK) * BLOCK + (s.random() - 0.5) * 60;
+  }
   return {id: idx, x, y, angle: Math.atan2(p.y-y,p.x-x), speed: 90 + s.random()*28,
     stun: 0, close: false, color: idx%2?'blue':'red'};
 }
 export function createGame(seed = 'daily', opts = {}) {
   const random = rng(seed);
   const s = {seed:String(seed), version:SIM_VERSION, ticks:0, random,
-    state:'playing', win:false, health:3, invuln:0, points:0, closeCalls:0,
+    state:'playing', win:false, health:MAX_HEALTH, invuln:0, points:0, closeCalls:0, calm:0, wallCd:0, scrapes:0,
     hits:0, police:[], traffic:[], marks:[], particles:[], chain:0, comboTimer:0, bestChain:0, dodges:0,
     player:{x:0,y:0,angle:-Math.PI / 2,speed:250,drift:0},
     events:[], nextPolice:0, nextTraffic:0, nextRoadblock:0};
   s.player.x=0; s.player.y=0;
   if (!opts.noPolice) { s.police.push(newPolice(s,0)); s.nextPolice=10*60; }
+  // The city is already busy when the run starts: cars are spread along the streets ahead.
+  if (!opts.noTraffic) for (let k = 0; k < 7; k++) spawnTraffic(s, 380 + k * 150 + s.random() * 80);
+  s.nextTraffic = Math.round(1.5 * TICK_RATE);
   return s;
 }
-function damage(s, type) {
+/** Closing speed between the player and another body moving at (speed, angle). */
+function impact(s, speed, angle) {
+  const p = s.player;
+  return Math.hypot(Math.cos(p.angle) * p.speed - Math.cos(angle) * speed, Math.sin(p.angle) * p.speed - Math.sin(angle) * speed);
+}
+function damage(s, type, amount) {
   if (s.invuln>0 || s.state!=='playing') return;
-  s.player.speed=205;s.health--; s.hits++; s.points=Math.max(0,s.points-150); s.invuln=0.95; s.chain=0; s.comboTimer=0;
-  s.events.push({type:'hit',kind:type,tick:s.ticks});
+  amount = Math.round(amount);
+  s.health = Math.max(0, s.health - amount); s.hits++; s.calm = 0;
+  s.points = Math.max(0, s.points - amount * 4);
+  s.player.speed = amount >= 20 ? 205 : clamp(s.player.speed - amount * 2, 205, 279);
+  s.invuln = 0.6; s.chain = 0; s.comboTimer = 0;
+  s.events.push({type:'hit',kind:type,tick:s.ticks,dmg:amount});
   if (s.health<=0) {s.state='ended';s.events.push({type:'end',tick:s.ticks});}
 }
-function spawnTraffic(s) {
+/** Spawn a car on the street grid `ahead` units in front of the player (beyond the visible
+ * range by default), either on the player's road axis or on a cross street. */
+function spawnTraffic(s, ahead = 980 + s.random() * 320) {
   const p=s.player;
-  let x,y,angle;
-  if(s.random()<0.5) {
-    y=Math.round(p.y/BLOCK)*BLOCK + (s.random()<0.5?-48:48);
-    x=p.x+(s.random()<0.5?-1:1)*(370+s.random()*260);
-    angle=x>p.x?Math.PI:0;
+  const alongX = Math.abs(Math.cos(p.angle)) > Math.abs(Math.sin(p.angle));
+  const tx = p.x + Math.cos(p.angle) * ahead, ty = p.y + Math.sin(p.angle) * ahead;
+  const lane = s.random() < 0.5 ? -48 : 48, dir = s.random() < 0.5 ? 1 : -1;
+  let x, y, angle;
+  if (s.random() < 0.62) {
+    // Same axis as the player: this road or a parallel one.
+    const shift = s.random() < 0.7 ? 0 : (s.random() < 0.5 ? -BLOCK : BLOCK);
+    if (alongX) { y = Math.round(p.y / BLOCK) * BLOCK + shift + lane; x = tx; angle = dir > 0 ? 0 : Math.PI; }
+    else { x = Math.round(p.x / BLOCK) * BLOCK + shift + lane; y = ty; angle = dir > 0 ? Math.PI / 2 : -Math.PI / 2; }
   } else {
-    x=Math.round(p.x/BLOCK)*BLOCK + (s.random()<0.5?-48:48);
-    y=p.y+(s.random()<0.5?-1:1)*(370+s.random()*260);
-    angle=y>p.y?-Math.PI/2:Math.PI/2;
+    // Cross street at the junction ahead, entering from either side.
+    const off = (s.random() < 0.5 ? -1 : 1) * (260 + s.random() * 420);
+    if (alongX) { x = Math.round(tx / BLOCK) * BLOCK + lane; y = p.y + off; angle = off > 0 ? -Math.PI / 2 : Math.PI / 2; }
+    else { y = Math.round(ty / BLOCK) * BLOCK + lane; x = p.x + off; angle = off > 0 ? Math.PI : 0; }
   }
   s.traffic.push({x,y,angle,speed:45+s.random()*35,passed:false,color:Math.floor(s.random()*4)});
 }
 function spawnRoadblock(s) {
   const p=s.player;
   // One visible, avoidable hazard adjacent to a crossroad, with 2 free lanes.
-  const ahead=480;
+  const ahead=860; // far enough to be seen and warned about, never right on the bumper
   const tx=p.x+Math.cos(p.angle)*ahead, ty=p.y+Math.sin(p.angle)*ahead;
   const vertical=Math.abs(Math.sin(p.angle))>Math.abs(Math.cos(p.angle));
   if(vertical) {
@@ -127,6 +161,9 @@ export function stepGame(s, steer=0) {
   const dt=1/TICK_RATE; s.ticks++;
   steer=clamp(Number.isFinite(steer)?steer:0,-1,1);
   if(s.invuln>0) s.invuln=Math.max(0,s.invuln-dt);
+  if(s.wallCd>0) s.wallCd=Math.max(0,s.wallCd-dt);
+  s.calm+=dt;
+  if(s.calm>=REGEN_DELAY && s.health<MAX_HEALTH) s.health=Math.min(MAX_HEALTH,s.health+REGEN_RATE*dt);
   if(s.comboTimer>0){ s.comboTimer=Math.max(0,s.comboTimer-dt); if(s.comboTimer===0) s.chain=0; }
   const p=s.player;
   // Readable, high-grip arcade controls. Speed continues without input.
@@ -143,7 +180,12 @@ export function stepGame(s, steer=0) {
     // Streetside walls are forgiving: they cost speed, not a life. The player
     // must be able to learn steering without losing three hearts immediately.
     p.x=ox;p.y=oy;p.angle=normAngle(p.angle+Math.PI*0.13*(steer>=0?1:-1));p.speed=205;
-    if(s.ticks%55===0){s.events.push({type:'scrape',tick:s.ticks});}
+    // A bump costs a little health (at most every 0.6 s) but never a combo or a big penalty.
+    if(s.wallCd===0 && s.state==='playing'){
+      s.wallCd=0.6; s.scrapes++; s.calm=0; s.health=Math.max(0,s.health-3);
+      s.events.push({type:'scrape',tick:s.ticks,dmg:3});
+      if(s.health<=0){s.state='ended';s.events.push({type:'end',tick:s.ticks});}
+    }
   }
   if(intensity>0.82 && s.ticks%24===0){ s.points+=8*comboMult(s); if(s.comboTimer>0) s.comboTimer=Math.max(s.comboTimer,1.2); }
   const elapsed=s.ticks/TICK_RATE;
@@ -151,23 +193,25 @@ export function stepGame(s, steer=0) {
     s.police.push(newPolice(s,s.police.length));s.nextPolice=s.ticks+5*TICK_RATE;
     s.events.push({type:'police',tick:s.ticks});
   }
-  if(s.ticks>=s.nextTraffic) {spawnTraffic(s);s.nextTraffic=s.ticks + Math.round((4.4-s.ticks/MAX_TICKS*2)*(area===1?.85:1)*TICK_RATE);}
+  if(s.ticks>=s.nextTraffic) {if(s.traffic.length<14)spawnTraffic(s);s.nextTraffic=s.ticks + Math.round((2.9-s.ticks/MAX_TICKS*1.1)*(area===1?.85:1)*TICK_RATE);}
   if(elapsed>=25 && (s.ticks>=s.nextRoadblock || s.ticks===55*TICK_RATE)) {spawnRoadblock(s);s.nextRoadblock=s.ticks+Math.round(9*TICK_RATE);s.events.push({type:'roadblock',tick:s.ticks});}
   for(const car of s.police) {
     if(car.stun>0){car.stun-=dt;continue;}
-    const lead=(car.id%2?.85:.28)+Math.min(0.65,elapsed/100);
+    // Aim ahead of the player, but never past the halfway point (head-on interceptors would overshoot).
+    const lead=Math.min((car.id%2?.85:.28)+Math.min(0.65,elapsed/100), dist(p,car)/(2*p.speed));
     const targetX=p.x+Math.cos(p.angle)*p.speed*lead;
     const targetY=p.y+Math.sin(p.angle)*p.speed*lead;
     let desired=Math.atan2(targetY-car.y,targetX-car.x);
     let delta=normAngle(desired-car.angle);
     car.angle=normAngle(car.angle+clamp(delta,-2.15*dt,2.15*dt));
-    car.speed=clamp(car.speed+70*dt,125,175+Math.min(45,elapsed*.7));
+    // Police out-run you on long straights late in the chase but turn worse than you: lose them in corners.
+    car.speed=clamp(car.speed+70*dt,125,180+Math.min(100,elapsed*1.7));
     const px=car.x,py=car.y;
     car.x+=Math.cos(car.angle)*car.speed*dt;
     car.y+=Math.sin(car.angle)*car.speed*dt;
     if(circleHitsBuilding(car.x,car.y,16)) {car.x=px;car.y=py;car.angle=normAngle(car.angle + (car.id%2?1:-1)*0.24);car.stun=.1;}
     const d=dist(p,car);
-    if(d<34){damage(s,'police');car.stun=0.65;car.x-=Math.cos(car.angle)*35;car.y-=Math.sin(car.angle)*35;}
+    if(d<34){damage(s,'police',clamp(12+impact(s,car.speed,car.angle)*0.05,18,30));car.stun=0.65;car.x-=Math.cos(car.angle)*35;car.y-=Math.sin(car.angle)*35;}
     if(d<77 && d>38 && !car.close && s.invuln===0) {car.close=true;s.closeCalls++;skill(s,90,'near');}
     if(d>110) car.close=false;
     if(d>1250){Object.assign(car,newPolice(s,car.id));}
@@ -176,20 +220,22 @@ export function stepGame(s, steer=0) {
     car.x+=Math.cos(car.angle)*car.speed*dt;
     car.y+=Math.sin(car.angle)*car.speed*dt;
     const d=dist(p,car);
-    if(d<31)damage(s,'traffic');
+    if(d<31)damage(s,'traffic',clamp(10+impact(s,car.speed,car.angle)*0.06,14,32));
     else if(d<64&&!car.passed&&s.invuln===0){car.passed=true;s.closeCalls++;skill(s,55,'near');}
   }
-  s.traffic=s.traffic.filter(car=>dist(p,car)<1050);
+  // Cars leave the simulation only once they are well behind the player or far away.
+  const hx=Math.cos(p.angle), hy=Math.sin(p.angle);
+  s.traffic=s.traffic.filter(car=>{const rx=car.x-p.x, ry=car.y-p.y; return rx*hx+ry*hy>-650 && Math.hypot(rx,ry)<1600;});
   for(const mark of s.marks){
     mark.ttl-=dt;const d=dist(p,mark);
-    if(d<38) {damage(s,'roadblock');mark.passed=true;}
+    if(d<38) {damage(s,'roadblock',30);mark.passed=true;}
     else if(d<72&&!mark.passed&&s.invuln===0){mark.passed=true;s.dodges++;skill(s,120,'dodge');}
   }
-  s.marks=s.marks.filter(mark=>mark.ttl>0&&dist(p,mark)<1100);
+  s.marks=s.marks.filter(mark=>mark.ttl>0&&dist(p,mark)<1400);
   if(s.ticks>=MAX_TICKS && s.state==='playing'){s.state='ended';s.win=true;s.events.push({type:'win',tick:s.ticks});}
   return s;
 }
-export function gameResult(s){return {version:SIM_VERSION,seed:s.seed,timeMs:Math.min(60000,Math.round(s.ticks*1000/TICK_RATE)),points:s.points,health:s.health,win:s.win,closeCalls:s.closeCalls,hits:s.hits,bestChain:s.bestChain,dodges:s.dodges};}
+export function gameResult(s){return {version:SIM_VERSION,seed:s.seed,timeMs:Math.min(60000,Math.round(s.ticks*1000/TICK_RATE)),points:s.points,health:Math.round(s.health),win:s.win,closeCalls:s.closeCalls,hits:s.hits,bestChain:s.bestChain,dodges:s.dodges,scrapes:s.scrapes};}
 export function compareResult(a,b){return (b.timeMs-a.timeMs)||(b.points-a.points);}
 export function encodeTrace(values){
   if(!values.length)return [];

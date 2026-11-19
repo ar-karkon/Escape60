@@ -14,10 +14,12 @@ GTA VI releasing November 19 2026 is relevant to audience attention, but **Escap
 | Neon shop signs, billboard ads, highway signs (invented names only) | Original canvas pixel art drawn at runtime | web/src/gfx/signs.js |
 | Cars, police, helicopter, barricade | Original procedural voxel models | web/src/gfx/cars.js |
 | Buildings, palms, lamps, marina, overpass, props, pedestrians | Original procedural voxel models | web/src/gfx/city.js, web/src/gfx/props.js |
-| Sky, sea, skyline backdrop, bloom, grading, particles | Original shader and scene code | web/src/gfx/sky.js, post.js, fx.js, voxel.js |
+| Sky, sea, skyline backdrop, bloom, FXAA, ink outlines, halftone, grading, particles | Original shader and scene code | web/src/gfx/sky.js, post.js, fx.js, voxel.js |
+| Comic VFX layer, pedestrians | Original code (style inspired by street-art racing games; no assets copied) | web/src/gfx/comic.js, web/src/gfx/peds.js |
 | Music (5 tracks) and recorded SFX | OpenGameArt.org, CC0 and CC-BY 3.0/4.0 (no share-alike, no GPL); attribution in-game (تنظیمات › سازندگان) and in the credits file; excerpted/normalised by `scripts/process-audio.py` | web/assets/audio/*, web/assets/audio/CREDITS.md |
 | QR encoder | qrcode-generator 1.4.4, MIT, © Kazuhiko Arase | web/vendor/qrcode.js |
-| Vazirmatn (Persian UI font) | SIL OFL 1.1, © Vazirmatn Project Authors, via @fontsource/vazirmatn 5.3.0 | web/assets/fonts/vazirmatn-*.woff2, Vazirmatn-OFL.txt |
+| Vazirmatn (fallback Persian font) | SIL OFL 1.1, © Vazirmatn Project Authors, via @fontsource/vazirmatn 5.3.0 | web/assets/fonts/vazirmatn-*.woff2, Vazirmatn-OFL.txt |
+| Rooyin Free (Persian pixel font) | SIL OFL 1.1, © Rooyin Project Authors / Mohamad Darvishi, reserved font name "Rooyin"; files bundled unmodified from github.com/MohamadDarvishi/Rooyin | web/assets/fonts/RooyinFree-*.woff2, RooyinFree-OFL.txt |
 | Jersey 10 (numbers / Latin pixel font) | SIL OFL 1.1, © Soft Type Project Authors, via @fontsource/jersey-10 5.3.0 | web/assets/fonts/jersey-10-*.woff2, Jersey10-OFL.txt |
 | Three.js r170 | MIT, upstream npm release | web/vendor/three.js, web/vendor/three.LICENSE |
 | Visual reference concepts (art-direction targets, **not** game assets, not shipped) | Supplied by the project owner | design/references/ |

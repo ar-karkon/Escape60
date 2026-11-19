@@ -11,13 +11,15 @@
   <meta property="og:image" content="./assets/og-card.jpg"/>
   <meta name="twitter:card" content="summary_large_image"/>
   <link rel="icon" href="./assets/logo.svg"><title>فرار ۶۰ | ESCAPE 60</title>
-  <link rel="preload" href="./assets/fonts/vazirmatn-arabic-800-normal.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="./assets/fonts/RooyinFree-Bold.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="./assets/fonts/RooyinFree-Regular.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="./assets/fonts/jersey-10-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="./style.css"/>
 </head>
 <body data-view="home">
   <main id="app">
     <canvas id="game" aria-label="شهر سه‌بعدی فرار ۶۰؛ با چپ و راست فرمان بده"></canvas>
+    <canvas id="ink" aria-hidden="true"></canvas>
     <div id="hurt" class="hurt" aria-hidden="true"></div>
     <span id="threat" class="threat" aria-hidden="true" hidden></span>
 
@@ -75,7 +77,7 @@
           <div class="stats">
             <div class="stat"><span class="stat-ico" data-icon="star"></span><small>امتیاز کل</small><strong id="result-score">0</strong></div>
             <div class="stat"><span class="stat-ico" data-icon="drift"></span><small>جاخالی‌ها</small><strong id="result-near">0</strong></div>
-            <div class="stat"><span class="stat-ico" data-icon="combo"></span><small>بهترین ضریب</small><strong id="result-chain">×1</strong></div>
+            <div class="stat"><span class="stat-ico" data-icon="combo"></span><small>بهترین زنجیره</small><strong id="result-chain">0</strong></div>
           </div>
           <div class="xp-row">
             <b class="lvl" id="lvl2">LV 1</b>
@@ -112,7 +114,11 @@
         <small>زنجیره</small>
       </div>
       <div class="hud-bottom">
-        <div class="hud-hearts" id="health" aria-label="جان‌های باقی‌مانده"></div>
+        <div class="hud-health" id="health" role="meter" aria-label="سلامت ماشین" aria-valuemin="0" aria-valuemax="100" aria-valuenow="100">
+          <span class="hp-ico" data-icon="shield"></span>
+          <div class="hp-bar"><i class="hp-trail" id="hp-trail"></i><i class="hp-fill" id="hp-fill"></i></div>
+          <b id="hp-num">100</b>
+        </div>
         <div class="hud-score"><span data-icon="star"></span><b id="score">0</b></div>
       </div>
       <div id="popups" class="popups" aria-hidden="true"></div>
@@ -192,7 +198,7 @@
         <p>Cold Night — Kim Lightyear (CC-BY 3.0)</p>
         <p><b>افکت‌ها</b></p>
         <p>aquinn · qubodup · domasx2 · ggbotnet · pyranostudios · rubberduck · Kenney · lukerustltd (CC0 / CC-BY 3.0)</p>
-        <p><b>فونت‌ها</b> Vazirmatn · Jersey 10 (SIL OFL) · <b>موتور</b> Three.js (MIT)</p>
+        <p><b>فونت‌ها</b> Rooyin Free — Mohamad Darvishi · Jersey 10 · Vazirmatn (SIL OFL) · <b>موتور</b> Three.js (MIT)</p>
         <p>جزئیات کامل: assets/audio/CREDITS.md</p>
       </div>
       <button id="close-credits" class="btn btn-primary"><b>بازگشت</b></button>

@@ -8,7 +8,7 @@ export const FORMATS = {
   post: { w: 1080, h: 1350, label: 'پست', hint: 'اینستاگرام · تلگرام' },
   wide: { w: 1200, h: 675, label: 'افقی', hint: 'X · تلگرام · دیسکورد' },
 };
-const FA = 'Vazirmatn, Tahoma, sans-serif', PX = '"Jersey 10", monospace';
+const FA = 'Rooyin, Vazirmatn, Tahoma, sans-serif', PX = '"Jersey 10", monospace';
 let logoImg = null;
 function loadLogo() {
   if (logoImg) return logoImg;
@@ -115,7 +115,7 @@ export async function drawCard(format, frame, data) {
   const ss = wide ? 0.62 : s;
   stat(ctx, sx0 + (sw + gap) * 2, y, sw, sh, 'امتیاز', fmt(result.points), '#ffe37c', ss);
   stat(ctx, sx0 + (sw + gap), y, sw, sh, 'جاخالی', fmt(result.closeCalls), '#fff4e6', ss);
-  stat(ctx, sx0, y, sw, sh, 'بهترین ضریب', '×' + Math.max(1, chain || 1), '#3dd8e7', ss);
+  stat(ctx, sx0, y, sw, sh, 'بهترین زنجیره', fmt(chain || 0), '#3dd8e7', ss);
   y += sh + 70 * s;
   // challenge call to action + QR
   const qrSize = wide ? 150 : format === 'post' ? 200 : 260;

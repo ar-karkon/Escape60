@@ -20,7 +20,10 @@ Date: 2026-11-19
 | D15 | Scoring 1.2.0 | IMPLEMENTED | Skill chain ×1…×5 for near misses / roadblock dodges, reset on hit; SIM_VERSION 1.2.0 | Rewards risky skilful driving; replay-verified; rankings keyed per version |
 | D16 | Audio | IMPLEMENTED | Licensed CC0/CC-BY OpenGameArt music + SFX, streamed music, decoded SFX | Owner asked for free tracks with a neon-coastal mood instead of synthesis |
 | D17 | Sharing | IMPLEMENTED | Story/Post/Wide cards from real frames + QR + challenge link with friend target | Friend targets are unverified link data and labelled as such |
-| D14 | UI typography | IMPLEMENTED | Vazirmatn (Persian) + Jersey 10 (digits/Latin), both OFL and bundled | Pixelify Sans rejected: its 5 and S were confusable in the timer |
+| D14 | UI typography | IMPLEMENTED | Rooyin Free pixel font for Persian (OFL, designer Mohamad Darvishi, github.com/MohamadDarvishi/Rooyin) + Jersey 10 for digits/Latin; Vazirmatn kept only as fallback | Owner asked for Rooyin; the free OFL edition is bundled unmodified |
+| D18 | Health | IMPLEMENTED | SIM 1.3.0 health bar with impact-scaled damage and slow regen | Small bumps no longer cost a whole life |
+| D19 | Living city | IMPLEMENTED | Visual-only pedestrians that walk, wait, cross and leap clear of cars; traffic/police spawn out of view | Owner: city felt empty and cars popped in |
+| D20 | Look | IMPLEMENTED | Softer rendering (FXAA, smooth upscale, higher internal resolution, less grain) + comic ink outlines, halftone shadows and graffiti VFX layer | Owner reference: NFS Unbound vibe; all effects original |
 
 ## ADR template
 ```

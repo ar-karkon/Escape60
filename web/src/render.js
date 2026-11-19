@@ -6,6 +6,8 @@ import { heroBody, policeBody, trafficBody, TRAFFIC_TYPES, wheelGeometry, makeCa
 import { createSky } from "./gfx/sky.js";
 import { createFX } from "./gfx/fx.js";
 import { createPost } from "./gfx/post.js";
+import { createPeds } from "./gfx/peds.js";
+import { createComic } from "./gfx/comic.js";
 import { CAR_COLORS } from "./gfx/palette.js";
 
 /* Sunset Bay renderer. Consumes simulation state only; it never changes gameplay. */
@@ -16,7 +18,7 @@ export function createRenderer(canvas) {
   const renderer = new T.WebGLRenderer({ canvas, antialias: false, powerPreference: "high-performance", stencil: false });
   renderer.setPixelRatio(1);
   renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = T.BasicShadowMap;
+  renderer.shadowMap.type = T.PCFShadowMap;
   const post = createPost(renderer);
   SHARED.uAtlas.value = atlasTexture;
 
@@ -46,6 +48,13 @@ export function createRenderer(canvas) {
   for (const l of beacons) scene.add(l);
 
   const fx = createFX(scene);
+  const peds = createPeds(scene, mats.car);
+  const inkCanvas = document.getElementById("ink");
+  const comic = inkCanvas ? createComic(inkCanvas) : null;
+  const sp = new T.Vector3();
+  const toScreen = (x, y, z) => { sp.set(x, y, z).project(camera); return [(sp.x + 1) / 2, (1 - sp.y) / 2, sp.z < 1]; };
+  const comicQueue = [];
+  const threats = [];
   const dyn = new GlowBuilder(160, true);
   const dynMesh = dyn.mesh(mats.glow);
   scene.add(dynMesh);
@@ -84,6 +93,7 @@ export function createRenderer(canvas) {
   function makeMark() {
     const m = new T.Mesh(barricadeGeo, mats.car);
     m.castShadow = true;
+    m.userData.born = performance.now();
     return m;
   }
   function sync(kind, states, factory, seen) {
@@ -144,6 +154,7 @@ export function createRenderer(canvas) {
   let prevGame = null, heading = 0, lastAngle = 0, steerVis = 0, eventIndex = 0, shake = 0, flash = 0, flashCol = new T.Color();
   let wheelRot = 0, skidTimer = 0, lastDrift = 0, endTime = 0, menuStart = 0, comboPulse = 0, paintKey = "";
   const seenTmp = new Set();
+  let pedGame = undefined;
   const demo = {
     police: [{ x: -36, y: 0, angle: Math.PI / 2, speed: 70 }, { x: 30, y: 0, angle: Math.PI / 2, speed: 70 }],
     traffic: [{ x: 45, y: 0, angle: -Math.PI / 2, speed: 60, color: 1 }],
@@ -185,9 +196,10 @@ export function createRenderer(canvas) {
     if (slowFrames > 90 && scale > 0.6 && !lockHigh) { scale = Math.max(0.6, scale - 0.15); slowFrames = 0; }
     if (fastFrames > 240 && scale < 1) { scale = Math.min(1, scale + 0.1); fastFrames = 0; }
     const tier = low ? 0 : scale < 0.8 ? 1 : 2;
-    const dpr = Math.min(window.devicePixelRatio || 1, 1.25);
+    // Softer look: render closer to native resolution and let FXAA + smooth upscaling round the edges.
+    const dpr = Math.min(window.devicePixelRatio || 1, tier === 2 ? 1.6 : 1.3);
     const cw = canvas.clientWidth || 390, ch = canvas.clientHeight || 780;
-    const k = (low ? 0.62 : scale) * dpr * Math.min(1, 1000 / ch);
+    const k = (low ? 0.7 : scale) * dpr * Math.min(1, 1300 / ch);
     const w = Math.max(1, Math.round(cw * k)), h = Math.max(1, Math.round(ch * k));
     if (canvas.width !== w || canvas.height !== h) {
       renderer.setSize(w, h, false);
@@ -199,6 +211,8 @@ export function createRenderer(canvas) {
     sunLight.castShadow = tier === 2;
     headSpot.visible = tier > 0;
     mats.glow.uniforms.uGlowScale.value = tier === 0 ? 0.8 : 1;
+    post.uniforms.uInk.value = tier === 0 ? 0 : 1;
+    post.uniforms.uHalftone.value = tier === 0 ? 0 : 0.42;
 
     const playing = game?.state === "playing";
     const ended = game?.state === "ended";
@@ -304,8 +318,16 @@ export function createRenderer(canvas) {
     sync("marks", markStates, makeMark, seenTmp);
     for (const s of markStates) {
       const o = actorMap.get(s);
-      o.position.set(s.x / 10, 0, s.y / 10);
+      // Deploy animation: the barricade drops in from above with a bounce instead of popping up.
+      const age = Math.min(1, (performance.now() - o.userData.born) / 520);
+      const drop = reducedMotion ? 0 : (1 - age) * (1 - age) * 7 - Math.sin(age * Math.PI) * 0.15 * (1 - age);
+      o.position.set(s.x / 10, Math.max(0, drop), s.y / 10);
+      o.scale.set(1, reducedMotion ? 1 : 0.6 + 0.4 * Math.min(1, age * 1.6), 1);
       o.rotation.y = -(s.angle ?? 0) - Math.PI / 2;
+      if (age < 1 && age > 0.6 && !o.userData.dusted && !low) {
+        o.userData.dusted = true;
+        for (let k = 0; k < 8; k++) fx.puff(o.position.x + (Math.random() - 0.5) * 6, 0.3, o.position.z + (Math.random() - 0.5) * 2, (Math.random() - 0.5) * 4, (Math.random() - 0.5) * 2, 0xcdb9d6, 0.9);
+      }
       const pulse = reducedMotion ? 0.6 : 0.45 + 0.4 * Math.abs(Math.sin(t / 160));
       dyn.add(GLOW.POOL, s.x / 10, 0.07, s.y / 10, 6, 6, 0, AMBER, pulse);
       dyn.add(GLOW.STREAK, s.x / 10, 0.06, s.y / 10, 1.6, 14, 0, RED, pulse);
@@ -344,6 +366,7 @@ export function createRenderer(canvas) {
       const ev = game.events;
       for (; eventIndex < ev.length; eventIndex++) {
         const e = ev[eventIndex];
+        if (e.type === "hit" || e.type === "near" || e.type === "dodge") comicQueue.push(e);
         if (e.type === "hit") {
           shake = reducedMotion ? 0 : 1;
           flash = 0.55; flashCol.setRGB(1, 0.12, 0.3);
@@ -388,6 +411,13 @@ export function createRenderer(canvas) {
       if (game.win && !reducedMotion && t - endTime < 6000) for (let k = 0; k < 2; k++) if (Math.random() < dt * 30) fx.confetti(px, 0, pz);
     }
     fx.update(dt);
+    // ---------- pedestrians (visual only) ----------
+    threats.length = 0;
+    threats.push({ x: px, z: pz, vx: Math.cos(angle) * speed, vz: Math.sin(angle) * speed });
+    for (const s of policeStates) threats.push({ x: s.x / 10, z: s.y / 10, vx: Math.cos(s.angle) * (s.speed ?? 0) / 10, vz: Math.sin(s.angle) * (s.speed ?? 0) / 10 });
+    for (const s of trafficStates) threats.push({ x: s.x / 10, z: s.y / 10, vx: Math.cos(s.angle) * s.speed / 10, vz: Math.sin(s.angle) * s.speed / 10 });
+    if (game !== pedGame) { peds.clear(); pedGame = game; comic?.clear(); comicQueue.length = 0; }
+    peds.update(Math.min(dt, 0.05), t / 1000, px, pz, Math.cos(game ? heading : angle), Math.sin(game ? heading : angle), threats, reducedMotion, low ? 30 : tier === 1 ? 52 : 80);
     dyn.flush();
 
     // ---------- camera director ----------
@@ -465,6 +495,28 @@ export function createRenderer(canvas) {
     post.uniforms.uDesat.value = ended && !game.win ? Math.min(0.35, (t - endTime) / 1500) : 0;
     post.uniforms.uTime.value = t / 1000;
     post.render(scene, camera, tier > 0);
+
+    // ---------- comic ink layer ----------
+    if (comic) {
+      comic.resize(cw, ch);
+      const fxOn = !reducedMotion && !low;
+      if (fxOn && speed > 0 && drift > 0.35) {
+        for (const s of [-1, 1]) {
+          const [nx, ny, vis] = toScreen(px - hx * 2.2 - hz * 1.15 * s, 0.25, pz - hz * 2.2 + hx * 1.15 * s);
+          if (!vis) continue;
+          const [ex, ey] = toScreen(px - hx * 4 - hz * 2.6 * s, 0.3, pz - hz * 4 + hx * 2.6 * s);
+          comic.drift(nx, ny, ex - nx, ey - ny, Math.min(1, dt * 30) * drift);
+        }
+      }
+      for (const e of comicQueue) {
+        if (!fxOn && e.type !== "hit") continue;
+        const [nx, ny, vis] = toScreen(px + hx * 1.5, 1.2, pz + hz * 1.5);
+        if (vis) comic.burst(nx, ny - 0.02, e.type, e.mult || 1);
+      }
+      comicQueue.length = 0;
+      if (fxOn && playing) comic.speedLines(post.uniforms.uSpeed.value);
+      comic.frame(dt);
+    }
 
     // ---------- off-screen threat indicator ----------
     if (arrow) {

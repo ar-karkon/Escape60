@@ -222,8 +222,13 @@ varying vec4 vCol; varying vec4 vMat; varying vec2 vUv2; varying vec3 vWPos; var
         "#include <fog_vertex>",
         `#include <fog_vertex>
 vCol=aCol; vMat=aMat; vUv2=aUv;
+#ifdef USE_INSTANCING
+vec4 wp4=modelMatrix*instanceMatrix*vec4(transformed,1.); vWPos=wp4.xyz;
+vWNrm=normalize(mat3(modelMatrix)*mat3(instanceMatrix)*objectNormal);
+#else
 vec4 wp4=modelMatrix*vec4(transformed,1.); vWPos=wp4.xyz;
-vWNrm=normalize(mat3(modelMatrix)*objectNormal);`,
+vWNrm=normalize(mat3(modelMatrix)*objectNormal);
+#endif`,
       );
     shader.fragmentShader = shader.fragmentShader
       .replace(
@@ -263,7 +268,7 @@ vec3 xV=normalize(cameraPosition-vWPos); vec3 xN=normalize(vWNrm);
   if(grainAmt>0.){
     vec3 cell=floor(vWPos*4.+xN*.5);
     if(pid==${P.PAINT}||pid==${P.LEAF}||pid==${P.CHROME})cell=vec3(floor(vUv2*4.),q);
-    base*=1.+(h12(cell.xz+cell.y*17.31)-.5)*grainAmt*.5;
+    base*=1.+(h12(cell.xz+cell.y*17.31)-.5)*grainAmt*.22;
   }
   pattern(pid,base,xEmit,xRefl,xSpec,vUv2,fw,q,xN,xV,vWPos,em>0.?em:1.);
   if(em>0.&&pid!=${P.SIGN}&&pid!=${P.NEON}&&pid!=${P.LIGHT})xEmit+=base*em;
@@ -271,6 +276,9 @@ vec3 xV=normalize(cameraPosition-vWPos); vec3 xN=normalize(vWNrm);
     float h=vWPos.y;
     base*=mix(.5,1.,smoothstep(0.,1.8,h))*(xN.y>.5?1.:mix(.9,1.06,smoothstep(2.,30.,h)));
   }
+  #ifdef USE_INSTANCING_COLOR
+  base*=vColor.rgb;
+  #endif
   diffuseColor.rgb=base;
 }`,
       )

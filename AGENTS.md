@@ -3,7 +3,7 @@ Read README.md, docs/02_GAME_DESIGN.md and docs/13_DECISIONS.md before changing 
 
 ## Current state
 Playable WebGL2 voxel browser game with Node replay-verified local online leaderboard. Edge adapter exists but is untested on ArvanCloud. Do **not** claim Arvan deployed, official entry completed or mobile QA passed.
-Visual overhaul (renderer in `web/src/gfx/`, pixel UI, closer chase camera), licensed audio (`web/assets/audio/`, CC0/CC-BY — keep CREDITS.md in sync), progression (`web/src/meta.js`) and share cards (`web/src/share.js`) are implemented and documented with real screenshots in `docs/screenshots/`. Simulation is 1.2.0 (skill chain). Real-device FPS and an audible mix check are still outstanding (docs/25). Do not mark visuals as matching the concept references.
+Visual overhaul (renderer in `web/src/gfx/`, pixel UI, closer chase camera), licensed audio (`web/assets/audio/`, CC0/CC-BY — keep CREDITS.md in sync), progression (`web/src/meta.js`) and share cards (`web/src/share.js`) are implemented and documented with real screenshots in `docs/screenshots/`. Simulation is 1.3.0 (health bar, out-of-view spawning, skill chain). Pedestrians (`web/src/gfx/peds.js`) and the comic layer (`web/src/gfx/comic.js`) are visual only. Real-device FPS and an audible mix check are still outstanding (docs/25). Do not mark visuals as matching the concept references.
 - Audio rule: only CC0 / CC-BY sources with a verified license page; never GPL, share-alike, non-commercial or ripped game audio.
 
 ## Commands

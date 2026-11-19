@@ -4,7 +4,7 @@ import * as T from "../../vendor/three.js";
    All names and brands are invented for the fictional Sunset Bay. */
 const W = 512, H = 512;
 const PIX = '"Jersey 10", "Courier New", monospace';
-const FA = 'Vazirmatn, Tahoma, sans-serif';
+const FA = 'Rooyin, Vazirmatn, Tahoma, sans-serif';
 
 const SIGNS = [
   // name, w, h, kind, text, colour, extra

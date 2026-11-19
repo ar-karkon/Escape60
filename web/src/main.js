@@ -117,10 +117,20 @@ $('paint-list').addEventListener('click', (e) => {
 });
 
 /* ---------- HUD helpers ---------- */
-const HEART = iconSVG('heart'), HEART_EMPTY = iconSVG('heartEmpty'), SIREN = iconSVG('siren'), SIREN_OFF = iconSVG('sirenOff');
-function renderHearts(n) {
-  els.health.innerHTML = [0, 1, 2].map((i) => `<span>${i < n ? HEART : HEART_EMPTY}</span>`).join('');
-  els.health.setAttribute('aria-label', `${n} جان باقی‌مانده`);
+const SIREN = iconSVG('siren'), SIREN_OFF = iconSVG('sirenOff');
+let trailHp = 100, trailHold = 0;
+function renderHealth(hp, dt = 0) {
+  const v = Math.max(0, Math.min(100, hp));
+  $('hp-fill').style.width = v + '%';
+  // Damage trail: the lost chunk lingers, then drains (fighting-game style) so every hit reads.
+  if (v > trailHp) trailHp = v;
+  else if (trailHold > 0) trailHold -= dt;
+  else trailHp = Math.max(v, trailHp - dt * 45);
+  $('hp-trail').style.width = trailHp + '%';
+  $('hp-num').textContent = Math.ceil(v);
+  els.health.dataset.level = v > 60 ? 'ok' : v > 30 ? 'warn' : 'crit';
+  els.health.classList.toggle('regen', !!game && game.calm >= 5 && v < 100 && game.state === 'playing');
+  els.health.setAttribute('aria-valuenow', String(Math.ceil(v)));
 }
 function renderSirens(n) {
   els.pressure.innerHTML = [0, 1, 2, 3, 4].map((i) => `<span class="${i < n ? 'on' : ''}">${i < n ? SIREN : SIREN_OFF}</span>`).join('');
@@ -150,7 +160,7 @@ async function begin() {
   audio.unlock();
   game = createGame(seed); trace = []; steer = 0; pressedLeft = false; pressedRight = false; paused = false;
   finishQueued = false; lastEvent = -1; runTicket = null; countdown = 1.8; countStep = -1;
-  shownHealth = -1; shownPolice = -1; heliShown = false; driftPts = 0; shownMult = 1; lastSecond = -1;
+  shownHealth = 100; trailHp = 100; trailHold = 0; shownPolice = -1; heliShown = false; driftPts = 0; shownMult = 1; lastSecond = -1;
   const best = persisted[seed]?.timeMs;
   bestPassed = !best; targetPassed = !challenge || seed !== initialSeed;
   placeMark(els.markBest, best && best < 60000 ? best : 0);
@@ -179,10 +189,8 @@ function updateHud() {
   const left = Math.max(0, 60 - Math.floor(game.ticks / TICK_RATE));
   els.count.textContent = `${left}`;
   els.power.style.width = `${100 * game.ticks / MAX_TICKS}%`;
-  if (game.health !== shownHealth) {
-    if (shownHealth > game.health) { els.health.classList.remove('hit'); void els.health.offsetWidth; els.health.classList.add('hit'); }
-    shownHealth = game.health; renderHearts(game.health);
-  }
+  if (game.health < shownHealth - 0.5) { els.health.classList.remove('hit'); void els.health.offsetWidth; els.health.classList.add('hit'); trailHold = 0.45; }
+  shownHealth = game.health;
   if (game.police.length !== shownPolice) { shownPolice = game.police.length; renderSirens(Math.min(5, shownPolice)); }
   els.hud.classList.toggle('final', game.ticks > 50 * TICK_RATE);
   const mult = comboMult(game);
@@ -207,14 +215,14 @@ function finish() {
   els.resultTime.textContent = formatTime(result.timeMs);
   els.resultScore.textContent = fmt(result.points);
   els.resultNear.textContent = fmt(result.closeCalls);
-  els.resultChain.textContent = `×${Math.max(1, result.bestChain)}`;
+  els.resultChain.textContent = fmt(result.bestChain);
   els.results.classList.toggle('bust', !result.win);
   els.resultTitle.textContent = result.win ? 'فرار کردی!' : 'گیر افتادی!';
   els.resultTag.textContent = result.win ? 'RUN COMPLETE' : 'BUSTED';
   els.resultTag.classList.toggle('bust', !result.win);
   els.resultStatus.innerHTML = result.win ? `<span>${iconSVG('check')}</span><b>فرار موفق!</b>` : `<span>${iconSVG('siren')}</span><b>دستگیر شدی</b>`;
   els.newBest.classList.toggle('hidden', !(newBest && prev));
-  els.resultDetail.textContent = `بهترین زمان این مسیر: ${formatTime(persisted[seed].timeMs)} · برخورد: ${faNum(result.hits)} · جاخالی از راه‌بند: ${faNum(result.dodges)}`;
+  els.resultDetail.textContent = `بهترین زمان این مسیر: ${formatTime(persisted[seed].timeMs)} · سلامت: ${faNum(result.health)}٪ · برخورد: ${faNum(result.hits)} · جاخالی از راه‌بند: ${faNum(result.dodges)}`;
   els.rank.textContent = runTicket ? 'در انتظار تأیید سرور…' : 'رکورد فقط روی این دستگاه ذخیره شد';
   // friend challenge outcome (target came from the link, so it is labelled unverified)
   if (challenge && seed === initialSeed) {
@@ -269,12 +277,12 @@ function tick() {
       if (event.type === 'near' && Math.random() < 0.35) audio.play('horn', { delay: 0.12, gain: 0.5, rate: 0.9 + Math.random() * 0.25 });
       vibrate(m >= 3 ? 25 : 12);
     } else if (event.type === 'hit') {
-      popup('-150', event.kind === 'police' ? 'ضربه پلیس!' : event.kind === 'roadblock' ? 'راه‌بند!' : 'تصادف!', 'bad');
-      audio.play('crash'); audio.duckMusic(0.4, 500); vibrate(90);
+      popup(`-${event.dmg}`, event.kind === 'police' ? 'ضربه پلیس!' : event.kind === 'roadblock' ? 'راه‌بند!' : 'تصادف!', 'bad');
+      audio.play('crash', { gain: 0.5 + event.dmg / 60 }); audio.duckMusic(0.4, 500); vibrate(40 + event.dmg * 2);
       els.hurt.classList.remove('on'); void els.hurt.offsetWidth; els.hurt.classList.add('on');
     } else if (event.type === 'roadblock') { banner('⚠ راه‌بند پلیس جلوتر — از کنارش جاخالی بده!'); for (let k = 0; k < 3; k++) audio.play('beep', { delay: k * 0.15, rate: 1.4 }); }
     else if (event.type === 'police') { banner('🚨 پلیس تازه به تعقیب پیوست', true, 1200); }
-    else if (event.type === 'scrape') audio.play('scrape', { gain: 0.6 });
+    else if (event.type === 'scrape') { audio.play('scrape', { gain: 0.6 }); vibrate(15); }
   }
   if (gained > 0 && !skillEvent) {
     driftPts += gained;
@@ -322,6 +330,7 @@ function frame(t) {
     }
   }
   audioMix();
+  if (game) renderHealth(game.health, dt);
   render(game, t, { reducedMotion, low: $('quality').checked, seed, alpha: acc * TICK_RATE, countdown: Math.max(0, countdown), lockHigh: qualityLock === 'high' });
   requestAnimationFrame(frame);
 }

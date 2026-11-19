@@ -27,3 +27,10 @@ Simulation, scoring, daily seed and server replay are unchanged (`SIM_VERSION` 1
 - **Progression:** XP, levels, 8 paint jobs (garage), 3 daily missions, day streak, best/friend markers on the timer bar, "new record" popups, final-5-seconds countdown beeps.
 - **Sharing:** share sheet with Story 9:16, Post 4:5 and Wide 16:9 cards rendered from the real results scene with QR challenge link; native image share, Telegram / X / WhatsApp links, save, copy; friend-challenge banner and verdict.
 - **Visual gaps:** Ocean-Drive coastline along the starting boulevard (open bay with pier, lighthouse and moving boats), rounded Art Deco corner towers, spire / fin crowns, porthole windows, decorative traffic on overpasses, lower helicopter in the chase frame, much denser drift smoke, stronger wet reflections, brighter water, combo bursts and FOV kick.
+
+## 2.1 — living city, health bar, softer comic look, Rooyin — 2026-11-19
+- **Simulation 1.3.0** (browser + server replay + tests): 0–100 health bar with impact-scaled damage, light wall bumps, slow regeneration; traffic and police spawn outside the visible range, city pre-populated at the start; head-on interceptors; police lead fix and late-game speed.
+- **Pedestrians:** up to 80 instanced walkers (7 draw calls) that stroll, wait, use crosswalks and leap clear of any car; visual only.
+- **Look:** FXAA, smooth upscaling at higher internal resolution, softer shadows, less voxel grain, comic ink outlines from depth, halftone shading in shadows, graffiti-style drift sparks, inked smoke puffs, starbursts and speed streaks; barricades drop in instead of popping up.
+- **Font:** all Persian text now uses the pixel font Rooyin Free (OFL).
+- **HUD:** segmented health bar with damage trail, regen glow and critical blink; damage numbers in popups; results show remaining health and best chain length.
