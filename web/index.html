@@ -19,6 +19,7 @@
   <main id="app">
     <canvas id="game" aria-label="ESCAPE 60"></canvas>
     <canvas id="ink" aria-hidden="true"></canvas>
+    <canvas id="threats" aria-hidden="true"></canvas>
     <div id="hurt" class="hurt" aria-hidden="true"></div>
 
     <!-- LOADING -->
@@ -160,6 +161,7 @@
       <div id="popups" class="popups" aria-hidden="true"></div>
       <div id="banner" class="banner hidden" role="status"></div>
       <div id="countdown" class="countdown hidden" aria-live="assertive"></div>
+      <div id="place" class="place hidden" role="status"></div>
       <div id="milestone" class="milestone hidden">
         <div class="ms-burst"></div>
         <h2 data-i18n="milestone">60 SECONDS!</h2>
@@ -169,7 +171,6 @@
       </div>
       <p id="howto" class="howto panel hidden"></p>
     </section>
-    <span id="threat" class="threat" aria-hidden="true" hidden></span>
     <nav id="controls" class="controls hidden" aria-label="steering">
       <div id="steer-zone" class="steer-zone">
         <span class="zone-hint left" id="hint-left"><span data-icon="arrowL"></span></span>

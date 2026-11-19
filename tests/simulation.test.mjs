@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createGame, stepGame, gameResult, encodeTrace, encodeInput, decodeInput, traceTicks, replayTrace, replayChunk, snapshotGame, restoreGame, MAX_TICKS, MILESTONE_TICKS, SIM_VERSION, INPUT, heatAt } from '../web/src/simulation.js';
-import { sample, edges, nodes, stations, spawnPoint, pointAt } from '../web/src/map.js';
+import { sample, edges, nodes, stations, spawnPoint, pointAt, SPAWNS, SPAWN_COUNT, district } from '../web/src/map.js';
 import { CARS } from '../web/src/cars.js';
 
 /** Road-following autopilot used to drive realistic runs (no randomness: deterministic traces). */
@@ -14,8 +14,8 @@ function autopilot(g) {
   let d = Math.atan2(ty - p.y, tx - p.x) - p.h; while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI;
   return encodeInput(Math.max(-3, Math.min(3, Math.round(d * 5))), Math.abs(d) > 0.4 && p.v > 28, false, Math.abs(d) < 0.1 && g.nitro > 0.2);
 }
-function drive(seed, car, maxTicks = MAX_TICKS, pilot = autopilot) {
-  const g = createGame(seed, { car }), inputs = [];
+function drive(seed, car, maxTicks = MAX_TICKS, pilot = autopilot, spawn) {
+  const g = createGame(seed, { car, spawn }), inputs = [];
   while (g.state === 'playing' && g.ticks < maxTicks) { const v = pilot(g); inputs.push(v); stepGame(g, v); g.events.length = 0; }
   return { g, inputs };
 }
@@ -29,7 +29,24 @@ test('map: connected road graph, smooth junctions, stations beside roads', () =>
   for (const e of edges) { const m = pointAt(edges.indexOf(e), e.len / 2, {}); assert.ok(sample(m.x, m.y, {}).g < 0, 'road centre is drivable'); }
   assert.equal(stations.length, 5);
   for (const s of stations) assert.ok(sample(s.x, s.y, {}).g < 0, 'pit stop pad is drivable');
-  for (let k = 0; k < 6; k++) { const sp = spawnPoint(k); assert.ok(sample(sp.x, sp.y, {}).g < 0, 'spawn on road'); }
+  assert.ok(SPAWN_COUNT >= 30, 'starts all over the city');
+  for (let k = 0; k < SPAWN_COUNT; k++) { const sp = spawnPoint(k); assert.ok(sample(sp.x, sp.y, {}).g < -1, 'spawn on road'); assert.equal(sp.index, k); }
+  assert.ok(new Set(SPAWNS.map((s) => district(s.x, s.y))).size >= 6, 'starts in most districts');
+  assert.equal(spawnPoint(SPAWN_COUNT + 3).index, 3, 'indices wrap');
+});
+
+test('each run can start anywhere: the start index is part of the run and of its replay', () => {
+  const a = createGame('spawn-check', { car: 'kaze', spawn: 0 }), b = createGame('spawn-check', { car: 'kaze', spawn: 7 });
+  assert.notEqual(a.player.x, b.player.x);
+  assert.equal(a.spawn, 0); assert.equal(b.spawn, 7);
+  const d = createGame('spawn-check', { car: 'kaze' }), e = createGame('spawn-check', { car: 'kaze', spawn: 9999 });
+  assert.equal(d.spawn, e.spawn, 'invalid index falls back to the seed start');
+  const { g, inputs } = drive('spawn-replay', 'raiden', MAX_TICKS, autopilot, 11);
+  assert.equal(gameResult(g).spawn, 11);
+  assert.deepEqual(replayTrace('spawn-replay', encodeTrace(inputs), 'raiden', 11), gameResult(g));
+  let other = null;
+  try { other = replayTrace('spawn-replay', encodeTrace(inputs), 'raiden', 12); } catch { other = 'rejected'; }
+  assert.notDeepEqual(other, gameResult(g), 'another start gives another run');
 });
 
 test('input encoding round-trips and invalid traces are rejected', () => {
@@ -123,5 +140,5 @@ test('all 14 cars run deterministically under the autopilot', () => {
     assert.ok(g.ticks > 0);
     if (g.state === 'ended') assert.deepEqual(replayTrace('cars-' + c.id, encodeTrace(inputs), c.id), gameResult(g));
   }
-  assert.equal(SIM_VERSION, '2.0.0');
+  assert.equal(SIM_VERSION, '2.1.0');
 });

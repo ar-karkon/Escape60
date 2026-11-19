@@ -21,13 +21,31 @@ async function open(browser, w, h, q = "", lang = "en") {
   const ctx = await browser.newContext({ viewport: { width: w, height: h }, deviceScaleFactor: w < h ? 2 : 1, hasTouch: w < h });
   const p = await ctx.newPage();
   await p.addInitScript((l) => { try { localStorage.setItem("escape60-lang", l); localStorage.setItem("escape60-profile-v2", JSON.stringify({ level: 18, xp: 0, runs: 5 })); } catch {} }, lang);
-  await p.goto(`${URL0}/?capture=1&q=high&seed=capture-3${q}`);
+  await p.goto(`${URL0}/?capture=1&q=high&seed=capture-3${q.includes("spawn=") ? "" : "&spawn=4"}${q}`);
   await p.waitForFunction(() => document.body.dataset.view === "home", null, { timeout: 180000 });
   await p.evaluate(pilot);
   await p.waitForTimeout(1500);
   return p;
 }
-const shot = (p, name) => p.screenshot({ path: path.join(OUT, name) });
+const shot = (p, name) => p.screenshot(name.endsWith(".jpg") ? { path: path.join(OUT, name), type: "jpeg", quality: 84 } : { path: path.join(OUT, name) });
+/** Put the nearest cop on your tail (d metres behind) and let the pursuit camera settle. */
+const tail = (p, d) => p.evaluate((d) => {
+  const E = window.__escape60, g = E.game(), pl = g.player;
+  E.freeze(true);
+  if (!g.police.length) g.police.push({ id: 90, type: "cruiser", x: 0, y: 0, h: 0, a: 0, v: 30, hp: 100, wreck: 0, stun: 0, near: false, close: 0, mode: 0, tx: 0, ty: 0, los: 0 });
+  const c = g.police[0], ca = Math.cos(pl.a), sa = Math.sin(pl.a);
+  c.x = pl.x - ca * d + sa * 1.2; c.y = pl.y - sa * d - ca * 1.2; c.h = c.a = pl.a; c.v = pl.v; c.mode = 0;
+  for (const o of g.police) if (o !== c) { o.x = pl.x + 3000; o.y = pl.y; }
+}, d);
+/** Start a run in the district of spawn `sp` and screenshot it once the camera settles. */
+async function district(browser, sp, name, tod = "sunset") {
+  const p = await open(browser, 390, 780, `&spawn=${sp}&tod=${tod}`);
+  await p.click("#play");
+  await p.waitForFunction(() => window.__escape60.state().ticks > 90, null, { timeout: 60000 });
+  await p.evaluate(() => { const E = window.__escape60; E.freeze(true); E.game().police.length = 0; });
+  await p.waitForTimeout(1800); await shot(p, "district-" + name + ".jpg");
+  await p.context().close();
+}
 (async () => {
   const browser = await chromium.launch({ args: ["--no-sandbox", "--use-gl=angle", "--use-angle=swiftshader", "--enable-unsafe-swiftshader"] });
   try {
@@ -36,7 +54,11 @@ const shot = (p, name) => p.screenshot({ path: path.join(OUT, name) });
     await p.click("#garage-open"); await p.waitForTimeout(1200); await shot(p, "garage.png");
     await p.click('.tab[data-tab="fx"]'); await p.waitForTimeout(600); await shot(p, "effects.png");
     await p.click("#garage-back"); await p.click("#play");
+    await p.waitForTimeout(700); await shot(p, "intro.jpg");
     await p.waitForTimeout(6000); await shot(p, "drive.png");
+    await tail(p, 11); await p.waitForTimeout(2600); await shot(p, "pursuit-tail.jpg");
+    await tail(p, 60); await p.waitForTimeout(2600); await shot(p, "pursuit-radar.jpg");
+    await p.evaluate(() => { const E = window.__escape60; E.game().police.forEach((c) => { c.x += 4000; }); E.freeze(false); });
     await p.evaluate(() => { window.__nitro = true; window.__escape60.game().nitro = 1; }); await p.waitForTimeout(2200); await shot(p, "nitro.png");
     await p.evaluate(() => { window.__nitro = false; window.__hand = true; }); await p.waitForTimeout(900); await shot(p, "drift.png");
     await p.evaluate(() => { window.__hand = false; const E = window.__escape60; while (E.game().ticks < 3560 && E.game().state === "playing") { E.game().health = 100; E.fast(Math.min(300, 3560 - E.game().ticks)); } });
@@ -63,6 +85,7 @@ const shot = (p, name) => p.screenshot({ path: path.join(OUT, name) });
     await p.context().close();
     p = await open(browser, 1280, 720, "&tod=day");
     await p.click("#play"); await p.waitForTimeout(6500); await shot(p, "desktop-day.png");
+    for (const [sp, name] of [[9, "neon"], [23, "oldtown"], [1, "brickrow"], [15, "oceandrive"], [33, "palmheights"], [20, "docks"], [25, "techpark"]]) await district(browser, sp, name);
     console.log("screenshots written to", OUT);
   } finally { await browser.close(); }
 })().catch((e) => { console.error(e); process.exit(1); });

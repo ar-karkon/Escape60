@@ -119,6 +119,36 @@ def("yacht", { shadow: false }, (k) => {
   k.set(0xe8eef4, 0.4, 0.6).cyl(0, 3.6, -1, 0.06, 0.04, 14, 5);
 });
 
+// ---- district street furniture ----
+def("lantern", { hit: 0.5, breakable: true, shadow: false }, (k) => { // Old Town / Brick Row: cast-iron post with twin lanterns
+  k.set(0x1c1e22, 0.55, 0.5).cyl(0, 0, 0, 0.24, 0.2, 0.6, 8).cyl(0, 0.6, 0, 0.1, 0.08, 4.3, 8).cbox(0, 4.3, 0, 1.5, 0.08, 0.08);
+  for (const x of [-0.72, 0.72]) {
+    k.set(0x1c1e22, 0.55, 0.5).cbox(x, 4.1, 0, 0.1, 0.4, 0.1).cyl(x, 3.3, 0, 0.18, 0.26, 3.36, 4).cyl(x, 3.9, 0, 0.27, 0.06, 4.15, 4);
+    k.set(0xffd9a0, 0.3, 0, 1.8, 1).cyl(x, 3.36, 0, 0.2, 0.25, 3.9, 4);
+  }
+});
+def("neonlamp", { hit: 0.5, breakable: true, shadow: false }, (k) => { // Neon Mile: slim pole with a glowing ring
+  k.set(0x15161b, 0.4, 0.7).cyl(0, 0, 0, 0.16, 0.12, 6.2, 6);
+  k.set(0xff3d9a, 0.3, 0, 2.6, 2).at(0, 6.4, 0, 0, 1, 1, 1, Math.PI / 2).cyl(0, -0.08, 0, 0.62, 0.62, 0.08, 10, false).reset();
+  k.set(0x3df0ff, 0.3, 0, 2.2, 2).cyl(0, 2.2, 0, 0.17, 0.17, 3.0, 6, false);
+});
+def("cypress", { shadow: true }, (k) => {
+  k.set(C.bark, 0.95).cyl(0, 0, 0, 0.2, 0.14, 1.2, 5);
+  k.set(0x24452a, 0.92).blob(0, 4.2, 0, 1.0, 3.8, 1.0, 1).set(0x2e5a32, 0.92).blob(0.15, 3.2, 0.1, 0.8, 2.4, 0.8, 0);
+});
+def("flowerbed", { shadow: false }, (k) => {
+  k.set(0x8a7d70, 0.9).cbox(0, 0.2, 0, 2.6, 0.4, 1.2);
+  k.set(C.leaf, 0.95).blob(0, 0.5, 0, 1.25, 0.35, 0.55, 0);
+  for (const [x, c] of [[-0.8, 0xff4d8d], [-0.25, 0xffd23f], [0.3, 0xff6a3c], [0.85, 0xc77dff]]) k.set(c, 0.8).blob(x, 0.75, 0.05, 0.28, 0.18, 0.28, 0);
+});
+def("bollard", { hit: 0.3, breakable: true, shadow: false }, (k) => { // Tech Park light bollards
+  k.set(0xe8ecef, 0.4, 0.4).cyl(0, 0, 0, 0.14, 0.14, 0.9, 8).set(0x9ff6ff, 0.3, 0, 1.6, 1).cyl(0, 0.62, 0, 0.145, 0.145, 0.8, 8, false);
+});
+def("vending", { hit: 0.6, breakable: true, shadow: false }, (k) => { // Neon Mile vending machines
+  k.set(0xd8263c, 0.5, 0.3).cbox(0, 0.95, 0, 0.9, 1.9, 0.75);
+  k.set(0xfff4e6, 0.2, 0, 1.4, 2).cbox(0, 1.15, -0.38, 0.7, 1.1, 0.02);
+});
+
 /** Build every prop geometry once. */
 export function buildProps() {
   const out = {};

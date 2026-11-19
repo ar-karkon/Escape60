@@ -8,7 +8,7 @@ export async function request(path, options = {}, ms = 6500) {
   } finally { clearTimeout(timeout); }
 }
 export const today = () => request('/challenges/today');
-export const startRun = (seed, car) => request('/runs/start', { method: 'POST', body: JSON.stringify({ seed, car }) });
+export const startRun = (seed, car, spawn) => request('/runs/start', { method: 'POST', body: JSON.stringify({ seed, car, spawn }) });
 /** Long runs are replayed in chunks (CPU budget per request); each reply carries a signed checkpoint. */
 export async function finishRun(runId, token, trace, result, onProgress = () => {}) {
   let checkpoint;

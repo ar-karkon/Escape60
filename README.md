@@ -42,6 +42,16 @@
   <a href="docs/screenshots/garage.png"><img src="docs/screenshots/garage.png" width="32%" alt="Garage and custom cars" /></a>
   <a href="docs/screenshots/night.png"><img src="docs/screenshots/night.png" width="32%" alt="Sunset Bay by night" /></a>
   <br />
+  <a href="docs/screenshots/intro.jpg"><img src="docs/screenshots/intro.jpg" width="24%" alt="Aerial intro over the city" /></a>
+  <a href="docs/screenshots/pursuit-tail.jpg"><img src="docs/screenshots/pursuit-tail.jpg" width="24%" alt="Pursuit camera framing a cop on your tail" /></a>
+  <a href="docs/screenshots/pursuit-radar.jpg"><img src="docs/screenshots/pursuit-radar.jpg" width="24%" alt="Off-screen police indicators" /></a>
+  <a href="docs/screenshots/district-neon.jpg"><img src="docs/screenshots/district-neon.jpg" width="24%" alt="Neon Mile district" /></a>
+  <br />
+  <a href="docs/screenshots/district-oldtown.jpg"><img src="docs/screenshots/district-oldtown.jpg" width="24%" alt="Old Town district" /></a>
+  <a href="docs/screenshots/district-brickrow.jpg"><img src="docs/screenshots/district-brickrow.jpg" width="24%" alt="Brick Row district" /></a>
+  <a href="docs/screenshots/district-oceandrive.jpg"><img src="docs/screenshots/district-oceandrive.jpg" width="24%" alt="Ocean Drive district" /></a>
+  <a href="docs/screenshots/district-techpark.jpg"><img src="docs/screenshots/district-techpark.jpg" width="24%" alt="Tech Park district" /></a>
+  <br />
   <sub>Real captures from the browser. For the artistic vision, see the <a href="design/references/">concept references</a>.</sub>
 </p>
 
@@ -85,8 +95,10 @@ npm run deploy         # release to Arvan from your computer (asks for the stora
 
 ## 🔥 Features — under the hood
 
+- **Pursuit awareness**: off-screen police chevrons around your car with distance, siren light from the screen edge they come from, lock-on markers, a tail warning, a pursuit camera that frames the cop on your tail with you, and a slow-motion crane reveal when a cop first locks on (`web/src/ui/threats.js`, `web/src/render.js`).
+- **Ten districts**: Downtown glass towers, Neon Mile, Brick Row, cobbled Old Town, Ocean Drive deco hotels, The Docks, Palm Heights villas, Tech Park, Red Canyon and Lakeside Park — each with its own facades, roofs, paving, lamps, trees, props, gates and landmarks. Every run opens with an aerial fly-in over the city to your car.
 - **Sunset Bay map** (`web/src/map.js`): ~24 km of hand-authored roads (Catmull-Rom curves) — warped downtown grid with a roundabout and a plaza, Ocean Boulevard, a sweeping coastal highway with a bridge over the marina, a winding canyon with hairpins, a lake loop, Old Town lanes, the port road and five **pit stops**. Drivable space is a smooth signed-distance field (filleted junction corners), shared bit-for-bit by the game, the server replay, the renderer and the minimap.
-- **Arcade drift physics** (`web/src/simulation.js`, SIM 2.0.0): automatic throttle, brake, handbrake slides, counter-steer, nitro, impact-scaled damage, a car that **limps and smokes when damaged**, **3 repairs** at pit stops, **explosion** at zero health, busted meter, takedowns (ram cops or make them crash), near misses, roadblock dodges, drift banking and a ×8 skill chain. Heat rises 1→5 over time with cruisers, interceptors, SUVs, roadblocks, spike strips and a helicopter. The 60 s mark is a milestone (+2,500, slow-motion celebration) — the run continues.
+- **Arcade drift physics** (`web/src/simulation.js`, SIM 2.1.0): every run starts at one of 50 start positions anywhere in the city (signed into the run ticket and replayed); automatic throttle, brake, handbrake slides, counter-steer, nitro, impact-scaled damage, a car that **limps and smokes when damaged**, **3 repairs** at pit stops, **explosion** at zero health, busted meter, takedowns (ram cops or make them crash), near misses, roadblock dodges, drift banking and a ×8 skill chain. Heat rises 1→5 over time with cruisers, interceptors, SUVs, roadblocks, spike strips and a helicopter. The 60 s mark is a milestone (+2,500, slow-motion celebration) — the run continues.
 - **14 cars** (`web/src/cars.js`), each inspired by a classic road car shape (JDM coupes, hot hatches, touring sedans, muscle cars, a rear-engine classic, wedge supercars) with fictional names, no badges, their own stats (speed, acceleration, handling, drift, nitro, armour) and procedural lofted 3D bodies (`web/src/gfx/carmodel.js`). 16 paints and 5 liveries.
 - **Selectable effects** in the garage: drift smoke (clean, comic, neon, rainbow, fire), nitro flame (blue jet, toxic, plasma, inferno), trails (light trails, neon tyres), combo bursts (graffiti, electric, minimal) and an accent colour.
 - **Feel**: camera director with speed FOV, acceleration lag, brake dive, handbrake roll, drift flank view, nitro punch with zoom blur, chromatic aberration and graffiti wings, trauma-based impact shake, hit-stop and slow motion on big moments; skid marks, sparks, backfires, damage smoke and fire, explosions with debris and shockwave, knock-over street furniture (lamps, hydrants with water jets, benches, palms…).

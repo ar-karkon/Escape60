@@ -198,6 +198,24 @@ export class AudioEngine {
       [880, 1175, 1568].forEach((f, k) => { const o = c.createOscillator(), g = c.createGain(), tk = t + 0.42 + k * 0.09; o.type = 'triangle'; o.frequency.value = f; g.gain.setValueAtTime(gain, tk); g.gain.exponentialRampToValueAtTime(0.001, tk + 0.45); o.connect(g); g.connect(this.sfxBus); o.start(tk); o.stop(tk + 0.5); });
     } catch {}
   }
+  /** Two-tone siren "whoop" when a cop locks onto your tail (synthesised, original). */
+  sirenWhoop(gain = 0.3) {
+    if (!this.ctx || !this.sfxOn) return;
+    try {
+      const c = this.ctx, t = c.currentTime;
+      for (let k = 0; k < 2; k++) {
+        const t0 = t + k * 0.34, lp = c.createBiquadFilter(), g = c.createGain();
+        lp.type = 'lowpass'; lp.frequency.value = 2400; lp.Q.value = 2;
+        g.gain.setValueAtTime(0.0001, t0); g.gain.exponentialRampToValueAtTime(gain, t0 + 0.04); g.gain.setValueAtTime(gain, t0 + 0.22); g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.33);
+        for (const [type, det] of [['sawtooth', 1], ['square', 1.007]]) {
+          const o = c.createOscillator(); o.type = type;
+          o.frequency.setValueAtTime(480 * det, t0); o.frequency.exponentialRampToValueAtTime(1450 * det, t0 + 0.2); o.frequency.exponentialRampToValueAtTime(820 * det, t0 + 0.32);
+          o.connect(lp); o.start(t0); o.stop(t0 + 0.34);
+        }
+        lp.connect(g); g.connect(this.sfxBus);
+      }
+    } catch {}
+  }
   duckMusic(amount = 0.35, ms = 600) {
     if (!this.ctx) return;
     const t = this.ctx.currentTime, g = this.musicBus.gain, base = this.musicOn ? 0.55 : 0;

@@ -21,8 +21,9 @@ export class Kit {
   tri(a, b, c, n) {
     if (!n) { const u = [b[0] - a[0], b[1] - a[1], b[2] - a[2]], v = [c[0] - a[0], c[1] - a[1], c[2] - a[2]]; n = [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]]; const l = Math.hypot(...n) || 1; n = n.map((k) => k / l); }
     this._v(...a, ...n); this._v(...b, ...n); this._v(...c, ...n);
+    return this;
   }
-  quad(a, b, c, d, n) { this.tri(a, b, c, n); this.tri(a, c, d, n); }
+  quad(a, b, c, d, n) { this.tri(a, b, c, n); this.tri(a, c, d, n); return this; }
   /** Box from (x0,y0,z0) to (x1,y1,z1) in the current frame; skip = set of faces to omit ('b','t',...). */
   box(x0, y0, z0, x1, y1, z1, skip = "") {
     const v = (x, y, z) => [x, y, z];
@@ -69,6 +70,25 @@ export class Kit {
     this.quad([x0, y, z1], [x1, y, z1], [x1, y + h, zm], [x0, y + h, zm]);
     this.tri([x0, y, z0], [x0, y, z1], [x0, y + h, zm]);
     this.tri([x1, y, z0], [x1, y + h, zm], [x1, y, z1]);
+    return this;
+  }
+  /** Hip roof over (x0..x1, z0..z1) at height y rising h (ridge along the longer side). */
+  hip(x0, z0, x1, z1, y, h, overhang = 0.4) {
+    x0 -= overhang; x1 += overhang; z0 -= overhang; z1 += overhang;
+    const w = x1 - x0, d = z1 - z0;
+    if (w >= d) {
+      const zm = (z0 + z1) / 2, i = d / 2, ra = [x0 + i, y + h, zm], rb = [x1 - i, y + h, zm];
+      this.quad([x0, y, z0], ra, rb, [x1, y, z0]);
+      this.quad([x1, y, z1], rb, ra, [x0, y, z1]);
+      this.tri([x0, y, z1], ra, [x0, y, z0]);
+      this.tri([x1, y, z0], rb, [x1, y, z1]);
+    } else {
+      const xm = (x0 + x1) / 2, i = w / 2, ra = [xm, y + h, z0 + i], rb = [xm, y + h, z1 - i];
+      this.quad([x1, y, z0], ra, rb, [x1, y, z1]);
+      this.quad([x0, y, z1], rb, ra, [x0, y, z0]);
+      this.tri([x0, y, z0], ra, [x1, y, z0]);
+      this.tri([x1, y, z1], rb, [x0, y, z1]);
+    }
     return this;
   }
   get count() { return this.p.length / 3; }

@@ -1,15 +1,15 @@
 /* Escape 60 game service. Runs on the edge (worker.js) and, unchanged, inside the local Node dev
    server. It decides every rank:
    - daily route,
-   - stateless HMAC run tickets (seed + car are signed into the ticket),
+   - stateless HMAC run tickets (seed, car and start position are signed into the ticket),
    - authoritative 60 Hz replay of the input trace with the same simulation the browser runs,
      in signed chunks so long runs fit a per-request CPU budget,
    - single-use runs, a durable leaderboard and daily stats in object storage.
    Nothing here trusts a score or a time sent by the browser. */
-import { createGame, gameResult, replayChunk, restoreGame, snapshotGame, traceTicks, compareResult, hashSeed, SIM_VERSION, MAX_TICKS } from '../web/src/simulation.js';
+import { createGame, gameResult, replayChunk, restoreGame, snapshotGame, traceTicks, compareResult, hashSeed, spawnIndex, SIM_VERSION, MAX_TICKS } from '../web/src/simulation.js';
 import { CARS } from '../web/src/cars.js';
 
-export const API_VERSION = '3.0.0';
+export const API_VERSION = '3.1.0';
 const enc = new TextEncoder();
 const seedValid = (s) => typeof s === 'string' && /^[a-zA-Z0-9_-]{2,64}$/.test(s);
 const dayOf = (ms) => new Date(ms).toISOString().slice(0, 10);
@@ -83,9 +83,10 @@ export function createApp({ env = {}, store, now = () => Date.now(), log = () =>
     const t = now(), seed = b.seed || `daily-${dayOf(t)}`;
     if (!seedValid(seed)) return fail(400, 'Invalid seed');
     const car = CARS.some((c) => c.id === b.car) ? b.car : CARS[0].id;
+    const spawn = spawnIndex(seed, b.spawn);
     const runId = crypto.randomUUID();
-    const token = await sign({ r: runId, s: seed, c: car, t, v: SIM_VERSION });
-    return json({ runId, token, seed, car, issuedAt: t, version: SIM_VERSION });
+    const token = await sign({ r: runId, s: seed, c: car, p: spawn, t, v: SIM_VERSION });
+    return json({ runId, token, seed, car, spawn, issuedAt: t, version: SIM_VERSION });
   }
   async function finish(req, ip) {
     if (limited(ip, 'finish', 120, 60000)) return fail(429, 'Please slow down');
@@ -107,11 +108,11 @@ export function createApp({ env = {}, store, now = () => Date.now(), log = () =>
       if (typeof c.state !== 'string' || c.state.length > 120000 || !Number.isFinite(c.ms)) return fail(400, 'Invalid checkpoint');
       if (!(await macOk(`${ticket.r}|${traceHash}|${c.ms}|${c.state}`, c.sig))) return fail(401, 'Invalid checkpoint');
       try { game = restoreGame(c.state); } catch { return fail(400, 'Invalid checkpoint'); }
-      if (game.seed !== ticket.s || game.car !== ticket.c) return fail(401, 'Invalid checkpoint');
+      if (game.seed !== ticket.s || game.car !== ticket.c || game.spawn !== ticket.p) return fail(401, 'Invalid checkpoint');
       priorMs = c.ms;
     } else {
       if (await store.get(runKey)) return fail(409, 'Run already submitted');
-      game = createGame(ticket.s, { car: ticket.c });
+      game = createGame(ticket.s, { car: ticket.c, spawn: ticket.p });
     }
     // Authoritative replay: the browser's numbers are only compared, never trusted.
     const t0 = performance.now(), before = game.ticks;
@@ -125,9 +126,9 @@ export function createApp({ env = {}, store, now = () => Date.now(), log = () =>
     }
     const result = gameResult(game);
     const r = b.result;
-    if (r.version !== SIM_VERSION || r.seed !== ticket.s || r.car !== ticket.c || r.timeMs !== result.timeMs || r.points !== result.points || r.health !== result.health || r.end !== result.end) return fail(422, 'Result does not match authoritative replay');
+    if (r.version !== SIM_VERSION || r.seed !== ticket.s || r.car !== ticket.c || r.spawn !== result.spawn || r.timeMs !== result.timeMs || r.points !== result.points || r.health !== result.health || r.end !== result.end) return fail(422, 'Result does not match authoritative replay');
     if (age < result.timeMs * minPlayRatio) return fail(422, 'Run finished too quickly');
-    const record = { runId: ticket.r, seed: ticket.s, car: ticket.c, date, at: now(), result, verifyMs, label: callsign(ticket.r) };
+    const record = { runId: ticket.r, seed: ticket.s, car: ticket.c, spawn: ticket.p, date, at: now(), result, verifyMs, label: callsign(ticket.r) };
     if (!(await store.put(runKey, JSON.stringify(record), { ifNoneMatch: '*' }))) return fail(409, 'Run already submitted');
     const entry = { id: ticket.r.slice(0, 8), timeMs: result.timeMs, points: result.points, car: ticket.c, label: record.label, at: record.at };
     const lbKey = `leaderboard/${SIM_VERSION}/${ticket.s}.json`;

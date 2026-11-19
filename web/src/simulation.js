@@ -1,21 +1,22 @@
-/** Deterministic 60 Hz game simulation (2.0). Shared by the browser and the authoritative replay.
+/** Deterministic 60 Hz game simulation (2.1). Shared by the browser and the authoritative replay.
  *
  * The player drives one of 14 cars through Sunset Bay with an arcade drift model: automatic throttle,
  * brake, handbrake slides, nitro. Health drops on impacts (and the car limps when damaged); three
  * repairs are available at the fuel & repair stations; at zero health the car is wrecked. The run
  * does not stop at 60 s: the 60 s mark is a milestone with a bonus, then the heat keeps rising until
- * the car is wrecked, busted, or the 10 minute cap is reached.
+ * the car is wrecked, busted, or the 10 minute cap is reached. Each run starts at one of the map's
+ * start positions (any district); the start index is part of the run and of its signed ticket.
  *
  * Only + - * /, Math.sqrt/floor/round/min/max/abs and dmath's sin/cos/atan2 are used so every JS
  * engine produces the same run from the same input trace. Units: metres, seconds, radians. */
-import { sample, pointAt, edges, nodes, stations, spawnPoint, routeFrom } from './map.js';
+import { sample, pointAt, edges, nodes, stations, spawnPoint, routeFrom, SPAWN_COUNT } from './map.js';
 import { carById, POLICE, POLICE_TYPES, TRAFFIC } from './cars.js';
 import { dsin, dcos, datan2 } from './dmath.js';
 
 export const TICK_RATE = 60;
 export const MILESTONE_TICKS = 60 * TICK_RATE;
 export const MAX_TICKS = 10 * 60 * TICK_RATE;
-export const SIM_VERSION = '2.0.0';
+export const SIM_VERSION = '2.1.0';
 export const MAX_HEALTH = 100;
 export const REPAIRS = 3;
 export const COMBO_WINDOW = 4;
@@ -54,13 +55,18 @@ const R = {}, R2 = {}, PT = {}, PT2 = {};
 
 export function heatAt(ticks) { const t = ticks / TICK_RATE; let h = 1; for (let i = 1; i < HEAT_AT.length; i++) if (t >= HEAT_AT[i]) h = i + 1; return h; }
 
+/** Valid start index for a run: the one asked for, or one picked from the seed. */
+export function spawnIndex(seed, spawn) { return Number.isInteger(spawn) && spawn >= 0 && spawn < SPAWN_COUNT ? spawn : hashSeed(seed) % SPAWN_COUNT; }
+export { SPAWN_COUNT };
+
 export function createGame(seed = 'daily', opts = {}) {
   const car = carById(opts.car);
   const h = hashSeed(seed);
-  const sp = spawnPoint(h);
+  const spawn = spawnIndex(seed, opts.spawn);
+  const sp = spawnPoint(spawn);
   const heading = datan2(sp.ty, sp.tx);
   const s = {
-    seed: String(seed), version: SIM_VERSION, car: car.id, ticks: 0, rs: h || 0x9e3779b9,
+    seed: String(seed), version: SIM_VERSION, car: car.id, spawn, ticks: 0, rs: (h ^ Math.imul(spawn + 1, 0x9e3779b1)) >>> 0 || 0x9e3779b9,
     state: 'playing', end: '', health: MAX_HEALTH, repairs: REPAIRS, invuln: 0, points: 0,
     chain: 0, comboTimer: 0, bestChain: 0, nitro: 0.6, heat: 1, bust: 0, milestone: false,
     player: { x: sp.x, y: sp.y, h: heading, a: heading, v: 26, slip: 0, steer: 0, yaw: 0, boost: false, brake: false, hand: false, drifting: false, wallCd: 0, spike: 0 },
@@ -601,7 +607,7 @@ function spawnRoadblock(s) {
 
 /* ---------------------------------------------------------------- results / replay ---------- */
 export function gameResult(s) {
-  return { version: SIM_VERSION, seed: s.seed, car: s.car, timeMs: Math.round((s.ticks * 1000) / TICK_RATE), points: s.points, health: Math.round(s.health),
+  return { version: SIM_VERSION, seed: s.seed, car: s.car, spawn: s.spawn, timeMs: Math.round((s.ticks * 1000) / TICK_RATE), points: s.points, health: Math.round(s.health),
     end: s.end, escaped: s.ticks >= MILESTONE_TICKS, near: s.stats.near, takedowns: s.stats.takedowns, driftPts: s.stats.driftPts, bestChain: s.bestChain,
     topSpeed: s.stats.top, repairs: s.stats.repairs, hits: s.stats.hits, dodges: s.stats.dodges, dist: Math.round(s.stats.dist), heat: s.heat };
 }
@@ -626,7 +632,7 @@ export function traceTicks(trace) {
 export function snapshotGame(s) { const { random, events, ...rest } = s; return JSON.stringify(rest); }
 export function restoreGame(json) {
   const s = JSON.parse(json);
-  if (!s || s.version !== SIM_VERSION || typeof s.seed !== 'string') throw Error('Invalid checkpoint');
+  if (!s || s.version !== SIM_VERSION || typeof s.seed !== 'string' || !Number.isInteger(s.spawn)) throw Error('Invalid checkpoint');
   s.events = []; return attachRandom(s);
 }
 /** Advance `game` along `trace` from tick `game.ticks` for at most `budget` ticks.
@@ -646,9 +652,9 @@ export function replayChunk(game, trace, budget = MAX_TICKS) {
   if (game.state !== 'ended') throw Error('Game has not ended');
   return true;
 }
-export function replayTrace(seed, trace, car) {
+export function replayTrace(seed, trace, car, spawn) {
   traceTicks(trace);
-  const game = createGame(seed, { car });
+  const game = createGame(seed, { car, spawn });
   replayChunk(game, trace);
   return gameResult(game);
 }
