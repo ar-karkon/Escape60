@@ -19,6 +19,9 @@ const RED = new T.Color(2.2, 0.12, 0.2), BLUE = new T.Color(0.2, 0.55, 2.4), WAR
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 const lerpAngle = (a, b, k) => a + Math.atan2(Math.sin(b - a), Math.cos(b - a)) * k;
 const damp = (k, dt) => 1 - Math.exp(-k * dt);
+const smooth = (a, b, x) => { const u = clamp((x - a) / (b - a), 0, 1); return u * u * (3 - 2 * u); };
+const GOLD = new T.Color(1.6, 1.15, 0.35);
+const CITY = { x: 0, z: -40 }; // centre of Sunset Bay (the aerial intro flies over it)
 
 export function createRenderer(canvas) {
   const renderer = new T.WebGLRenderer({ canvas, antialias: false, powerPreference: "high-performance", stencil: false });
@@ -280,7 +283,12 @@ export function createRenderer(canvas) {
   let rung = weak ? 4 : mobile ? 3 : 1, cost = 16, slow = 0, fast = 0, qualityMode = "auto";
 
   /* ---------- camera / director state ---------- */
-  const cam = { yaw: 0, lag: 0, fovKick: 0, trauma: 0, roll: 0, nitro: 0, brake: 0, hand: 0, blurPulse: 0, ca: 0, flash: 0, flashCol: new T.Color(), init: false, intro: 0 };
+  const cam = { yaw: 0, lag: 0, fovKick: 0, trauma: 0, roll: 0, nitro: 0, brake: 0, hand: 0, blurPulse: 0, ca: 0, flash: 0, flashCol: new T.Color(), init: false, intro: 0, pursuit: 0, tailW: 0, tailD: 10 };
+  // pursuit director: a cinematic reveal the first time a cop locks onto your tail (with cooldown)
+  let reveal = null, revealReadyAt = 0;
+  const revealSeen = new Set();
+  /** What the HUD overlay needs from this frame (hero position, intro progress, pursuit state). */
+  const view = { px: 0, pz: 0, a: 0, h: 0, intro: 0, pursuit: 0, reveal: 0 };
   const eye = new T.Vector3(), look = new T.Vector3(), camLook = new T.Vector3(), tmp = new T.Vector3();
   let prevGame = null, eventIndex = 0, lastT = 0, prevV = 0, accel = 0, endT = 0, slowUntil = 0, slowScale = 1, menuT0 = 0, garageYaw = 0.6, lastBrake = false, skidT = 0;
   const prevWheel = [null, null];
@@ -298,9 +306,11 @@ export function createRenderer(canvas) {
   draw.project = (x, y, z) => { tmp.set(x, y, z).project(camera); return [(tmp.x + 1) / 2, (1 - tmp.y) / 2, tmp.z < 1]; };
   draw.camera = camera;
   draw.world = world;
+  draw.view = view;
+  draw.onReveal = null;
 
   draw.frame = (game, t, opts = {}) => {
-    const { mode = "menu", alpha = 0, countdown = 0, reduced = false, shakeOn = true } = opts;
+    const { mode = "menu", alpha = 0, countdown = 0, introTotal = 0, reduced = false, shakeOn = true } = opts;
     const realDt = Math.max(0.0001, Math.min(0.1, (t - lastT) / 1000));
     lastT = t;
     const vdt = realDt * (t < slowUntil ? slowScale : 1);
@@ -331,6 +341,7 @@ export function createRenderer(canvas) {
     if (game !== prevGame) {
       prevGame = game; eventIndex = 0; cam.init = false; endT = 0; P.clear(); fx.clear(); trails.clear();
       world.resetBreakables(); prevWheel[0] = prevWheel[1] = null; slowUntil = 0; menuT0 = t;
+      reveal = null; revealSeen.clear(); revealReadyAt = t + 6000; cam.pursuit = 0; cam.tailW = 0;
       heroMat.userData.u.uCharred.value = 0; heroMat.userData.u.uDamage.value = 0;
       for (const d of debris) scene.remove(d.m); debris.length = 0;
     }
@@ -401,13 +412,16 @@ export function createRenderer(canvas) {
     let bu = 0;
     cops.forEach((o, i) => {
       const yaw = o.rotation.y, side = (phase + i) % 2;
-      if (i < 5) {
-        glow(true, o.position.x, 0.08, o.position.z, 7, 7, 0, side ? RED : BLUE, 0.4 + 0.3 * tod.night);
+      if (i < 6) {
+        glow(true, o.position.x, 0.08, o.position.z, 9, 9, 0, side ? RED : BLUE, 0.5 + 0.35 * tod.night);
         const bx = o.position.x, by = o.userData.model.barY + 0.2, bz = o.position.z;
-        glow(false, bx + Math.cos(yaw) * 0.5, by, bz - Math.sin(yaw) * 0.5, 1.6, 1.6, 0, side ? RED : BLUE, 0.9);
+        // light bars stay readable far away: the flare grows with distance from the camera
+        const far = Math.max(1, o.position.distanceTo(camera.position) / 34);
+        glow(false, bx + Math.cos(yaw) * 0.5, by, bz - Math.sin(yaw) * 0.5, 1.7 * far, 1.7 * far, 0, side ? RED : BLUE, 1.0);
+        glow(false, bx - Math.cos(yaw) * 0.5, by, bz + Math.sin(yaw) * 0.5, 1.2 * far, 1.2 * far, 0, side ? BLUE : RED, 0.7);
         carLights(o.position.x, o.position.z, yaw, 0.9);
       }
-      if (i < 2 && rung < 4) { const l = beacons[bu++]; l.position.set(o.position.x, 2.6, o.position.z); l.color.copy(side ? RED : BLUE); l.intensity = 30 + 50 * tod.night; }
+      if (i < 2 && rung < 4) { const l = beacons[bu++]; l.position.set(o.position.x, 5.2, o.position.z); l.color.copy(side ? RED : BLUE); l.intensity = (14 + 30 * tod.night) * clamp(o.position.distanceTo(camera.position) / 18, 0.35, 1); }
       if (i < 4 && playing && rung < 5) world.smash(o.position.x, o.position.z, 1.3).forEach((hh) => spawnDebris(hh, 0, 0));
     });
     for (let i = bu; i < 2; i++) beacons[i].intensity = 0;
@@ -493,8 +507,35 @@ export function createRenderer(canvas) {
     for (const m of [gFlat, gBill]) { m.instanceMatrix.needsUpdate = true; m.geometry.getAttribute("aCol").needsUpdate = true; }
     contactMesh.instanceMatrix.needsUpdate = true;
 
+    // ---------- pursuit awareness (visual only) ----------
+    let pk = 0, revealCand = null, tailW = 0, tailD = 0;
+    if (game && playing && countdown <= 0) {
+      const fx0 = Math.cos(a0), fz0 = Math.sin(a0);
+      for (const s of policeStates) {
+        if (s.wreck) continue;
+        const dx = s.x - px, dz = s.y - pz, d = Math.hypot(dx, dz) || 1, f = (dx * fx0 + dz * fz0) / d;
+        const behind = clamp(-f * 1.3 + 0.15, 0, 1);
+        const k = behind * smooth(55, 18, d);
+        if (k > pk) pk = k;
+        // the closest cop on your tail gets framed together with you
+        const w = smooth(0.55, 0.8, -f) * smooth(27, 15, d);
+        if (w > tailW) { tailW = w; tailD = Math.min(16, -f * d); }
+        if (!revealCand && !revealSeen.has(s.id) && behind > 0.75 && d > 8 && d < 46 && s.mode === 1) revealCand = s;
+      }
+      if (revealCand && !reveal && t > revealReadyAt && v > 12) {
+        revealSeen.add(revealCand.id); revealReadyAt = t + 15000;
+        if (!reduced) { reveal = { s: revealCand, t0: t, dur: 2300 }; slowMo(t, 0.42, 1.25); cam.flash = Math.max(cam.flash, 0.22); cam.flashCol.setRGB(0.5, 0.25, 1); }
+        draw.onReveal?.(revealCand);
+      }
+    }
+    if (!playing) reveal = null;
+    cam.pursuit += (pk - cam.pursuit) * damp(pk > cam.pursuit ? 2.6 : 0.8, realDt);
+    cam.tailW += (tailW - cam.tailW) * damp(tailW > cam.tailW ? 2.2 : 0.75, realDt);
+    if (tailW > 0.05) cam.tailD += (tailD - cam.tailD) * damp(2, realDt);
+
     // ---------- camera director ----------
     const portrait = camera.aspect < 0.9;
+    view.intro = 0;
     const base = portrait ? { dist: 6.3, height: 2.7, look: 9, fov: 58 } : { dist: 5.9, height: 2.05, look: 8, fov: 50 };
     const sp = clamp(v / 70, 0, 1.3);
     cam.nitro += ((boost ? 1 : 0) - cam.nitro) * damp(boost ? 5 : 2.5, realDt);
@@ -507,25 +548,71 @@ export function createRenderer(canvas) {
       const yawTarget = lerpAngle(h0, a0 + slip * 0.5, moveK);
       cam.yaw = cam.init ? lerpAngle(cam.yaw, yawTarget, damp(3.6 + sp * 1.8, realDt)) : yawTarget;
       cam.lag += (clamp(accel * 0.045, -0.8, 0.6) * moveK - cam.lag) * damp(3, realDt);
-      const dist = Math.max(5, base.dist + sp * 0.9 + cam.lag + cam.nitro * 1.0 - cam.brake * 0.3);
+      // pursuit cam: police closing in from behind lift the camera; a cop right on your tail makes it
+      // crane back and up until the chaser is framed with you, above the touch controls
+      const pq = cam.pursuit;
+      const dist = Math.max(5, base.dist + sp * 0.9 + cam.lag + cam.nitro * 1.0 - cam.brake * 0.3 + pq * 2.6);
       const cy = Math.cos(cam.yaw), sy = Math.sin(cam.yaw);
       const side = -slip * 1.4 * (portrait ? 0.7 : 1) * moveK;
-      eye.set(px - cy * dist - sy * side, base.height + sp * 0.3 - cam.nitro * 0.25, pz - sy * dist + cy * side);
-      look.set(px + cy * base.look, portrait ? 0.2 : 0.75, pz + sy * base.look);
-      fov = base.fov + sp * 7 + cam.nitro * 12 - cam.brake * 3;
-      roll = clamp(-steer * sp * 0.03 - slip * 0.05 - cam.hand * steer * 0.025, -0.09, 0.09);
-      if (countdown > 0) {
-        // intro: swing from a low front three-quarter view into the chase position
-        const kk = Math.min(1, countdown / 3), e2 = kk * kk * (3 - 2 * kk);
-        const ang = h0 + Math.PI * 0.75 * e2;
-        tmp.set(px + Math.cos(ang) * (7 + 2 * e2), 1.3 + (1 - e2) * 1.2, pz + Math.sin(ang) * (7 + 2 * e2));
-        eye.lerp(tmp, e2);
-        look.lerp(tmp.set(px, 0.8, pz), e2);
-        fov = base.fov - 6 * e2;
+      eye.set(px - cy * dist - sy * side, base.height + sp * 0.3 - cam.nitro * 0.25 + pq * 1.8, pz - sy * dist + cy * side);
+      const la = base.look * (1 - 0.3 * pq);
+      look.set(px + cy * la, portrait ? 0.2 : 0.75, pz + sy * la);
+      fov = base.fov + sp * 7 + cam.nitro * 12 - cam.brake * 3 + pq * 3;
+      const tw = cam.tailW;
+      if (tw > 0.002) {
+        const dc = cam.tailD, D = dc * (portrait ? 1.35 : 1.2) + 6.5, Hc = 2.5 + D * (portrait ? 0.38 : 0.3);
+        tmp.set(px - cy * D, Hc, pz - sy * D); eye.lerp(tmp, tw);
+        tmp.set(px - cy * dc * (portrait ? 0.45 : 0.3), 0, pz - sy * dc * (portrait ? 0.45 : 0.3)); look.lerp(tmp, tw);
+        fov += (base.fov + 8 - fov) * tw;
       }
+      roll = clamp(-steer * sp * 0.03 - slip * 0.05 - cam.hand * steer * 0.025, -0.09, 0.09);
+      let introK = 0;
+      if (countdown > 0) {
+        // intro: an aerial establishing shot of Sunset Bay that dives down onto the car from behind
+        const total = Math.max(introTotal, countdown, 0.001), u = clamp(1 - countdown / total, 0, 1);
+        const e = smooth(0.1, 0.97, u);
+        introK = 1 - e;
+        const hx2 = eye.x - px, hz2 = eye.z - pz, hd = Math.hypot(hx2, hz2) || 1;
+        const r1 = Math.hypot(hd, eye.y), el1 = Math.atan2(eye.y, hd), yaw1 = Math.atan2(hz2, hx2);
+        // start high above the far side of the city, looking across it at your car, then fly in
+        // over the rooftops and swing around behind the car
+        const cdx = CITY.x - px, cdz = CITY.z - pz, dc = Math.hypot(cdx, cdz);
+        const yaw0 = dc > 160 ? Math.atan2(cdz, cdx) : yaw1 + 1.3;
+        const r0 = clamp(dc + (portrait ? 520 : 440), 620, 1150), el0 = 0.36;
+        const r = r1 * Math.pow(r0 / r1, Math.pow(1 - e, 1.1));
+        const el = el0 + (el1 - el0) * smooth(0.3, 1, e);
+        const yc = lerpAngle(yaw0, yaw1, smooth(0.08, 0.92, e)) + (1 - e) * u * 0.22;
+        eye.set(px + Math.cos(yc) * r * Math.cos(el), r * Math.sin(el), pz + Math.sin(yc) * r * Math.cos(el));
+        tmp.set(px, 0, pz);
+        look.lerp(tmp, introK);
+        fov = fov + ((portrait ? 62 : 50) - fov) * introK;
+        roll *= e;
+        // a beacon on the ground marks your car in the wide shot
+        const ring = 6 + r * 0.05;
+        glow(true, px, 0.12, pz, ring, ring, 0, GOLD, 0.9 * introK);
+        glow(true, px, 0.13, pz, ring * 0.45, ring * 0.45, 0, GOLD, 1.2 * introK);
+      }
+      view.intro = introK;
+      if (reveal) {
+        // cinematic reveal: crane up behind the chasing cop, framing it with you ahead, then return
+        const u = (t - reveal.t0) / reveal.dur, s = reveal.s;
+        if (u >= 1 || s.wreck || !game.police.includes(s)) reveal = null;
+        else {
+          const e = smooth(0, 0.2, u) * (1 - smooth(0.66, 1, u));
+          let dx = px - s.x, dz = pz - s.y; const L = Math.hypot(dx, dz) || 1; dx /= L; dz /= L;
+          const sideAmt = (u - 0.45) * 9, back = 7 + L * 0.2;
+          tmp.set(s.x - dx * back - dz * sideAmt, 4.8 + L * 0.16, s.y - dz * back + dx * sideAmt);
+          eye.lerp(tmp, e);
+          look.lerp(tmp.set(s.x + (px - s.x) * 0.58, 0.9, s.y + (pz - s.y) * 0.58), e);
+          fov += (portrait ? 60 : 52) * e - fov * e;
+          roll *= 1 - e;
+          view.reveal = e;
+        }
+      }
+      if (!reveal) view.reveal = 0;
       if (playing && boost && shakeOn && !reduced) cam.trauma = Math.max(cam.trauma, 0.16);
       // keep the camera out of buildings: pull it in toward the car along the boom
-      for (let k = 1; k <= 6; k++) {
+      if (introK < 0.15) for (let k = 1; k <= 6; k++) {
         const u = k / 6, qx = px + (eye.x - px) * u, qz = pz + (eye.z - pz) * u;
         if (world.blocked(qx, qz)) { const f = Math.max(0.35, u - 0.12); eye.x = px + (eye.x - px) * f; eye.z = pz + (eye.z - pz) * f; eye.y += (1 - f) * 2.2; break; }
       }
@@ -546,7 +633,7 @@ export function createRenderer(canvas) {
     }
     if (!cam.init || (!game && mode !== "garage" && t - menuT0 < 50)) { camera.position.copy(eye); camLook.copy(look); cam.init = true; }
     else {
-      const kp = game && !ended ? 10 : 3.5;
+      const kp = game && !ended ? (view.intro > 0.02 ? 16 : 10) : 3.5;
       camera.position.x += (eye.x - camera.position.x) * damp(kp, realDt);
       camera.position.z += (eye.z - camera.position.z) * damp(kp, realDt);
       camera.position.y += (eye.y - camera.position.y) * damp(kp * 0.7, realDt);
@@ -568,6 +655,9 @@ export function createRenderer(canvas) {
     camera.lookAt(camLook);
     if (draw.debugCam) { const d = draw.debugCam; camera.position.set(...d.eye); camera.up.set(0, 1, 0); camera.fov = d.fov || 55; camera.updateProjectionMatrix(); camera.lookAt(...d.look); }
     camera.updateMatrixWorld();
+    view.px = px; view.pz = pz; view.a = a0; view.h = h0; view.pursuit = cam.pursuit;
+    if (!game || ended) view.reveal = 0;
+    if (scene.fog && tod.fogD) scene.fog.density = tod.fogD * (1 - 0.6 * view.intro);
 
     // sun + shadows follow the action
     const sd = U.uSunDir.value;

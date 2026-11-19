@@ -8,7 +8,7 @@ export async function request(path, options = {}, ms = 6500) {
   } finally { clearTimeout(timeout); }
 }
 export const today = () => request('/challenges/today');
-export const startRun = (seed, car) => request('/runs/start', { method: 'POST', body: JSON.stringify({ seed, car }) });
+export const startRun = (seed, car, spawn) => request('/runs/start', { method: 'POST', body: JSON.stringify({ seed, car, spawn }) });
 /** Live referee: the edge re-simulates the newest inputs while the run is still being driven. */
 export const liveCheck = (runId, token, trace, checkpoint) => request('/runs/live', { method: 'POST', body: JSON.stringify({ runId, token, trace, checkpoint }) }, 6000);
 /** Final verdict. Starts from the last live checkpoint when there is one (only the last seconds are

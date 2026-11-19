@@ -43,7 +43,7 @@ canvas#ink { position: absolute; inset: 0; width: 100%; height: 100%; pointer-ev
 [data-icon] { display: inline-block; flex: none; }
 
 /* ---------- pixel frame primitives ---------- */
-.panel, .card, .btn, .chip, .hud-pause, .steer, .act, .stat, .rank-row, .status-chip, .banner, dialog, .hud-timer, .ribbon, .title-ribbon, .icon-btn, .car-card, .tab, .speedo, .live-chip, .rival-chip, .ghost-tag, .rival-result {
+.panel, .card, .btn, .chip, .hud-pause, .steer, .act, .stat, .rank-row, .status-chip, .banner, dialog, .hud-timer, .ribbon, .title-ribbon, .icon-btn, .car-card, .tab, .speedo, .live-chip, .rival-chip, .ghost-tag, .rival-result, .place {
   --b: 3px; --edge: var(--violet); --line: var(--ink);
   box-shadow:
     0 calc(var(--b) * -1) 0 0 var(--edge), 0 var(--b) 0 0 var(--edge),
@@ -183,9 +183,27 @@ body[data-view="results"] .overlay { background: linear-gradient(180deg, rgba(27
 .hurt { position: absolute; inset: 0; z-index: 1; pointer-events: none; opacity: 0; background: radial-gradient(ellipse at center, transparent 40%, rgba(255, 30, 70, 0.55) 100%); }
 .hurt.on { animation: hurt 0.45s steps(4); }
 @keyframes hurt { 0% { opacity: 1; } 100% { opacity: 0; } }
-.threat { position: absolute; z-index: 2; width: 30px; height: 30px; pointer-events: none; background: conic-gradient(from 135deg at 50% 100%, transparent 0 0deg, var(--hot) 0 90deg, transparent 0); clip-path: polygon(50% 0, 100% 100%, 50% 72%, 0 100%); filter: drop-shadow(0 0 6px var(--hot)); animation: threat 0.4s steps(2) infinite; }
-@keyframes threat { 50% { background: var(--policeBlue, #3f98ff); } }
-body:not([data-view="game"]) .threat { display: none; }
+/* pursuit awareness overlay (drawn by web/src/ui/threats.js) */
+canvas#threats { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 2; image-rendering: pixelated; }
+body:not([data-view="game"]) canvas#threats { display: none; }
+/* location card: district name during the aerial intro (big) and when you drive into a new district (mini) */
+.place { --b: 3px; --edge: var(--gold); position: absolute; left: 50%; top: calc(var(--safe-t) + 150px); transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 8px 26px 10px; white-space: nowrap; pointer-events: none; text-align: center;
+  background: linear-gradient(180deg, rgba(42, 18, 64, 0.92) 0 14%, rgba(27, 11, 43, 0.88) 14%); animation: place-in 0.45s steps(5) both; }
+.place small { font: 400 15px/1 var(--px); letter-spacing: 4px; color: var(--cyan); text-shadow: 2px 2px 0 var(--ink); }
+.place b { font: 800 34px/1.05 var(--fa); color: var(--gold); letter-spacing: 1px; text-shadow: 3px 0 var(--ink), -3px 0 var(--ink), 0 3px var(--ink), 0 -3px var(--ink), 0 6px #c8174a; }
+.place i { margin-top: 4px; font: 400 13px/1 var(--px); font-style: normal; letter-spacing: 2px; color: var(--muted); animation: blink 0.9s steps(2) infinite; }
+.place.mini { --b: 2px; --edge: var(--cyan); top: calc(var(--safe-t) + 92px); padding: 4px 16px 6px; }
+.place.mini small { font-size: 11px; letter-spacing: 3px; }
+.place.mini b { font-size: 21px; text-shadow: 2px 0 var(--ink), -2px 0 var(--ink), 0 2px var(--ink), 0 -2px var(--ink), 0 4px #1d6fa0; color: var(--cream); }
+.place.out { animation: place-out 0.4s steps(4) forwards; }
+@keyframes place-in { from { opacity: 0; transform: translate(-50%, -14px) scale(1.15); } to { opacity: 1; transform: translate(-50%, 0) scale(1); } }
+@keyframes place-out { to { opacity: 0; transform: translate(-50%, -10px); } }
+/* aerial intro: the HUD steps away so the city can show off, then slides back in for the countdown */
+.hud > *:not(#place):not(#countdown) { transition: opacity 0.35s steps(4), transform 0.35s steps(4); }
+body.intro .hud > *:not(#place):not(#countdown) { opacity: 0; }
+body.intro .hud-top, body.intro .minimap { transform: translateY(-24px); }
+body.intro .cluster { transform: translate(-50%, 24px); }
+body.intro #controls .zone-hint { opacity: 0; }
 
 /* ---------- controls ---------- */
 .controls { position: absolute; z-index: 2; left: 14px; right: 14px; bottom: var(--safe-b); display: flex; justify-content: space-between; align-items: center; pointer-events: none; }

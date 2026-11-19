@@ -12,6 +12,7 @@ export function challengeUrl(seed, result) {
   u.search = ''; u.hash = '';
   u.searchParams.set('seed', seed);
   u.searchParams.set('c', `${result.timeMs}.${result.points}`);
+  if (Number.isInteger(result.spawn)) u.searchParams.set('sp', String(result.spawn));
   return u.toString();
 }
 function cover(ctx, img, x, y, w, h) {

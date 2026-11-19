@@ -126,7 +126,7 @@ async function labStart() {
   setButtons(); $('ep-log').textContent = ''; log(L('starting'), 'info');
   try { lab.ticket = await api('/runs/start', { method: 'POST', body: JSON.stringify({ lab: true, car: 'kaze' }) }); }
   catch (e) { log(L('refused', { err: e.message }), 'bad'); lab.state = 'idle'; setButtons(); return; }
-  lab.game = createGame(lab.ticket.seed, { car: lab.ticket.car });
+  lab.game = createGame(lab.ticket.seed, { car: lab.ticket.car, spawn: lab.ticket.spawn });
   log(L('ticket', { id: lab.ticket.runId.slice(0, 8), seed: lab.ticket.seed }), 'info');
 }
 function labSend() {

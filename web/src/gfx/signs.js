@@ -1,8 +1,14 @@
 import * as T from "../../vendor/three.js";
 
 /* One canvas atlas for every printed / neon graphic in the city: billboard ads (original fictional
-   brands), shop signs, the repair-station sign and the hillside SUNSET BAY letters. */
-export const ATLAS = { size: 1024 };
+   brands), shop signs, the repair-station sign, the hillside SUNSET BAY letters, district gate signs
+   and vertical neon blade signs. 1024 x 2048. */
+export const ATLAS = { size: 1024, height: 2048 };
+const BLADES = [["HOTEL", "#ff3d9a"], ["ARCADE", "#3df0ff"], ["RAMEN", "#ffd23f"], ["CLUB", "#c77dff"], ["BAR", "#ff6a3c"], ["KARAOKE", "#7cff9a"], ["24H", "#3df0ff"], ["NOODLE", "#ff3d6e"]];
+const GATES = [
+  ["neon", "NEON MILE", "#ff3d9a", "#3df0ff", "#140a22"], ["oldtown", "OLD TOWN", "#ffd9a0", "#e8b46a", "#3a1f14"], ["port", "THE DOCKS", "#ffc21a", "#ffffff", "#16202a"],
+  ["midtown", "BRICK ROW", "#fff4e6", "#ff6a3c", "#3a1a14"], ["north", "TECH PARK", "#9ff6ff", "#5dffb0", "#0c1a24"], ["beach", "OCEAN DRIVE", "#ff8fb8", "#7ff3ff", "#2a1240"],
+];
 const cells = {};
 const ADS = [
   { bg: ["#ff3d6e", "#ff9a3c"], title: "NEON NOODLES", sub: "OPEN ALL NIGHT", ink: "#fff" },
@@ -18,7 +24,7 @@ let texture = null, canvas = null;
 export function atlasTexture() {
   if (texture) return texture;
   canvas = document.createElement("canvas");
-  canvas.width = canvas.height = ATLAS.size;
+  canvas.width = ATLAS.size; canvas.height = ATLAS.height;
   draw();
   texture = new T.CanvasTexture(canvas);
   texture.colorSpace = T.SRGBColorSpace;
@@ -28,10 +34,10 @@ export function atlasTexture() {
 export function redrawAtlas() { if (!canvas) return; draw(); texture.needsUpdate = true; }
 export function cell(name) { atlasTexture(); return cells[name]; }
 
-function put(name, x, y, w, h) { const S = ATLAS.size; cells[name] = [x / S, 1 - (y + h) / S, (x + w) / S, 1 - y / S]; }
+function put(name, x, y, w, h) { const S = ATLAS.size, H = ATLAS.height; cells[name] = [x / S, 1 - (y + h) / H, (x + w) / S, 1 - y / H]; }
 function draw() {
   const c = canvas.getContext("2d"), S = ATLAS.size;
-  c.clearRect(0, 0, S, S);
+  c.clearRect(0, 0, S, ATLAS.height);
   const font = (px, w = 400) => `${w} ${Math.round(px * 1.15)}px "Jersey 10", "Rooyin", "Vazirmatn", monospace`;
   ADS.forEach((ad, i) => {
     const x = (i % 2) * 512, y = Math.floor(i / 2) * 256;
@@ -74,6 +80,28 @@ function draw() {
     c.fillText("SUNSET BAY", x + w / 2, y + h / 2 + 4, w - 20);
     put("hill", x, y, w, h);
   }
+  // vertical neon blade signs (letters stacked top to bottom)
+  BLADES.forEach(([text, col], i) => {
+    const x = i * 64, y = 1024, w = 64, h = 320;
+    c.fillStyle = "#0a0710"; c.fillRect(x, y, w, h);
+    c.strokeStyle = col; c.lineWidth = 4; c.strokeRect(x + 5, y + 5, w - 10, h - 10);
+    c.shadowColor = col; c.shadowBlur = 12; c.fillStyle = col; c.textAlign = "center"; c.textBaseline = "middle";
+    const n = text.length, step = Math.min(44, (h - 30) / n);
+    c.font = font(Math.min(46, step * 1.05));
+    for (let k = 0; k < n; k++) c.fillText(text[k], x + w / 2, y + 18 + step * (k + 0.5) + (h - 36 - step * n) / 2);
+    c.shadowBlur = 0;
+    put("blade" + i, x, y, w, h);
+  });
+  // district gate signs
+  GATES.forEach(([id, text, col, col2, bg], i) => {
+    const x = (i % 2) * 512, y = 1344 + Math.floor(i / 2) * 128, w = 512, h = 128;
+    c.fillStyle = bg; c.fillRect(x, y, w, h);
+    c.fillStyle = col2; c.fillRect(x, y, w, 8); c.fillRect(x, y + h - 8, w, 8);
+    for (let k = 0; k < 16; k++) { c.fillStyle = k % 2 ? col : col2; c.fillRect(x + 6 + k * 31.5, y + 14, 14, 6); c.fillRect(x + 6 + k * 31.5, y + h - 20, 14, 6); }
+    c.shadowColor = col; c.shadowBlur = 16; c.fillStyle = col; c.textAlign = "center"; c.textBaseline = "middle";
+    c.font = font(78); c.fillText(text, x + w / 2, y + h / 2 + 4, w - 40); c.shadowBlur = 0;
+    put("gate_" + id, x, y, w, h);
+  });
 }
 function wrench(c, x, y, r, col) {
   c.save(); c.translate(x, y); c.rotate(-Math.PI / 4); c.fillStyle = col;

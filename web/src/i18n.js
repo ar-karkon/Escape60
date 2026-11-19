@@ -5,7 +5,7 @@ const S = {
     title: "ESCAPE 60", tagline: "One city. 60 seconds. How long can you last?", playTag: "SUNSET BAY · 60s",
     loading: "Building Sunset Bay…", loadRoads: "Paving roads", loadTextures: "Painting streets", loadBuildings: "Raising the skyline", loadStreets: "Lane markings", loadWalls: "Guard rails & walls", loadProps: "Palms, lamps & pit stops", loadDone: "Ready",
     play: "START ESCAPE", playSub: "Lose the cops · survive · score", garage: "Garage", missions: "Missions", records: "Records", settings: "Settings", chain: "chain", mmLeft: "to escape", timeLabel: "survival time",
-    daily: "Daily route · same city for everyone", friend: "Friend challenge · same route", random: "New random route",
+    daily: "Daily route · a new start point every run", friend: "Friend challenge · same start", random: "New random route",
     online: "● Global leaderboard online", offline: "Offline · records saved on this device", checking: "Connecting…",
     cars: "Cars", paint: "Paint", effects: "Effects", race: "Start escape", back: "Back", select: "SELECT", selected: "SELECTED", locked: "LV {n}",
     statSpeed: "Speed", statAccel: "Acceleration", statHandling: "Handling", statDrift: "Drift", statNitro: "Nitro", statArmor: "Armor",
@@ -41,12 +41,14 @@ const S = {
     friendBanner: "A friend challenged you: {score} pts in {time}. Same route — beat it!", friendWon: "🏆 You beat your friend's score!", friendLost: "{n} points short of your friend — one more run!",
     left: "Steer left", right: "Steer right", brake: "BRAKE", handbrake: "DRIFT", nitro: "NITRO", brakeDrift: "BRAKE · DRIFT",
     shareText: "I survived {time} in ESCAPE 60 and scored {score} points with the {car}. Beat that! #Escape60",
+    you: "YOU", copBehind: "COP ON YOUR TAIL!", tailBanner: "⚠ PURSUIT — A COP LOCKED ON", city: "SUNSET BAY", skipIntro: "TAP TO SKIP",
+    d_downtown: "DOWNTOWN", d_beach: "OCEAN DRIVE", d_port: "THE DOCKS", d_oldtown: "OLD TOWN", d_hills: "PALM HEIGHTS", d_canyon: "RED CANYON", d_park: "LAKESIDE PARK", d_north: "TECH PARK", d_neon: "NEON MILE", d_midtown: "BRICK ROW",
   },
   fa: {
     title: "فرار ۶۰", tagline: "یک شهر. شصت ثانیه برای فرار. بعدش تا کجا دووم میاری؟", playTag: "START ESCAPE",
     loading: "در حال ساختن خلیج غروب…", loadRoads: "آسفالت خیابان‌ها", loadTextures: "رنگ‌آمیزی خیابان‌ها", loadBuildings: "بالا بردن آسمان‌خراش‌ها", loadStreets: "خط‌کشی خیابان‌ها", loadWalls: "گاردریل و دیوارها", loadProps: "نخل، چراغ و پیت‌استاپ", loadDone: "آماده",
     play: "شروع فرار", playSub: "از پلیس فرار کن · زنده بمون · امتیاز بگیر", garage: "گاراژ", missions: "مأموریت روز", records: "رکوردها", settings: "تنظیمات", chain: "زنجیره", mmLeft: "تا فرار", timeLabel: "زمان بقا",
-    daily: "مسیر روزانه · همان شهر برای همه", friend: "چالش دوستانه · همان مسیر", random: "مسیر تصادفی تازه",
+    daily: "مسیر روزانه · هر بار از یک جای شهر", friend: "چالش دوستانه · همان نقطه شروع", random: "مسیر تصادفی تازه",
     online: "● جدول جهانی آنلاین است", offline: "آفلاین · رکورد روی همین دستگاه", checking: "در حال اتصال…",
     cars: "ماشین‌ها", paint: "رنگ", effects: "افکت‌ها", race: "شروع فرار", back: "بازگشت", select: "انتخاب", selected: "انتخاب شده", locked: "سطح {n}",
     statSpeed: "سرعت", statAccel: "شتاب", statHandling: "کنترل", statDrift: "دریفت", statNitro: "نیترو", statArmor: "استحکام",
@@ -82,6 +84,8 @@ const S = {
     friendBanner: "دوستت به چالشت کشیده: {score} امتیاز در {time}. همین مسیر — بزنش!", friendWon: "🏆 امتیاز دوستت رو زدی!", friendLost: "{n} امتیاز تا رکورد دوستت — یک دور دیگه!",
     left: "فرمان چپ", right: "فرمان راست", brake: "ترمز", handbrake: "دریفت", nitro: "نیترو", brakeDrift: "ترمز · دریفت",
     shareText: "در فرار ۶۰ با {car} {time} دوام آوردم و {score} امتیاز گرفتم. بزنش! #Escape60",
+    you: "تو", copBehind: "پلیس پشت سرته!", tailBanner: "⚠ تعقیب — پلیس روت قفل کرده", city: "خلیج غروب", skipIntro: "برای رد شدن بزن",
+    d_downtown: "مرکز شهر", d_beach: "بلوار ساحلی", d_port: "اسکله", d_oldtown: "شهر قدیم", d_hills: "تپه‌های نخل", d_canyon: "دره سرخ", d_park: "پارک دریاچه", d_north: "شهرک فناوری", d_neon: "راسته نئون", d_midtown: "محله آجری",
   },
 };
 const KEY = "escape60-lang";

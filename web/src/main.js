@@ -1,4 +1,4 @@
-import { createGame, stepGame, gameResult, encodeTrace, encodeInput, comboMult, TICK_RATE, MILESTONE_TICKS, SIM_VERSION, COMBO_WINDOW, REPAIRS } from './simulation.js';
+import { createGame, stepGame, gameResult, encodeTrace, encodeInput, comboMult, TICK_RATE, MILESTONE_TICKS, SIM_VERSION, COMBO_WINDOW, REPAIRS, SPAWN_COUNT } from './simulation.js';
 import { createRenderer } from './render.js';
 import { AudioEngine, gearOf } from './audio.js';
 import { hydrateIcons, iconSVG } from './ui/icons.js';
@@ -6,17 +6,21 @@ import { redrawAtlas } from './gfx/signs.js';
 import { loadProfile, saveProfile, applyRun, xpForLevel, missionInfo, parseChallenge, beats, carUnlocked, carLook } from './meta.js';
 import { CARS, carById, ratings, PAINTS, LIVERIES } from './cars.js';
 import { EFFECTS, ACCENTS } from './gfx/effects.js';
-import { stations, sample, pointAt, edges } from './map.js';
+import { stations, sample, pointAt, edges, district, DISTRICTS } from './map.js';
 import { t, num, applyI18n, setLang, getLang } from './i18n.js';
 import * as api from './api.js';
 import { createMinimap } from './ui/minimap.js';
+import { createThreats } from './ui/threats.js';
 
 const $ = (id) => document.getElementById(id);
 const VERSION = 'v3.4';
+/** Seconds of aerial intro + countdown before you get control (skippable with any input). */
+const INTRO = 4.8;
 hydrateIcons();
 applyI18n();
 const canvas = $('game'), render = createRenderer(canvas);
 const minimap = createMinimap($('minimap'));
+const threats = createThreats($('threats'), render);
 const audio = new AudioEngine();
 const touch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
 document.body.classList.toggle('no-touch', !touch);
@@ -66,11 +70,12 @@ applyLook();
 /* ---------- views ---------- */
 function setView(name) {
   view = name;
+  if (name !== 'game') document.body.classList.remove('intro');
   document.body.dataset.view = name;
   for (const id of ['loading', 'home', 'garage', 'results', 'hud']) $(id).classList.toggle('hidden', id !== name && !(id === 'hud' && name === 'game'));
   $('controls').classList.toggle('hidden', name !== 'game');
   $('pause').classList.add('hidden');
-  if (name === 'home') { renderHome(); audio.setMode('menu'); }
+  if (name === 'home') { renderHome(); audio.setMode('menu'); prefetchRival(); }
   if (name === 'garage') { renderGarage(); audio.setMode('menu'); }
   if (name === 'results') audio.setMode('results');
 }
@@ -97,7 +102,7 @@ function renderHome() {
 
 /* ---------- online ---------- */
 async function checkOnline() {
-  try { const res = await api.today(); online = !!res.seed; $('online-state').textContent = t('online'); $('online-state').className = 'status online'; }
+  try { const res = await api.today(); online = !!res.seed; $('online-state').textContent = t('online'); $('online-state').className = 'status online'; if (online && !nextRival) prefetchRival(); }
   catch { online = false; $('online-state').textContent = t('offline'); $('online-state').className = 'status'; }
 }
 checkOnline();
@@ -276,8 +281,20 @@ function sendLive() {
     else if (lv.fails > 2) $('live').classList.add('hidden');
   }).finally(() => { lv.inflight = null; });
 }
+/** Who should race you: a friend's shared run, else the run just above your best (the edge decides). */
+function rivalQuery() {
+  const best = persisted[seed], friend = challengeRun && seed === initialSeed ? challengeRun : null;
+  return friend ? { id: friend } : { points: best ? best.points : null, not: best?.id };
+}
+/** Fetch the next rival ahead of time, so the next run can start where the rival started. */
+let nextRival = null, rivalAsk = 0;
+function prefetchRival() {
+  if (!online) return;
+  const ask = ++rivalAsk, forSeed = seed;
+  api.rival(seed, rivalQuery()).then(({ rival }) => { if (ask === rivalAsk && forSeed === seed) nextRival = rival?.trace?.length ? { ...rival, forSeed } : null; }).catch(() => {});
+}
 function setGhost(rv) {
-  ghost = { info: rv, game: createGame(seed, { car: rv.car }), item: 0, used: 0, out: false, beaten: false, endTick: 0 };
+  ghost = { info: rv, game: createGame(seed, { car: rv.car, spawn: rv.spawn }), item: 0, used: 0, out: false, beaten: false, endTick: 0 };
   render.setGhost(rv.car);
   $('ghost-name').textContent = rv.self ? t('rivalSelf') : `${rv.label} · #${rv.rank}`;
   $('rival-name').textContent = rv.self ? t('rivalSelf') : rv.label;
@@ -307,14 +324,31 @@ function placeGhostTag(gp) {
   el.classList.remove('hidden');
   el.style.transform = `translate(${Math.round(sx * canvas.clientWidth)}px, ${Math.round(sy * canvas.clientHeight)}px) translate(-50%, -100%)`;
 }
+/* ---------- pursuit reveal (the renderer calls this when a cop first locks onto your tail) ---------- */
+render.onReveal = () => { if (view !== 'game') return; banner(t('tailBanner'), '', 1900); audio.sirenWhoop(); audio.duckMusic(0.5, 900); vibrate(35); };
 
 /* ---------- run flow ---------- */
+/** Every run starts somewhere new in the city (a friend challenge starts where the friend did). */
+let lastSpawn = -1;
+const fixedSpawn = qs.has('capture') && /^\d{1,3}$/.test(qs.get('spawn') || '') ? Number(qs.get('spawn')) : null;
+function pickSpawn() {
+  if (fixedSpawn !== null) return fixedSpawn % SPAWN_COUNT;
+  if (challenge && seed === initialSeed && Number.isInteger(challenge.spawn) && challenge.spawn < SPAWN_COUNT) return challenge.spawn;
+  if (nextRival && nextRival.forSeed === seed && Number.isInteger(nextRival.spawn) && nextRival.spawn < SPAWN_COUNT) return nextRival.spawn; // race the ghost from its own start
+  let k = Math.floor(Math.random() * SPAWN_COUNT);
+  if (k === lastSpawn) k = (k + 1 + Math.floor(Math.random() * (SPAWN_COUNT - 1))) % SPAWN_COUNT;
+  return (lastSpawn = k);
+}
 function begin() {
   if (!ready) return;
   audio.unlock();
   applyLook();
-  game = createGame(seed, { car: profile.car });
-  trace = []; paused = false; finishQueued = false; input.nitroLatch = false; input.brake = false; lastEvent = -1; runTicket = null; countdown = 3; countStep = -1; acc = 0;
+  const spawn = pickSpawn();
+  game = createGame(seed, { car: profile.car, spawn });
+  trace = []; paused = false; finishQueued = false; input.nitroLatch = false; input.brake = false; lastEvent = -1; runTicket = null; countdown = INTRO; countStep = -1; acc = 0;
+  $('countdown').classList.add('hidden');
+  placeId = district(game.player.x, game.player.y); placeCand = placeId; placeT = 0; introWhoosh = false;
+  showPlace(placeId, true);
   shownHp = 100; trailHp = 100; trailHold = 0; shownMult = 1; shownHeat = 0; lastSecond = -1; msTimer = 0;
   bestPassed = !persisted[seed]; targetPassed = !challenge || seed !== initialSeed;
   pops.textContent = ''; $('banner').classList.add('hidden'); $('milestone').classList.add('hidden');
@@ -323,21 +357,41 @@ function begin() {
   updateHud(0);
   resetEdgeHud();
   live = { checkpoint: null, inflight: null, sent: 0, every: 300, expect: new Map(), fails: 0, rank: null };
+  const pre = nextRival; nextRival = null;
+  if (pre && pre.forSeed === seed && pre.spawn === game.spawn) setGhost(pre);
   if (online) {
     const started = game;
-    api.startRun(seed, profile.car).then((r) => { if (game === started && !finishQueued) { runTicket = r; live.every = r.live?.every || 300; renderLive('sync'); } }).catch(() => {});
-    const best = persisted[seed], friend = challengeRun && seed === initialSeed ? challengeRun : null;
-    api.rival(seed, friend ? { id: friend } : { points: best ? best.points : null, not: best?.id }).then(({ rival }) => { if (game === started && !finishQueued && rival?.trace?.length) setGhost(rival); }).catch(() => {});
+    api.startRun(seed, profile.car, spawn).then((r) => { if (game === started && !finishQueued) { runTicket = r; live.every = r.live?.every || 300; renderLive('sync'); } }).catch(() => {});
+    // no rival prefetched for this start: ask the edge for one that started here too
+    if (!ghost) api.rival(seed, { ...rivalQuery(), spawn }).then(({ rival }) => { if (game === started && !finishQueued && !ghost && rival?.trace?.length && rival.spawn === game.spawn) setGhost(rival); }).catch(() => {});
   }
   audio.nextChaseTrack(); audio.setMode('chase');
   if (profile.runs < 3) { const h = $('howto'); h.innerHTML = `<b>${t('howTo')}</b><br>${touch ? t('howTouch') : t('howKeys')}<br>${t('howGoal')}`; h.classList.remove('hidden'); clearTimeout(howtoTimer); howtoTimer = setTimeout(() => h.classList.add('hidden'), 6500); }
   last = performance.now();
 }
 function skipCountdown() { if (countdown > 0.6) countdown = 0.6; }
+/* ---------- location card: the district you start in (big, during the intro) or drive into ---------- */
+let placeId = -1, placeCand = -1, placeT = 0, placeTimer = 0, introWhoosh = false;
+function showPlace(id, intro = false) {
+  const el = $('place');
+  el.innerHTML = `<small>${t('city')}</small><b>${t('d_' + DISTRICTS[id])}</b>${intro ? `<i>${t('skipIntro')}</i>` : ''}`;
+  el.className = 'place' + (intro ? ' intro' : ' mini');
+  clearTimeout(placeTimer);
+  if (!intro) placeTimer = setTimeout(() => el.classList.add('out'), 2300);
+}
+function hidePlace() { const el = $('place'); if (!el.classList.contains('hidden') && !el.classList.contains('out')) el.classList.add('out'); }
+function trackPlace(dt) {
+  const p = game.player, id = district(p.x, p.y);
+  if (id === placeId) { placeCand = id; placeT = 0; return; }
+  if (id !== placeCand) { placeCand = id; placeT = 0; return; }
+  placeT += dt;
+  if (placeT > 0.8) { placeId = id; showPlace(id); }
+}
 function showCount(step) {
   if (step === countStep) return;
   countStep = step;
   const el = $('countdown');
+  if (step < 0) { el.classList.add('hidden'); return; }
   el.classList.remove('hidden');
   if (step < 3) { el.innerHTML = `<b>${3 - step}</b>`; audio.play('beep', { gain: 0.8 }); }
   else { el.innerHTML = `<b class="go">${t('go')}</b>`; audio.play('go'); setTimeout(() => { if (countStep === 3) el.classList.add('hidden'); }, 650); }
@@ -465,6 +519,7 @@ function finish() {
       $('rank').textContent = txt;
       if (x.share) lastShareUrl = new URL(x.share, location.href).href;
       if (x.id && persisted[seed] && persisted[seed].points === r.points) { persisted[seed].id = x.id; try { localStorage.setItem('escape60-bests-' + SIM_VERSION, JSON.stringify(persisted)); } catch {} }
+      prefetchRival(); // the next retry races the run just above this one, from its start
     }).catch(() => { if (game === finished) $('rank').textContent = t('rankFail'); });
   }
 }
@@ -479,15 +534,19 @@ function frame(now) {
   if (!paused && !frozen && game?.state === 'playing' && view === 'game') {
     if (countdown > 0) {
       countdown -= dt;
-      showCount(countdown > 2 ? 0 : countdown > 1 ? 1 : countdown > 0 ? 2 : 3);
+      showCount(countdown > 3 ? -1 : countdown > 2 ? 0 : countdown > 1 ? 1 : countdown > 0 ? 2 : 3);
+      document.body.classList.toggle('intro', countdown > 3);
+      if (countdown < 2.6) hidePlace();
+      if (!introWhoosh && countdown < INTRO - 1.1) { introWhoosh = true; audio.play('whoosh', { gain: 0.55, rate: 0.55 }); }
       acc = 0;
     } else {
-      if (countStep < 3) showCount(3);
+      if (countStep < 3) { showCount(3); hidePlace(); document.body.classList.remove('intro'); }
       acc = Math.min(acc + dt * render.timeScale, 0.25);
       let steps = 0;
       while (acc >= 1 / TICK_RATE && steps < 15) { tick(); acc -= 1 / TICK_RATE; steps++; }
     }
     if (game && game.ticks % 2 === 0) updateHud(dt);
+    if (game && countdown <= 0 && game.state === 'playing') trackPlace(dt);
   }
   // audio mix
   const p = game?.player, playing = game?.state === 'playing' && !paused && countdown <= 0 && view === 'game';
@@ -505,8 +564,9 @@ function frame(now) {
   const gp = view === 'game' ? ghostPose() : null;
   if (game && view === 'game') minimap.draw(game, now, gp && gp.fade > 0.1 ? gp : null);
   const mode = view === 'garage' ? 'garage' : view === 'game' || view === 'results' ? 'game' : 'menu';
-  render.frame(view === 'game' || view === 'results' ? game : null, now, { mode, alpha: acc * TICK_RATE, countdown: Math.max(0, countdown), reduced: settings.motion, shakeOn: settings.shake, ghost: gp });
+  render.frame(view === 'game' || view === 'results' ? game : null, now, { mode, alpha: acc * TICK_RATE, countdown: Math.max(0, countdown), introTotal: INTRO, reduced: settings.motion, shakeOn: settings.shake, ghost: gp });
   placeGhostTag(gp);
+  threats.draw(game, now, { active: view === 'game' && !paused, reduced: settings.motion, tail: t('copBehind'), you: t('you') });
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
@@ -533,7 +593,7 @@ button('home-button', () => { game = null; applyLook(); setView('home'); });
 button('resume', () => togglePause(false));
 button('pause-btn', () => togglePause(true));
 button('restart', () => { togglePause(false); begin(); });
-button('quit', () => { paused = false; game = null; audio.pause(false); applyLook(); setView('home'); });
+button('quit', () => { paused = false; game = null; audio.pause(false); applyLook(); setView('home'); $('place').className = 'place hidden'; });
 button('pause-settings', () => openSettings());
 button('settings-open', () => openSettings());
 button('close-config', () => $('config').close());

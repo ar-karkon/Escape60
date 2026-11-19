@@ -55,7 +55,7 @@ Rehearsed (2026-11-19) against a local fake S3 + edge that re-verifies every sig
 1. `npm run check && npm run build` → `dist/web/` (flat files for the edge proxy plus an `assets/` tree for ordinary static hosts, hashed `app-*.js`, `style-*.css`) and `dist/edge/worker.js`.
 2. Upload changed flat files from `dist/web/` to `escape60-game` (public toggle on) — including `edge.html` and every `.br` / `.gz` copy. `index.html` last.
 3. Edge → escape60 → ویرایش کد → replace with `dist/edge/worker.js` → انتشار.
-4. Verify: `/api/v1/health` (version 2.0.0, storage), a full verified run through `npm run test:browser` with `GAME_URL=<live url> CHROME_BIN=/usr/bin/google-chrome`.
+4. Verify: `/api/v1/health` (version 2.1.0, API 3.1.0, storage), a full verified run through `npm run test:browser` with `GAME_URL=<live url> CHROME_BIN=/usr/bin/google-chrome`.
 5. Any simulation change: bump `SIM_VERSION`; the edge replays with the bundled copy of the same `simulation.js`.
 
 ## Verified on the live edge (2026-11-19, v2.3 — re-verify after deploying v3.0)

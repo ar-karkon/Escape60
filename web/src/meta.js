@@ -78,12 +78,13 @@ export function applyRun(p, r) {
   return { gained, levelUp: p.level > before, level: p.level, unlocks, completed, streak: p.streak.days, streakUp };
 }
 
-/** Friend challenge carried in the link: ?seed=…&c=<timeMs>.<points>. Unverified by design. */
+/** Friend challenge carried in the link: ?seed=…&c=<timeMs>.<points>&sp=<start>. Unverified by design. */
 export function parseChallenge(qs) {
   const c = qs.get('c');
   if (!c || !/^\d{1,6}\.\d{1,7}$/.test(c)) return null;
   const [t, pts] = c.split('.').map(Number);
   if (t > 600000) return null;
-  return { timeMs: t, points: pts };
+  const sp = qs.get('sp');
+  return { timeMs: t, points: pts, spawn: sp && /^\d{1,3}$/.test(sp) ? Number(sp) : null };
 }
 export function beats(r, target) { return r.points > target.points || (r.points === target.points && r.timeMs > target.timeMs); }

@@ -1,13 +1,13 @@
 /* Dev tool: rasterise the shared world map (field, water, pads, stations) to a PNG. */
 import { writeFileSync } from 'node:fs';
 import { deflateSync } from 'node:zlib';
-import { BOUNDS, sample, water, nodes, edges, stations, pads, spawnPoint, district } from '../web/src/map.js';
+import { BOUNDS, sample, water, nodes, edges, stations, pads, spawnPoint, district, SPAWN_COUNT } from '../web/src/map.js';
 const step = Number(process.argv[3] || 2), out = process.argv[2] || 'map.png';
 if (process.argv[4]) { const [a, b, c, d] = process.argv[4].split(',').map(Number); Object.assign(BOUNDS, { minX: a, minY: b, maxX: c, maxY: d }); }
 const W = Math.ceil((BOUNDS.maxX - BOUNDS.minX) / step), H = Math.ceil((BOUNDS.maxY - BOUNDS.minY) / step);
 const img = Buffer.alloc((W * 4 + 1) * H);
 const r = {};
-const DC = [[150, 150, 160], [235, 215, 170], [140, 140, 150], [200, 170, 150], [140, 175, 110], [175, 140, 110], [110, 170, 100], [160, 175, 130]];
+const DC = [[150, 150, 160], [235, 215, 170], [140, 140, 150], [200, 170, 150], [140, 175, 110], [175, 140, 110], [110, 170, 100], [160, 175, 130], [150, 110, 170], [170, 120, 100]];
 const t0 = performance.now();
 for (let j = 0; j < H; j++) {
   img[j * (W * 4 + 1)] = 0;
@@ -34,7 +34,7 @@ const dot = (x, y, col, rad = 3) => {
 };
 for (const n of nodes) dot(n.x, n.y, n.edges.length >= 3 ? [255, 210, 0] : [255, 0, 255], 2);
 for (const s of stations) dot(s.x, s.y, [0, 255, 120], 5);
-for (let k = 0; k < 6; k++) { let s; try { s = spawnPoint(k); } catch { console.log("bad spawn", k); continue; } dot(s.x, s.y, [0, 200, 255], 4); dot(s.x + s.tx * 12, s.y + s.ty * 12, [0, 200, 255], 2); }
+for (let k = 0; k < SPAWN_COUNT; k++) { let s; try { s = spawnPoint(k); } catch { console.log("bad spawn", k); continue; } dot(s.x, s.y, [0, 200, 255], 4); dot(s.x + s.tx * 12, s.y + s.ty * 12, [0, 200, 255], 2); }
 function png(w, h, data) {
   const crcT = new Int32Array(256).map((_, n) => { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; return c; });
   const crc = (b) => { let c = -1; for (const x of b) c = crcT[(c ^ x) & 255] ^ (c >>> 8); return (c ^ -1) >>> 0; };

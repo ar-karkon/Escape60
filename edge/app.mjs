@@ -2,7 +2,7 @@
    the local Node dev server. Every rank, rival and share card is decided here; nothing trusts a
    score, a time or a position sent by the browser.
 
-   - Run tickets: stateless HMAC tokens binding run id, route (seed), car and issue time.
+   - Run tickets: stateless HMAC tokens binding run id, route (seed), car, start position and issue time.
    - Live referee: while you drive, the browser streams its input trace (~5 s of inputs, a few
      hundred bytes) and the edge re-simulates those ticks with the same 60 Hz simulation, checks
      that inputs arrive no faster than real time, and answers with the authoritative score and
@@ -15,7 +15,7 @@
    - Share cards: a pixel-art PNG of a verified run, drawn and encoded on the edge, plus /r/<id>
      link previews (Open Graph) that open the game on the same route with a verified target.
    - Percentile, daily stats and edge telemetry for the /edge dashboard. */
-import { createGame, gameResult, replayChunk, advanceTrace, tracePrefix, restoreGame, snapshotGame, traceTicks, compareResult, hashSeed, stepGame, encodeInput, SIM_VERSION, MAX_TICKS, TICK_RATE } from '../web/src/simulation.js';
+import { createGame, gameResult, replayChunk, advanceTrace, tracePrefix, restoreGame, snapshotGame, traceTicks, compareResult, hashSeed, spawnIndex, stepGame, encodeInput, SIM_VERSION, MAX_TICKS, TICK_RATE } from '../web/src/simulation.js';
 import { CARS, carById } from '../web/src/cars.js';
 import { drawCard } from './card.mjs';
 import { createMetrics } from './metrics.mjs';
@@ -143,13 +143,13 @@ export function createApp({ env = {}, store, now = () => Date.now(), log = () =>
       if (!(await macOk(ckText(ticket.r, await prefixHash(b.trace, c.t), c), c.sig))) throw bad(401, 'Invalid checkpoint', 'checkpoint');
       let game;
       try { game = restoreGame(c.state); } catch { throw bad(400, 'Invalid checkpoint', 'checkpoint'); }
-      if (game.seed !== ticket.s || game.car !== ticket.c || game.ticks !== c.t) throw bad(401, 'Invalid checkpoint', 'checkpoint');
+      if (game.seed !== ticket.s || game.car !== ticket.c || game.spawn !== ticket.p || game.ticks !== c.t) throw bad(401, 'Invalid checkpoint', 'checkpoint');
       if (total - c.seen > ((t - c.at) / 1000) * TICK_RATE * PACE + PACE_SLACK_TICKS) throw bad(422, 'Inputs arrived faster than real time', 'pacing');
       return { game, ms: c.ms, n: c.n };
     }
     if (!ticket.l && (await store.get(runKey(ticket)))) throw bad(409, 'Run already submitted', 'replayed');
     if (total > ((t - ticket.t) / 1000) * TICK_RATE * PACE + PACE_SLACK_TICKS) throw bad(422, 'Inputs arrived faster than real time', 'pacing');
-    return { game: createGame(ticket.s, { car: ticket.c }), ms: 0, n: 0 };
+    return { game: createGame(ticket.s, { car: ticket.c, spawn: ticket.p }), ms: 0, n: 0 };
   }
   const runKey = (ticket) => `runs/${SIM_VERSION}/${dayOf(ticket.t)}/${ticket.r}.json`;
   function replayWith(fn, game, trace) {
@@ -172,10 +172,11 @@ export function createApp({ env = {}, store, now = () => Date.now(), log = () =>
     const t = now(), lab = b.lab === true, seed = lab ? 'edge-lab' : b.seed || `daily-${dayOf(t)}`;
     if (!seedValid(seed)) throw bad(400, 'Invalid seed', 'seed');
     const car = CARS.some((c) => c.id === b.car) ? b.car : CARS[0].id;
+    const spawn = spawnIndex(seed, b.spawn);
     const runId = crypto.randomUUID();
-    const token = await sign({ r: runId, s: seed, c: car, t, v: SIM_VERSION, ...(lab ? { l: 1 } : {}) });
+    const token = await sign({ r: runId, s: seed, c: car, p: spawn, t, v: SIM_VERSION, ...(lab ? { l: 1 } : {}) });
     metrics.add(lab ? 'labStarts' : 'starts');
-    return json({ runId, token, seed, car, issuedAt: t, version: SIM_VERSION, live: { every: chunkTicks } });
+    return json({ runId, token, seed, car, spawn, issuedAt: t, version: SIM_VERSION, live: { every: chunkTicks } });
   }
   /** Live referee: replay the newest inputs while the run is still being driven. */
   async function live(req, ip) {
@@ -204,17 +205,17 @@ export function createApp({ env = {}, store, now = () => Date.now(), log = () =>
       return json({ continue: true, progress: complete ? 100 : Math.round((100 * game.ticks) / total), checkpoint: await checkpoint(ticket.r, b.trace, game, r.ms + cpu, total, r.n) }, 202);
     }
     const result = gameResult(game), c = b.result;
-    if (c.version !== SIM_VERSION || c.seed !== ticket.s || c.car !== ticket.c || c.timeMs !== result.timeMs || c.points !== result.points || c.health !== result.health || c.end !== result.end) throw bad(422, 'Result does not match authoritative replay', 'mismatch');
+    if (c.version !== SIM_VERSION || c.seed !== ticket.s || c.car !== ticket.c || c.spawn !== result.spawn || c.timeMs !== result.timeMs || c.points !== result.points || c.health !== result.health || c.end !== result.end) throw bad(422, 'Result does not match authoritative replay', 'mismatch');
     if (now() - ticket.t < result.timeMs * minPlayRatio) throw bad(422, 'Run finished too quickly', 'pacing');
     if (ticket.l) { metrics.add('labRuns'); return json({ accepted: true, lab: true, stored: false, result, verifyMs, ticks: game.ticks, live: r.n, verification: 'edge-replay-v4' }); }
     const date = dayOf(ticket.t), at = now(), label = callsign(ticket.r), id = ticket.r.replace(/-/g, '').slice(0, 12);
-    const record = { runId: ticket.r, id, seed: ticket.s, car: ticket.c, date, at, result, verifyMs, live: r.n, label };
+    const record = { runId: ticket.r, id, seed: ticket.s, car: ticket.c, spawn: ticket.p, date, at, result, verifyMs, live: r.n, label };
     if (!(await store.put(runKey(ticket), JSON.stringify(record), { ifNoneMatch: '*' }))) throw bad(409, 'Run already submitted', 'replayed');
-    const entry = { id, timeMs: result.timeMs, points: result.points, car: ticket.c, label, at, g: 1 };
+    const entry = { id, timeMs: result.timeMs, points: result.points, car: ticket.c, p: ticket.p, label, at, g: 1 };
     const rows = await update(`leaderboard/${SIM_VERSION}/${ticket.s}.json`, (list = []) => { const next = list.filter((e) => e.id !== entry.id); next.push(entry); next.sort((a, x) => compareResult(a, x) || a.at - x.at); return next.slice(0, 100); });
     boards.delete(ticket.s);
     const idx = rows.findIndex((e) => e.id === id), rank = idx >= 0 ? idx + 1 : null;
-    const doc = { id, seed: ticket.s, car: ticket.c, label, result, trace: b.trace, at, live: r.n, verifyMs, rank, of: rows.length };
+    const doc = { id, seed: ticket.s, car: ticket.c, spawn: ticket.p, label, result, trace: b.trace, at, live: r.n, verifyMs, rank, of: rows.length };
     const [hist] = await Promise.all([
       update(`hist/${SIM_VERSION}/${ticket.s}.json`, (h = { n: 0, b: {} }) => { const k = histBin(result.points); h.n++; h.b[k] = (h.b[k] || 0) + 1; return h; }).catch(() => null),
       store.put(`runs-by-id/${SIM_VERSION}/${id}.json`, JSON.stringify(doc)),
@@ -234,7 +235,9 @@ export function createApp({ env = {}, store, now = () => Date.now(), log = () =>
     const rows = await boardRows(seed);
     return json({ seed, total: rows.length, entries: rows.slice(0, limit).map((e, i) => ({ rank: i + 1, timeMs: e.timeMs, points: e.points, car: e.car, label: e.label, ghost: !!e.g })), verified: true }, 200, { 'Cache-Control': 'public, max-age=5' });
   }
-  /** The edge picks your rival: the verified run just above your best (or a mid-table run). */
+  const rivalOf = (doc, extra = {}) => ({ id: doc.id, rank: doc.rank, of: doc.of, label: doc.label, car: doc.car, spawn: doc.spawn, points: doc.result.points, timeMs: doc.result.timeMs, end: doc.result.end, trace: doc.trace, ...extra });
+  /** The edge picks your rival: the verified run just above your best (or a mid-table run).
+      With `spawn`, only runs that started at that position qualify (the ghost must start with you). */
   async function rival(url) {
     const seed = url.searchParams.get('seed') || `daily-${dayOf(now())}`;
     if (!seedValid(seed)) throw bad(400, 'Invalid seed', 'seed');
@@ -243,12 +246,13 @@ export function createApp({ env = {}, store, now = () => Date.now(), log = () =>
     const want = url.searchParams.get('id'); // a friend's shared run (from /r/<id>) races you as the ghost
     if (idValid(want)) {
       const doc = await runDoc(want);
-      if (doc && doc.seed === seed) { metrics.add('rivals'); return json({ rival: { id: doc.id, rank: doc.rank, of: doc.of, label: doc.label, car: doc.car, points: doc.result.points, timeMs: doc.result.timeMs, end: doc.result.end, trace: doc.trace, friend: true } }, 200, { 'Cache-Control': 'public, max-age=300' }); }
+      if (doc && doc.seed === seed) { metrics.add('rivals'); return json({ rival: rivalOf(doc, { friend: true }) }, 200, { 'Cache-Control': 'public, max-age=300' }); }
     }
-    const rows = all.filter((e) => e.g && e.id !== not);
+    const at = url.searchParams.has('spawn') ? Number(url.searchParams.get('spawn')) : null;
+    const rows = all.filter((e) => e.g && e.id !== not && (at === null || e.p === at));
     if (!rows.length) { // nobody else yet: race your own best run
       const own = idValid(not) ? await runDoc(not) : null;
-      if (own && own.seed === seed) { metrics.add('rivals'); return json({ rival: { id: own.id, rank: own.rank, of: own.of, label: own.label, car: own.car, points: own.result.points, timeMs: own.result.timeMs, end: own.result.end, trace: own.trace, self: true } }); }
+      if (own && own.seed === seed && (at === null || own.spawn === at)) { metrics.add('rivals'); return json({ rival: rivalOf(own, { self: true }) }); }
       return json({ rival: null }, 200, { 'Cache-Control': 'public, max-age=10' });
     }
     let pick;
@@ -257,7 +261,7 @@ export function createApp({ env = {}, store, now = () => Date.now(), log = () =>
     const doc = await runDoc(pick.id);
     if (!doc) return json({ rival: null });
     metrics.add('rivals');
-    return json({ rival: { id: doc.id, rank: all.indexOf(pick) + 1, of: all.length, label: doc.label, car: doc.car, points: doc.result.points, timeMs: doc.result.timeMs, end: doc.result.end, trace: doc.trace } }, 200, { 'Cache-Control': 'public, max-age=20' });
+    return json({ rival: rivalOf(doc, { rank: all.indexOf(pick) + 1, of: all.length }) }, 200, { 'Cache-Control': 'public, max-age=20' });
   }
   async function card(id) {
     const doc = await runDoc(id);
@@ -278,7 +282,7 @@ export function createApp({ env = {}, store, now = () => Date.now(), log = () =>
 <meta property="og:type" content="website"><meta property="og:title" content="${esc(title)}"><meta property="og:description" content="${esc(desc)}">
 <meta property="og:image" content="${esc(img)}"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="628">
 <meta property="og:url" content="${esc(`${url.origin}/r/${id}`)}"><meta name="twitter:card" content="summary_large_image"><meta name="twitter:image" content="${esc(img)}">
-<script>history.replaceState(null,"","/?seed=${doc.seed}&c=${r.timeMs}.${r.points}&r=${id}")</script>`;
+<script>history.replaceState(null,"","/?seed=${doc.seed}&c=${r.timeMs}.${r.points}${Number.isInteger(doc.spawn) ? `&sp=${doc.spawn}` : ''}&r=${id}")</script>`;
     let html = await loadIndex();
     html = html.replace(/<meta (property="og:[^"]*"|name="twitter:[^"]*")[^>]*>\s*/g, '').replace(/<head>/i, `<head>\n${head}`);
     metrics.add('previews');

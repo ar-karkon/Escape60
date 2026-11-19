@@ -6,7 +6,7 @@ import * as T from "../../vendor/three.js";
    U.uNight; neon is always on. */
 export const U = {
   uTime: { value: 0 }, uNight: { value: 0.3 }, uHead: { value: 1 }, uWet: { value: 0.3 },
-  uField: { value: null }, uZone: { value: null }, uFieldMin: { value: new T.Vector2() }, uFieldSize: { value: new T.Vector2(1, 1) },
+  uField: { value: null }, uZone: { value: null }, uZone2: { value: null }, uFieldMin: { value: new T.Vector2() }, uFieldSize: { value: new T.Vector2(1, 1) },
   uSkyTop: { value: new T.Color() }, uSkyHorizon: { value: new T.Color() }, uSunDir: { value: new T.Vector3(0, 1, 0) }, uSunColor: { value: new T.Color() },
   uFogColor: { value: new T.Color() },
 };
@@ -109,33 +109,80 @@ export function kitMaterial(opts = {}) {
 
 /** Building facades: procedural windows / storefronts. aFac = (u, v metres, floor height, window width),
  *  aBld = (style, seed, lit probability, glass). style: 0 glass tower, 1 office, 2 apartment, 3 shop,
- *  4 warehouse, 5 house, 6 hotel, 7 roof/plain. */
+ *  4 warehouse (corrugated), 5 house, 6 deco hotel, 7 roof/plain, 8 brick (arched windows, Brick Row),
+ *  9 stucco with shutters (Old Town), 10 villa (big glass), 11 neon block (Neon Mile, always glowing),
+ *  12 tech ribbon windows (Tech Park). */
 export function facadeMaterial() {
   const mat = new T.MeshStandardMaterial({ vertexColors: true, roughness: 0.85, metalness: 0, envMapIntensity: 1 });
   patch(mat, {
     vertexHead: `attribute vec4 aFac; attribute vec4 aBld; varying vec4 vFac; varying vec4 vBld;`,
     vertexBody: `vFac = aFac; vBld = aBld;`,
-    fragHead: `varying vec4 vFac; varying vec4 vBld; float winMask; float glassF; vec3 winEm;`,
+    fragHead: `varying vec4 vFac; varying vec4 vBld; float winMask; float glassF; vec3 winEm; vec3 neonEm;
+      vec3 pal(float i){ i = mod(i, 4.); return i < 1. ? vec3(1., .18, .55) : i < 2. ? vec3(.15, .9, 1.) : i < 3. ? vec3(.75, .35, 1.) : vec3(1., .78, .25); }`,
     fragColor: `{
       float style = floor(vBld.x + 0.5), seed = floor(vBld.y + 0.5); // integers: interpolation noise must not reach the hash
       vec2 cell = vec2(max(vFac.w, 0.5), max(vFac.z, 0.5));
       vec2 id = floor(vFac.xy / cell), q = fract(vFac.xy / cell);
-      winMask = 0.; glassF = 0.; winEm = vec3(0.);
+      winMask = 0.; glassF = 0.; winEm = vec3(0.); neonEm = vec3(0.);
       float rnd = h21(id + seed * 13.1);
-      if (style < 6.5 && vFac.y > -0.5) {
-        vec2 fr = style < 0.5 ? vec2(0.06, 0.08) : style < 1.5 ? vec2(0.12, 0.28) : style < 2.5 ? vec2(0.22, 0.26) : style < 3.5 ? vec2(0.16, 0.24) : style < 4.5 ? vec2(0.3, 0.35) : style < 5.5 ? vec2(0.3, 0.3) : vec2(0.2, 0.22);
+      bool wall = vFac.y > -0.5 && (style < 6.5 || style > 7.5);
+      if (wall) {
+        vec2 fr = style < 0.5 ? vec2(0.06, 0.08) : style < 1.5 ? vec2(0.12, 0.28) : style < 2.5 ? vec2(0.22, 0.26) : style < 3.5 ? vec2(0.16, 0.24)
+          : style < 4.5 ? vec2(0.3, 0.35) : style < 5.5 ? vec2(0.3, 0.3) : style < 6.5 ? vec2(0.2, 0.22) : style < 8.5 ? vec2(0.3, 0.2)
+          : style < 9.5 ? vec2(0.33, 0.22) : style < 10.5 ? vec2(0.05, 0.1) : style < 11.5 ? vec2(0.1, 0.2) : vec2(0.015, 0.3);
         winMask = step(fr.x, q.x) * step(q.x, 1. - fr.x) * step(fr.y, q.y) * step(q.y, 1. - fr.y);
         if (style > 3.5 && style < 4.5) winMask *= step(0.55, q.y) * step(0.6, rnd);
+        if (style > 7.5 && style < 8.5) { // arched window heads
+          float a = 0.16, cy = 1. - fr.y - a; vec2 e = vec2((q.x - 0.5) / (0.5 - fr.x), max(0., q.y - cy) / a);
+          winMask *= step(dot(e, e), 1.);
+        }
+        if (style > 9.5 && style < 10.5) winMask *= step(0.3, h21(vec2(id.x, seed + 2.)));
+        if (style > 11.5) winMask = step(0.3, q.y) * step(q.y, 0.84) * (1. - step(0.985, q.x)); // ribbon glazing
         // shop fronts on the ground floor
-        bool shopFloor = (style > 2.5 && style < 3.5 && vFac.y < cell.y) || (style > 5.5 && vFac.y < cell.y);
-        if (shopFloor) { winMask = step(0.05, q.x) * step(q.x, 0.95) * step(0.06, q.y) * step(q.y, 0.85); }
-        float lit = step(1. - vBld.z, rnd) ;
+        bool shopFloor = vFac.y < cell.y && ((style > 2.5 && style < 3.5) || (style > 5.5 && style < 6.5) || style > 7.5);
+        if (shopFloor) {
+          winMask = step(0.05, q.x) * step(q.x, 0.95) * step(0.06, q.y) * step(q.y, 0.85);
+          if (style > 8.5 && style < 9.5) { vec2 e = vec2((q.x - 0.5) / 0.4, max(0., q.y - 0.55) / 0.3); winMask = step(0.1, q.x) * step(q.x, 0.9) * step(dot(e, e), 1.) * step(0.02, q.y); }
+        }
+        float lit = step(1. - vBld.z, rnd);
         vec3 warm = mix(vec3(1., .72, .42), vec3(.65, .82, 1.), step(0.7, h21(id * 1.7 + seed)));
         winEm = winMask * warm * lit * (0.5 + 0.6 * h21(id + 3.1));
         if (shopFloor) winEm = winMask * mix(vec3(1.,.62,.38), vec3(.5,.85,1.), h21(id+seed)) * 0.55;
-        glassF = winMask * (style < 0.5 ? 1. : vBld.w);
-        vec3 glassCol = style < 0.5 ? mix(vec3(0.05, 0.12, 0.18), vec3(0.1, 0.2, 0.26), rnd) : vec3(0.05, 0.06, 0.08);
-        diffuseColor.rgb = mix(diffuseColor.rgb * (0.92 + 0.12 * h21(floor(vFac.xy * 0.5) + seed)), glassCol, winMask);
+        glassF = winMask * (style < 0.5 || style > 11.5 ? 1. : vBld.w);
+        vec3 glassCol = style < 0.5 ? mix(vec3(0.05, 0.12, 0.18), vec3(0.1, 0.2, 0.26), rnd) : style > 11.5 ? vec3(0.08, 0.16, 0.2) : vec3(0.05, 0.06, 0.08);
+        vec3 wallCol = diffuseColor.rgb * (0.92 + 0.12 * h21(floor(vFac.xy * 0.5) + seed));
+        if (style > 7.5 && style < 8.5) { // brick bond, fading out where it would shimmer
+          vec2 bp = vFac.xy / vec2(0.62, 0.27); bp.x += 0.5 * mod(floor(bp.y), 2.);
+          vec2 bf = fract(bp); float aa = clamp(1. - fwidth(bp.y) * 2.5, 0., 1.);
+          float mortar = max(1. - smoothstep(0., 0.09, bf.y), 1. - smoothstep(0., 0.05, bf.x)) * aa;
+          wallCol = diffuseColor.rgb * (0.84 + 0.3 * h21(floor(bp) + seed));
+          wallCol = mix(wallCol, vec3(0.72, 0.68, 0.62), mortar * 0.55);
+          wallCol *= 1. - 0.18 * step(mod(id.y, 4.), 0.) * step(0.9, q.y); // string course
+        }
+        if (style > 8.5 && style < 9.5) { // stucco + louvred shutters beside each window
+          wallCol = diffuseColor.rgb * (0.93 + 0.1 * vnoise(vFac.xy * 0.9 + seed));
+          float sh = (step(0.12, q.x) * step(q.x, 0.31) + step(0.69, q.x) * step(q.x, 0.88)) * step(fr.y, q.y) * step(q.y, 1. - fr.y) * step(cell.y, vFac.y);
+          vec3 shc = h21(vec2(seed, 7.)) < 0.33 ? vec3(0.16, 0.4, 0.3) : h21(vec2(seed, 7.)) < 0.66 ? vec3(0.18, 0.32, 0.55) : vec3(0.5, 0.26, 0.16);
+          shc *= 0.85 + 0.25 * step(0.5, fract(q.y * cell.y * 4.));
+          wallCol = mix(wallCol, shc, sh);
+        }
+        if (style > 3.5 && style < 4.5) { // corrugated metal
+          float aa = clamp(1. - fwidth(vFac.x) * 3., 0., 1.);
+          wallCol *= 1. - 0.12 * aa * step(0.5, fract(vFac.x * 2.6));
+        }
+        if (style > 10.5 && style < 11.5) { // neon block: dark skin, coloured light, LED slab lines
+          float ci = floor(h21(vec2(seed, 3.)) * 4.);
+          vec3 nc = pal(ci + step(0.75, rnd)), nc2 = pal(ci + 1.);
+          winEm = winMask * mix(nc, vec3(1., .8, .9), 0.35) * step(0.35, rnd) * (0.35 + 0.5 * h21(id + 5.));
+          float slab = (1. - smoothstep(0.0, 0.07, q.y)) * step(cell.y, vFac.y);
+          float fin = step(0.97, fract(vFac.x / 6.)) * step(cell.y, vFac.y);
+          neonEm = max(slab, fin) * nc2 * 1.6;
+          wallCol = mix(wallCol, vec3(0.02), max(slab, fin) * 0.8);
+          if (shopFloor) { neonEm += winMask * nc * 0.9; }
+        }
+        if (style > 11.5) wallCol = mix(wallCol, wallCol * 1.08, step(0.84, q.y));
+        if (style > 5.5 && style < 6.5) wallCol *= 1. + 0.12 * step(0.9, q.y) * step(cell.y, vFac.y); // deco eyebrow bands
+        diffuseColor.rgb = mix(wallCol, glassCol, winMask);
         // floor slab lines
         if (style < 0.5) diffuseColor.rgb *= 1. - 0.25 * step(q.y, 0.06);
       }
@@ -143,8 +190,8 @@ export function facadeMaterial() {
       diffuseColor.rgb *= 0.82 + 0.18 * smoothstep(0., 6., vFac.y);
     }`,
     fragRough: `roughnessFactor = mix(roughnessFactor, 0.08, glassF);`,
-    fragMetal: `metalnessFactor = mix(0., 0.75, glassF * step(vBld.x, 0.5)) + glassF * 0.2;`,
-    fragEmissive: `totalEmissiveRadiance += winEm * pow(uNight, 1.7) * 1.6;`,
+    fragMetal: `metalnessFactor = mix(0., 0.75, glassF * (step(vBld.x, 0.5) + step(11.5, vBld.x))) + glassF * 0.2;`,
+    fragEmissive: `totalEmissiveRadiance += winEm * pow(uNight, 1.7) * 1.6 + neonEm * (0.55 + 0.9 * uNight);`,
   });
   return mat;
 }
@@ -153,11 +200,14 @@ export function facadeMaterial() {
 export function groundMaterial() {
   const mat = new T.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9, metalness: 0, envMapIntensity: 0.32 });
   patch(mat, {
-    fragHead: `uniform sampler2D uField, uZone; uniform vec2 uFieldMin, uFieldSize; float gRough; float gWet;`,
+    fragHead: `uniform sampler2D uField, uZone, uZone2; uniform vec2 uFieldMin, uFieldSize; float gRough; float gWet;
+      float grout(vec2 g, float w, float aa){ vec2 b = abs(fract(g) - 0.5); return max(smoothstep(0.5 - w, 0.5, b.x), smoothstep(0.5 - w, 0.5, b.y)) * aa; }`,
     fragColor: `{
       vec2 fuv = (vWorld.xz - uFieldMin) / uFieldSize;
       vec4 F = texture2D(uField, fuv);
       vec4 Z = texture2D(uZone, fuv);
+      vec4 D = texture2D(uZone2, fuv); // district paving: r Old Town / Brick Row, g Neon Mile, b docks, a Ocean Drive
+      float pAA = clamp(1. - fwidth(vWorld.x) * 2.2, 0., 1.);
       float f = F.r, g = F.g, town = F.b, wat = F.a;
       if (wat > 0.5 && f > 1.6) discard;
       vec2 p = vWorld.xz;
@@ -181,6 +231,14 @@ export function groundMaterial() {
       float off = step(0., f);
       vec2 st = abs(fract(p / 1.5) - 0.5);
       vec3 walk = mix(vec3(0.62, 0.6, 0.57), vec3(0.7, 0.68, 0.64), h21(floor(p / 1.5))) * (1. - 0.18 * smoothstep(0.44, 0.5, max(st.x, st.y)));
+      { // each district paves its sidewalks differently
+        vec2 bt = p / vec2(0.6, 0.3); bt.x += 0.5 * mod(floor(bt.y), 2.);
+        vec3 warmW = mix(vec3(0.6, 0.34, 0.26), vec3(0.72, 0.47, 0.35), h21(floor(bt))) * (1. - 0.28 * grout(bt, 0.07, pAA));
+        vec3 neonW = mix(vec3(0.15, 0.13, 0.19), vec3(0.23, 0.2, 0.28), h21(floor(p / 0.9))) * (1. - 0.35 * grout(p / 0.9, 0.05, pAA));
+        vec3 portW = mix(vec3(0.5, 0.5, 0.47), vec3(0.6, 0.59, 0.55), n1) * (1. - 0.22 * grout(p / 3., 0.02, pAA));
+        vec3 beachW = mix(vec3(0.9, 0.72, 0.68), vec3(0.95, 0.84, 0.74), h21(floor(p / 0.8))) * (1. - 0.16 * grout(p / 0.8, 0.05, pAA));
+        walk = mix(walk, warmW, D.r); walk = mix(walk, neonW, D.g); walk = mix(walk, portW, D.b); walk = mix(walk, beachW, D.a);
+      }
       float sideM = town * (1. - smoothstep(0.7, 1.3, g)) * smoothstep(-aa, aa, f);
       base = mix(base, walk, sideM);
       float curbTop = town * smoothstep(-aa, aa, f) * (1. - smoothstep(0.32 - aa, 0.32 + aa, f));
@@ -200,6 +258,20 @@ export function groundMaterial() {
       float puddle = smoothstep(0.66, 0.8, fbm(p * 0.07 + 3.)) * nightWet;
       gWet = asph * (0.3 * nightWet + 0.5 * puddle);
       asphalt = mix(asphalt, asphalt * 0.7, puddle);
+      { // Old Town streets are cobbled; the Neon Mile is dark and glossy; the docks are worn concrete
+        float cob = smoothstep(0.72, 0.95, D.r);
+        if (cob > 0.01) {
+          vec2 cp = p / 0.42; cp.x += 0.5 * mod(floor(cp.y), 2.);
+          vec2 cf = fract(cp) - 0.5; float stone = 1. - smoothstep(0.28, 0.5, length(cf * vec2(1., 1.2)));
+          float caa = clamp(1. - fwidth(cp.x) * 1.8, 0., 1.);
+          vec3 cc = mix(vec3(0.3, 0.27, 0.26), vec3(0.46, 0.4, 0.35), h21(floor(cp)));
+          asphalt = mix(asphalt, mix(cc * 0.5, cc, mix(0.72, stone, caa)), cob);
+        }
+        asphalt = mix(asphalt, asphalt * 0.72, D.g);
+        gWet = max(gWet, asph * D.g * 0.45);
+        asphalt = mix(asphalt, asphalt * 1.45 + vec3(0.03), D.b * 0.55);
+      }
+      gRough = mix(gRough, 0.42, sideM * D.g);
       diffuseColor.rgb = mix(base, asphalt, asph);
       gRough = mix(gRough, mix(0.86, 0.38, gWet), asph);
     }`,

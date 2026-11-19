@@ -417,8 +417,10 @@ export function water(x, y) {
   w = Math.max(w, (1 - Math.sqrt(lx * lx + ly * ly)) * 40);
   return w;
 }
-/** District id for building style. */
-export const DISTRICTS = ['downtown', 'beach', 'port', 'oldtown', 'hills', 'canyon', 'park', 'north'];
+/** District id: each part of Sunset Bay has its own architecture, streets and name. Visual / UI only
+ * (the simulation never reads it). The downtown grid is split into the glass towers of the core,
+ * the neon entertainment strip to the east and the brick blocks to the west. */
+export const DISTRICTS = ['downtown', 'beach', 'port', 'oldtown', 'hills', 'canyon', 'park', 'north', 'neon', 'midtown'];
 export function district(x, y) {
   if (x > 780) return 2;
   if (y > 330) return 1;
@@ -427,6 +429,8 @@ export function district(x, y) {
   if (x > 400 && y < -330) return 3;
   if (y < -420 && x > -320 && x < 120) return 6;
   if (y < -380) return 7;
+  if (x > 150 + 26 * dsin(y / 95)) return 8;
+  if (x < -170 + 24 * dsin(y / 120 + 1)) return 9;
   return 0;
 }
 export const LANDMARKS = [
@@ -440,17 +444,42 @@ export const LANDMARKS = [
   { type: 'tower', x: 60, y: -150 },
 ];
 
-/** Start grid: seeds pick one. [x, y, heading]. */
-const SPAWNS = [[-300, 145, 0], [-160, 461, 0], [520, -196, 0], [-1005, 20, Math.PI / 2], [878, 60, -Math.PI / 2], [-240, -808, Math.PI]];
-export function spawnPoint(seedHash) {
-  const [x, y, a] = SPAWNS[seedHash % SPAWNS.length];
-  const r = sample(x, y, {});
-  // snap onto the right-hand lane of the nearest road and face along it
-  const pt = pointAt(r.e, r.s, {});
-  let tx = pt.tx, ty = pt.ty;
-  if (tx * dcos(a) + ty * dsin(a) < 0) { tx = -tx; ty = -ty; }
-  const lane = edges[r.e].k.laneW * 0.5;
-  return { x: pt.x - ty * lane, y: pt.y + tx * lane, tx, ty, edge: r.e };
+/** Start grid (map v2.1): every run can start anywhere in the city. One start per long, fairly straight
+ * stretch of road, at least SPAWN_GAP metres apart, on the right-hand lane, with room to get going
+ * before the next junction. Built deterministically from the road graph (arithmetic only), so the
+ * browser and the replay service agree on every index. */
+const SPAWN_GAP = 165;
+export const SPAWNS = (() => {
+  const out = [], pt = {}, a = {}, b = {}, res = {};
+  for (let ei = 0; ei < edges.length; ei++) {
+    const E = edges[ei];
+    if (E.len < 120) continue;
+    for (let s0 = 45; s0 < E.len - 75; s0 += 150) {
+      // alternate directions so starts face every way
+      const dir = (out.length + ei) % 2 === 0 ? 1 : -1;
+      const s = dir > 0 ? s0 : E.len - s0;
+      pointAt(ei, s, pt); pointAt(ei, s + dir * 55, a); pointAt(ei, s - dir * 20, b);
+      if (pt.tx * a.tx + pt.ty * a.ty < 0.9 || pt.tx * b.tx + pt.ty * b.ty < 0.9) continue; // not on a bend
+      const tx = pt.tx * dir, ty = pt.ty * dir, lane = E.k.laneW * 0.5;
+      const x = pt.x - ty * lane, y = pt.y + tx * lane;
+      if (sample(x, y, res).g > -1.5 || res.e !== ei) continue; // on this road, clear of walls and junctions
+      if (sample(x + tx * 40, y + ty * 40, res).g > -0.5) continue; // open road ahead
+      let near = false;
+      for (const o of out) { const dx = o.x - x, dy = o.y - y; if (dx * dx + dy * dy < SPAWN_GAP * SPAWN_GAP) { near = true; break; } }
+      if (near) continue;
+      let pad = false;
+      for (const p of PADS) { const dx = p.x - x, dy = p.y - y; if (dx * dx + dy * dy < 70 * 70) { pad = true; break; } }
+      if (pad) continue;
+      out.push({ x, y, tx, ty, edge: ei });
+    }
+  }
+  return out;
+})();
+export const SPAWN_COUNT = SPAWNS.length;
+/** Start position by index (any integer; wrapped onto the start grid). */
+export function spawnPoint(index) {
+  const n = SPAWNS.length, k = ((Math.floor(index) % n) + n) % n;
+  return { ...SPAWNS[k], index: k };
 }
 
 /** Whole-map field on a regular grid (renderer textures, building placement). Calls back per row. */

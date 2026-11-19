@@ -24,8 +24,8 @@ function pilot(g) {
   let d = Math.atan2(q.y + q.tx * fwd * 2.5 - p.y, q.x - q.ty * fwd * 2.5 - p.x) - p.h; while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI;
   return encodeInput(Math.max(-3, Math.min(3, Math.round(d * 5))), Math.abs(d) > 0.4 && p.v > 28, false, false);
 }
-function play(seed, car) {
-  const g = createGame(seed, { car }), steps = [];
+function play(seed, car, spawn) {
+  const g = createGame(seed, { car, spawn }), steps = [];
   while (g.state === 'playing') { const v = pilot(g); steps.push(v); stepGame(g, v); g.events.length = 0; }
   return { trace: encodeTrace(steps), result: gameResult(g) };
 }
@@ -58,6 +58,22 @@ test('a played run is replayed, verified and ranked; replays are single-use', as
   assert.equal(lb.body.entries[0].points, result.points);
   assert.equal(lb.body.entries[0].car, 'raiden');
   assert.equal(lb.body.entries[0].label, callsign(t.body.runId));
+});
+
+test('the ticket binds the random start position', async () => {
+  const h = harness();
+  const t = await h.call('/api/v1/runs/start', { seed: 'daily-2026-11-19', car: 'kaze', spawn: 17 });
+  assert.equal(t.body.spawn, 17);
+  const { trace, result } = play('daily-2026-11-19', 'kaze', 17);
+  assert.equal(result.spawn, 17);
+  h.advance(result.timeMs + 1000);
+  const ok = await h.call('/api/v1/runs/finish', { runId: t.body.runId, token: t.body.token, trace, result });
+  assert.equal(ok.status, 200, JSON.stringify(ok.body));
+  const t2 = await h.call('/api/v1/runs/start', { seed: 'daily-2026-11-19', car: 'kaze', spawn: 18 });
+  const bad = await h.call('/api/v1/runs/finish', { runId: t2.body.runId, token: t2.body.token, trace, result });
+  assert.equal(bad.status, 422, 'a run from another start does not verify');
+  const t3 = await h.call('/api/v1/runs/start', { seed: 'x1', car: 'kaze', spawn: -4 });
+  assert.ok(Number.isInteger(t3.body.spawn) && t3.body.spawn >= 0, 'invalid start index is replaced');
 });
 
 test('forged score, wrong car or too-fast submission is rejected', async () => {
@@ -201,7 +217,7 @@ test('edge-rendered share card, link preview and percentile', async () => {
   assert.deepEqual([...bytes.slice(0, 8)], [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
   const page = await (await call(`/r/${ids[0].id}`)).text();
   assert.match(page, /og:image" content="http:\/\/edge\/api\/v1\/card\/[a-f0-9]{12}\.png"/);
-  assert.match(page, /history\.replaceState\(null,"","\/\?seed=cards&c=\d+\.\d+&r=[a-f0-9]{12}"\)/);
+  assert.match(page, /history\.replaceState\(null,"","\/\?seed=cards&c=\d+\.\d+&sp=\d+&r=[a-f0-9]{12}"\)/);
   assert.equal((page.match(/og:title/g) || []).length, 1, 'old og tags replaced');
   assert.equal((await call('/r/000000000000')).status, 302);
 });
