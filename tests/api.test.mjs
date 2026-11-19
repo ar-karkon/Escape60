@@ -75,7 +75,7 @@ test('forged score, wrong car or too-fast submission is rejected', async () => {
   const t3 = await h.call('/api/v1/runs/start', { seed: 'forge', car: 'kaze' });
   const quick = await h.call('/api/v1/runs/finish', { runId: t3.body.runId, token: t3.body.token, trace, result });
   assert.equal(quick.status, 422);
-  assert.match(quick.body.error, /too quickly/);
+  assert.match(quick.body.error, /faster than real time|too quickly/);
 });
 
 test('long runs replay in signed chunks; tampered checkpoints are refused', async () => {
@@ -97,4 +97,148 @@ test('long runs replay in signed chunks; tampered checkpoints are refused', asyn
   assert.equal(r.status, 200, JSON.stringify(r.body));
   assert.ok(n >= 2);
   assert.deepEqual(r.body.result, result);
+});
+
+/* ---------- edge referee v4 ---------- */
+function playSteps(seed, car) {
+  const g = createGame(seed, { car }), steps = [], pts = [0];
+  while (g.state === 'playing') { const v = pilot(g); steps.push(v); stepGame(g, v); g.events.length = 0; pts.push(g.points); }
+  return { steps, pts, result: gameResult(g) };
+}
+async function liveRun(h, seed, car, every = 300) {
+  const t = await h.call('/api/v1/runs/start', { seed, car });
+  const run = playSteps(seed, car);
+  h.advance(3000); // countdown
+  let checkpoint, n = 0, last;
+  for (let at = every; at < run.steps.length; at += every) {
+    h.advance((every * 1000) / 60);
+    last = await h.call('/api/v1/runs/live', { runId: t.body.runId, token: t.body.token, trace: encodeTrace(run.steps.slice(0, at)), checkpoint });
+    assert.equal(last.status, 200, JSON.stringify(last.body));
+    assert.equal(last.body.verified, at);
+    assert.equal(last.body.points, run.pts[at], 'edge score equals the local score at the same tick');
+    checkpoint = last.body.checkpoint; n++;
+  }
+  h.advance(2000);
+  const f = await h.call('/api/v1/runs/finish', { runId: t.body.runId, token: t.body.token, trace: encodeTrace(run.steps), result: run.result, checkpoint });
+  return { t, run, f, n, last };
+}
+
+test('live referee verifies the run while it is driven and the final verdict reuses its checkpoint', async () => {
+  const h = harness();
+  const { f, n, last, run } = await liveRun(h, 'live-a', 'kaze');
+  assert.ok(n >= 3, `live checks: ${n}`);
+  assert.ok(last.body.standing && last.body.standing.rank === 1, 'live rank on an empty board');
+  assert.equal(f.status, 200, JSON.stringify(f.body));
+  assert.equal(f.body.live, n);
+  assert.deepEqual(f.body.result, run.result);
+  assert.match(f.body.share, /^\/r\/[a-f0-9]{12}$/);
+  const lb = await h.call('/api/v1/leaderboard?seed=live-a');
+  assert.equal(lb.body.entries[0].ghost, true);
+});
+
+test('pacing proof: inputs faster than real time are refused, live and at finish', async () => {
+  const h = harness();
+  const t = await h.call('/api/v1/runs/start', { seed: 'pace', car: 'kaze' });
+  const run = playSteps('pace', 'kaze');
+  h.advance(2000);
+  const ahead = await h.call('/api/v1/runs/live', { runId: t.body.runId, token: t.body.token, trace: encodeTrace(run.steps.slice(0, 900)) });
+  assert.equal(ahead.status, 422); assert.match(ahead.body.error, /faster than real time/);
+  // a legit first check, then a burst that outruns the clock
+  h.advance(10000);
+  const ok = await h.call('/api/v1/runs/live', { runId: t.body.runId, token: t.body.token, trace: encodeTrace(run.steps.slice(0, 600)) });
+  assert.equal(ok.status, 200, JSON.stringify(ok.body));
+  h.advance(1000);
+  const burst = await h.call('/api/v1/runs/live', { runId: t.body.runId, token: t.body.token, trace: encodeTrace(run.steps.slice(0, 1200)), checkpoint: ok.body.checkpoint });
+  assert.equal(burst.status, 422);
+  const m = await h.call('/api/v1/edge');
+  assert.ok(m.body.today.rejects.pacing >= 2);
+});
+
+test('checkpoints are bound to the exact input prefix', async () => {
+  const h = harness();
+  const t = await h.call('/api/v1/runs/start', { seed: 'prefix', car: 'kaze' });
+  const run = playSteps('prefix', 'kaze');
+  h.advance(15000);
+  const a = await h.call('/api/v1/runs/live', { runId: t.body.runId, token: t.body.token, trace: encodeTrace(run.steps.slice(0, 600)) });
+  assert.equal(a.status, 200);
+  const edited = run.steps.slice(0, 900); edited[100] = edited[100] === 3 ? 4 : 3; // rewrite history
+  h.advance(5000);
+  const b = await h.call('/api/v1/runs/live', { runId: t.body.runId, token: t.body.token, trace: encodeTrace(edited), checkpoint: a.body.checkpoint });
+  assert.equal(b.status, 401);
+});
+
+test('the edge picks a ghost rival whose inputs replay to the same score', async () => {
+  const h = harness();
+  const one = await liveRun(h, 'ghosts', 'kaze');
+  assert.equal(one.f.status, 200);
+  const r = await h.call('/api/v1/rival?seed=ghosts&points=0');
+  assert.equal(r.status, 200);
+  assert.equal(r.body.rival.points, one.run.result.points);
+  const g = createGame('ghosts', { car: r.body.rival.car });
+  for (const [v, c] of r.body.rival.trace) for (let i = 0; i < c; i++) { stepGame(g, v); g.events.length = 0; }
+  assert.equal(g.points, r.body.rival.points, 'bit-exact ghost');
+  const none = await h.call(`/api/v1/rival?seed=ghosts&not=${one.f.body.id}`);
+  assert.equal(none.body.rival, null);
+});
+
+test('edge-rendered share card, link preview and percentile', async () => {
+  let clock = DAY;
+  const store = memoryStore();
+  const app = createApp({ env: { RUN_SECRET: 't', REPLAY_CHUNK: 40000, SINGLE_PASS: true }, store, now: () => clock, loadIndex: async () => '<!doctype html><html><head><meta property="og:title" content="old"><title>x</title></head><body></body></html>' });
+  const call = async (path, payload) => { const res = await app.handle(new Request('http://edge' + path, payload ? { method: 'POST', body: JSON.stringify(payload) } : {})); return res; };
+  const ids = [];
+  for (const car of ['kaze', 'toro']) {
+    const t = await (await call('/api/v1/runs/start', { seed: 'cards', car })).json();
+    const run = playSteps('cards', car); clock += run.result.timeMs + 5000;
+    const f = await (await call('/api/v1/runs/finish', { runId: t.runId, token: t.token, trace: encodeTrace(run.steps), result: run.result })).json();
+    assert.equal(f.accepted, true, JSON.stringify(f)); ids.push(f);
+  }
+  assert.equal(typeof ids[1].better, 'number');
+  assert.equal(ids[1].runs, 2);
+  const png = await call(`/api/v1/card/${ids[0].id}.png`);
+  assert.equal(png.status, 200); assert.equal(png.headers.get('content-type'), 'image/png');
+  const bytes = new Uint8Array(await png.arrayBuffer());
+  assert.deepEqual([...bytes.slice(0, 8)], [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  const page = await (await call(`/r/${ids[0].id}`)).text();
+  assert.match(page, /og:image" content="http:\/\/edge\/api\/v1\/card\/[a-f0-9]{12}\.png"/);
+  assert.match(page, /history\.replaceState\(null,"","\/\?seed=cards&c=\d+\.\d+&r=[a-f0-9]{12}"\)/);
+  assert.equal((page.match(/og:title/g) || []).length, 1, 'old og tags replaced');
+  assert.equal((await call('/r/000000000000')).status, 302);
+});
+
+test('lab runs are verified but never stored; telemetry counts the work', async () => {
+  const h = harness();
+  const t = await h.call('/api/v1/runs/start', { lab: true, car: 'kaze' });
+  assert.equal(t.body.seed, 'edge-lab');
+  const run = playSteps('edge-lab', 'kaze'); h.advance(run.result.timeMs + 5000);
+  const f = await h.call('/api/v1/runs/finish', { runId: t.body.runId, token: t.body.token, trace: encodeTrace(run.steps), result: run.result });
+  assert.equal(f.status, 200); assert.equal(f.body.stored, false);
+  assert.equal((await h.call('/api/v1/leaderboard?seed=edge-lab')).body.total, 0);
+  const b = await h.call('/api/v1/edge/bench?ticks=120');
+  assert.equal(b.body.ticks, 120);
+  const m = await h.call('/api/v1/edge');
+  assert.ok(m.body.today.c.ticks >= run.steps.length + 120);
+  assert.ok(m.body.features.includes('live-referee'));
+});
+
+test('static delivery negotiates Brotli/gzip copies and passes byte ranges through', async () => {
+  const { createStatic } = await import('../edge/static.mjs');
+  const files = { 'app-ABCDEFGH.js': 'x'.repeat(1000), 'app-ABCDEFGH.js.br': 'BR', 'app-ABCDEFGH.js.gz': 'GZIP', 'music.mp3': 'MP3DATA' };
+  const seen = [];
+  const fetchImpl = async (url, opt = {}) => { const name = url.split('/').pop(); seen.push([name, opt.headers?.Range]); return files[name] ? new Response(files[name], { status: opt.headers?.Range ? 206 : 200, headers: { 'content-length': String(files[name].length) } }) : new Response('no', { status: 404 }); };
+  const sizes = { 'app-ABCDEFGH.js': { raw: 1000, br: 2, gz: 4 } };
+  const metrics = { c: {}, add(k, n = 1) { this.c[k] = (this.c[k] || 0) + n; } };
+  const s = createStatic({ origin: 'https://bucket', fetchImpl, sizes, metrics });
+  const br = await s(new Request('https://e/app-ABCDEFGH.js', { headers: { 'accept-encoding': 'gzip, deflate, br' } }));
+  assert.equal(br.headers.get('content-encoding'), 'br'); assert.equal(await br.text(), 'BR'); assert.equal(br.headers.get('vary'), 'Accept-Encoding');
+  const gz = await s(new Request('https://e/app-ABCDEFGH.js', { headers: { 'accept-encoding': 'gzip' } }));
+  assert.equal(gz.headers.get('content-encoding'), 'gzip');
+  const plain = await s(new Request('https://e/app-ABCDEFGH.js'));
+  assert.equal(plain.headers.get('content-encoding'), null); assert.equal((await plain.text()).length, 1000);
+  const ranged = await s(new Request('https://e/music.mp3', { headers: { range: 'bytes=0-3', 'accept-encoding': 'br' } }));
+  assert.equal(ranged.status, 206); assert.equal(ranged.headers.get('content-encoding'), null);
+  assert.equal(metrics.c.savedBytes, 998 + 996);
+  const off = createStatic({ origin: 'https://bucket', fetchImpl, sizes, precompressed: false });
+  assert.equal((await off(new Request('https://e/app-ABCDEFGH.js', { headers: { 'accept-encoding': 'br' } }))).headers.get('content-encoding'), null);
+  assert.equal((await s(new Request('https://e/edge'))).status, 404, 'routes map /edge to edge.html (absent here)');
 });

@@ -3,7 +3,7 @@
   "version": "3.0.0",
   "private": true,
   "type": "module",
-  "description": "Escape 60 \u2014 browser street-pursuit racing game",
+  "description": "Escape 60 — browser street-pursuit racing game",
   "scripts": {
     "dev": "node server/server.mjs",
     "start": "node server/server.mjs",
@@ -12,7 +12,8 @@
     "build": "node scripts/build.mjs",
     "test:browser": "node scripts/browser-smoke.cjs",
     "capture": "node scripts/capture-screens.cjs",
-    "deploy": "node scripts/deploy-arvan.mjs"
+    "deploy": "node scripts/deploy-arvan.mjs",
+    "edge:local": "node scripts/edge-local.mjs"
   },
   "engines": {
     "node": ">=20"

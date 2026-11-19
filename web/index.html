@@ -111,6 +111,7 @@
         <p id="challenge-result" class="challenge-result hidden"></p>
         <div class="xp-row"><b class="lvl" id="lvl2">LV 1</b><div class="xpbar"><i id="xp-fill2"></i></div><b class="xp-gain" id="xp-gain">+0 XP</b></div>
         <p class="unlocks hidden" id="res-unlocks"></p>
+        <p class="rival-result hidden" id="res-rival"><span data-icon="ghost"></span><b id="res-rival-text"></b></p>
         <div class="rank-row"><span data-icon="bars"></span><p class="rank" id="rank"></p></div>
         <div class="actions">
           <button id="share" class="btn btn-secondary btn-share"><span class="btn-ico" data-icon="share"></span><b data-i18n="share">SHARE</b></button>
@@ -135,6 +136,11 @@
       <div class="hud-score"><span data-icon="star"></span><b id="score">0</b></div>
       <div id="mult-box" class="combo off"><b id="mult">×1</b><div class="combo-bar"><i id="chain-fill"></i></div><small data-i18n="chain">CHAIN</small></div>
       <div class="minimap"><canvas id="minimap"></canvas><div class="mm-count"><b id="mm-count">60</b><small id="mm-label"></small></div></div>
+      <div class="edge-stack" aria-live="off">
+        <div id="live" class="live-chip hidden" data-state="sync"><i class="live-dot"></i><small id="live-tag">LIVE</small><b id="live-rank">#&#8212;</b><small id="live-of"></small></div>
+        <div id="rival" class="rival-chip hidden"><span class="rv-ico" data-icon="ghost"></span><small id="rival-tag">RIVAL</small><small id="rival-name" class="rv-name"></small><b id="rival-delta">+0</b></div>
+      </div>
+      <div id="ghost-tag" class="ghost-tag hidden"><b id="ghost-name"></b></div>
       <div id="pit-arrow" class="pit-arrow hidden"><span class="arw" data-icon="wrench"></span><small id="pit-dist"></small></div>
       <div class="vbar vbar-health" id="health" role="meter" aria-label="health">
         <span class="vb-ico" data-icon="shield"></span>

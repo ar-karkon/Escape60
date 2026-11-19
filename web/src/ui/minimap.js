@@ -1,6 +1,6 @@
 /* Heading-up round minimap. The whole road network is drawn once into an offscreen canvas from the
    shared map (so it shows exactly what you can drive), then cropped and rotated around the player
-   each frame, with police, roadblocks and the green pit stops on top. */
+   each frame, with police, roadblocks, the green pit stops and the rival ghost on top. */
 import { BOUNDS, edges, stations, water, pads } from "../map.js";
 
 const PX = 1.6; // offscreen pixels per metre
@@ -45,7 +45,7 @@ export function createMinimap(canvas) {
     if (w && h && (w !== W || h !== H)) { canvas.width = W = w; canvas.height = H = h; }
   }
   return {
-    draw(game, t) {
+    draw(game, t, ghost = null) {
       resize();
       if (!W || !game) return;
       if (!base) build();
@@ -74,6 +74,11 @@ export function createMinimap(canvas) {
         ctx.fillStyle = "#0e0618"; ctx.fillRect(x - 6 * dpr, y - 6 * dpr, 12 * dpr, 12 * dpr);
         ctx.fillStyle = game.repairs > 0 ? "#5dffb0" : "#5a4a7a"; ctx.beginPath(); ctx.arc(x, y, (edge ? 4 : 5.5) * dpr, 0, Math.PI * 2); ctx.fill();
         if (!edge) { ctx.fillStyle = "#052216"; ctx.font = `900 ${8 * dpr}px sans-serif`; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText("+", x, y + 0.5); }
+      }
+      if (ghost) { // rival ghost: cyan diamond
+        const [x, y] = toScreen(ghost.x, ghost.y), r = 5 * dpr;
+        ctx.fillStyle = "#0e0618"; ctx.beginPath(); ctx.moveTo(x, y - r - 2 * dpr); ctx.lineTo(x + r + 2 * dpr, y); ctx.lineTo(x, y + r + 2 * dpr); ctx.lineTo(x - r - 2 * dpr, y); ctx.fill();
+        ctx.fillStyle = "#3dd8e7"; ctx.beginPath(); ctx.moveTo(x, y - r); ctx.lineTo(x + r, y); ctx.lineTo(x, y + r); ctx.lineTo(x - r, y); ctx.fill();
       }
       const blink = Math.floor(t / 160) % 2;
       for (const c of game.police) {

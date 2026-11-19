@@ -43,7 +43,7 @@ canvas#ink { position: absolute; inset: 0; width: 100%; height: 100%; pointer-ev
 [data-icon] { display: inline-block; flex: none; }
 
 /* ---------- pixel frame primitives ---------- */
-.panel, .card, .btn, .chip, .hud-pause, .steer, .act, .stat, .rank-row, .status-chip, .banner, dialog, .hud-timer, .ribbon, .title-ribbon, .icon-btn, .car-card, .tab, .speedo {
+.panel, .card, .btn, .chip, .hud-pause, .steer, .act, .stat, .rank-row, .status-chip, .banner, dialog, .hud-timer, .ribbon, .title-ribbon, .icon-btn, .car-card, .tab, .speedo, .live-chip, .rival-chip, .ghost-tag, .rival-result {
   --b: 3px; --edge: var(--violet); --line: var(--ink);
   box-shadow:
     0 calc(var(--b) * -1) 0 0 var(--edge), 0 var(--b) 0 0 var(--edge),
@@ -666,3 +666,32 @@ body.no-touch .vbar { bottom: auto; }
 @media (orientation: landscape) and (min-width: 600px) { .vbar { top: calc(var(--safe-t) + 128px); bottom: auto; height: min(220px, calc(100% - 160px)); width: 28px; } }
 @media (orientation: landscape) and (max-height: 520px) { .vbar { top: calc(var(--safe-t) + 112px); height: calc(100% - 132px); width: 26px; } }
 @media (max-height: 680px) and (orientation: portrait) { .vbar { top: calc(50% - 88px); bottom: auto; height: min(200px, 32vh); } }
+/* v3.4: edge referee — live global rank + ghost rival (pixel-frame chips under the minimap) */
+.edge-stack { position: absolute; right: 14px; top: calc(var(--safe-t) + 80px + clamp(98px, 26vw, 132px)); width: clamp(104px, 28vw, 140px); display: flex; flex-direction: column; gap: 10px; pointer-events: none; direction: ltr; }
+.live-chip, .rival-chip { --b: 2px; --edge: var(--cyan); display: grid; align-items: center; column-gap: 5px; padding: 3px 7px 4px; background: rgba(27, 11, 43, 0.84); }
+.live-chip { grid-template-columns: 6px auto 1fr auto; }
+.live-dot { width: 6px; height: 6px; background: #5dffb0; box-shadow: 0 0 6px #5dffb0; }
+.live-chip small { font: 400 13px/1 var(--px); letter-spacing: 1px; color: var(--cyan); }
+.live-chip b { justify-self: end; font: 400 24px/0.9 var(--px); color: var(--gold); text-shadow: 2px 2px 0 var(--ink); }
+.live-chip #live-of { color: var(--muted); font-size: 12px; align-self: end; padding-bottom: 2px; }
+.live-chip[data-state="sync"] .live-dot { background: var(--amber); box-shadow: 0 0 6px var(--amber); animation: blink 0.6s steps(2) infinite; }
+.live-chip[data-state="warn"] { --edge: var(--hot); }
+.live-chip[data-state="warn"] .live-dot { background: var(--hot); box-shadow: 0 0 6px var(--hot); }
+.live-chip[data-state="warn"] small { color: #ffb3c4; }
+.live-chip.pump b { animation: pump 0.35s steps(4); }
+@keyframes blink { 50% { opacity: 0.2; } }
+.rival-chip { --edge: var(--violet); grid-template-columns: 22px 1fr auto; grid-template-rows: auto auto; row-gap: 1px; }
+.rival-chip .rv-ico { grid-row: 1 / 3; width: 22px; height: 13px; }
+.rival-chip small { font: 400 12px/1 var(--px); letter-spacing: 1px; color: var(--cyan); white-space: nowrap; }
+.rival-chip .rv-name { grid-column: 2; color: var(--muted); font-size: 11px; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.rival-chip b { grid-column: 3; grid-row: 1 / 3; font: 400 22px/0.9 var(--px); color: #5dffb0; text-shadow: 2px 2px 0 var(--ink); }
+.rival-chip.behind b { color: var(--pink); }
+.rival-chip.beaten { --edge: var(--gold); }
+.rival-chip.beaten b { color: var(--gold); }
+.ghost-tag { --b: 2px; --edge: var(--cyan); position: absolute; left: 0; top: 0; padding: 1px 6px 2px; background: rgba(10, 40, 60, 0.78); transform: translate(-50%, -100%); white-space: nowrap; pointer-events: none; }
+.ghost-tag b { font: 400 15px/1 var(--px); letter-spacing: 1px; color: var(--cyan); direction: ltr; }
+.rival-result { --b: 2px; --edge: var(--cyan); align-self: center; display: flex; align-items: center; gap: 8px; margin: 2px 0; padding: 4px 14px; background: rgba(10, 60, 80, 0.55); color: #9ff6ff; font-size: 14px; }
+.rival-result [data-icon] { width: 22px; height: 13px; }
+.rival-result.won { --edge: var(--gold); color: var(--gold); }
+@media (max-height: 680px) and (orientation: portrait) { .edge-stack { right: 40px; width: 112px; top: calc(var(--safe-t) + 74px + clamp(98px, 26vw, 132px)); gap: 8px; } }
+@media (orientation: landscape) and (min-width: 600px) { .edge-stack { top: calc(var(--safe-t) + 66px); right: 46px; width: 132px; } }

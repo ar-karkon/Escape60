@@ -129,6 +129,25 @@ export function createRenderer(canvas) {
     scene.add(hero);
   }
   setCar(CARS[0].id);
+  // ghost rival: a holographic copy of another player's verified run (additive fresnel + scan lines)
+  const ghostMat = new T.ShaderMaterial({
+    uniforms: { uColor: { value: new T.Color(0x3dd8e7) }, uTime: U.uTime, uFade: { value: 1 } },
+    vertexShader: "varying vec3 vN; varying vec3 vV; varying float vY; void main(){ vec4 wp = modelMatrix * vec4(position, 1.); vN = normalize(mat3(modelMatrix) * normal); vV = normalize(cameraPosition - wp.xyz); vY = wp.y; gl_Position = projectionMatrix * viewMatrix * wp; }",
+    fragmentShader: "uniform vec3 uColor; uniform float uTime, uFade; varying vec3 vN; varying vec3 vV; varying float vY; void main(){ float f = 1. - abs(dot(normalize(vN), normalize(vV))); f *= f; float scan = .55 + .45 * step(.45, fract(vY * 7. - uTime * 1.8)); gl_FragColor = vec4(uColor * (.35 + 2.2 * f) * scan * uFade, 1.); }",
+    transparent: true, depthWrite: false, blending: T.AdditiveBlending,
+  });
+  ghostMat.customProgramCacheKey = () => "ghost";
+  let ghostCar = null, ghostKey = "";
+  function setGhost(id) {
+    if (id === ghostKey) return;
+    ghostKey = id || "";
+    if (ghostCar) { scene.remove(ghostCar); ghostCar.userData.body.geometry.dispose(); ghostCar = null; }
+    if (!id) return;
+    const c = carById(id);
+    ghostCar = carGroup(buildCar(c.body, { paint: 0x3dd8e7, stripe: 0xffffff, livery: null }), ghostMat, 0x3dd8e7);
+    ghostCar.traverse((o) => { o.castShadow = false; o.renderOrder = 5; });
+    scene.add(ghostCar);
+  }
   const model0 = () => hero.userData.model;
   const copModels = {};
   const copLivery = { cruiser: [0x0e1014, 0xf4f5f7, "twotone"], interceptor: [0x0d1b3a, 0xf4f5f7, "side"], suv: [0x101216, 0xf4f5f7, "twotone"] };
@@ -271,6 +290,7 @@ export function createRenderer(canvas) {
 
   draw.init = (onProgress) => world.init(onProgress);
   draw.setCar = setCar;
+  draw.setGhost = setGhost;
   draw.setEffects = (s) => { fx.setStyle(s); trails.setColor(s.trail === "neon" ? new T.Color(...fx.accent(2)) : TAILC); };
   draw.setTOD = (name) => { if (name === todName || !TOD[name]) return; todName = name; tod = sky.apply(name, scene, { hemi, sun }); world.refresh(); };
   draw.setQuality = (q) => { qualityMode = q; if (q === "high") rung = 0; if (q === "low") rung = 4; };
@@ -341,6 +361,19 @@ export function createRenderer(canvas) {
     heroMat.userData.u.uBrake.value = brake ? 1 : hand ? 0.7 : 0.15;
     heroMat.userData.u.uDamage.value += ((game ? Math.pow(1 - hp / 100, 1.2) * 0.9 : 0) - heroMat.userData.u.uDamage.value) * damp(3, realDt);
 
+    // ---------- ghost rival ----------
+    if (ghostCar) {
+      const gs = opts.ghost;
+      ghostCar.visible = !!(gs && game);
+      if (ghostCar.visible) {
+        const ex = playing && gs.moving ? alpha * TICK : 0, gx = gs.x + Math.cos(gs.a) * gs.v * ex, gz = gs.y + Math.sin(gs.a) * gs.v * ex;
+        ghostCar.position.set(gx, 0.02, gz);
+        ghostCar.rotation.y = -gs.h - Math.PI / 2;
+        const gu = ghostCar.userData; gu.spin -= (gs.v * vdt) / gu.wr;
+        for (const wh of gu.wheels) wh.mesh.rotation.x = gu.spin;
+        ghostMat.uniforms.uFade.value = clamp((Math.hypot(gx - px, gz - pz) - 3) / 10, 0.12, 1) * (gs.fade ?? 1);
+      }
+    }
     // ---------- world ----------
     world.update(px, pz, t, vdt, fx);
     // ---------- actors ----------

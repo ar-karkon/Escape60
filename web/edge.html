@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#1b0b2b">
+  <meta name="robots" content="noindex">
+  <title>Edge Referee · ESCAPE 60</title>
+  <link rel="icon" href="./assets/logo.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="./style.css">
+  <style>
+    html, body { height: auto; min-height: 100%; overflow: auto; user-select: text; -webkit-user-select: text; }
+    body.edge-page { background: radial-gradient(120% 60% at 50% 0%, #5a1d6e 0%, #2b0f4c 45%, var(--ink) 80%) fixed; }
+    .ep { max-width: 1080px; margin: 0 auto; padding: max(18px, env(safe-area-inset-top)) 16px 40px; display: flex; flex-direction: column; gap: 22px; }
+    .ep-head { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+    .ep-head img { width: 92px; height: auto; image-rendering: pixelated; }
+    .ep-head h1 { margin: 0; font: 400 52px/0.9 var(--px); letter-spacing: 2px; color: var(--gold); text-shadow: 3px 0 var(--ink), -3px 0 var(--ink), 0 3px var(--ink), 0 -3px var(--ink), 0 6px #c8174a; }
+    html[lang="fa"] .ep-head h1 { font-family: var(--fa); font-weight: 900; font-size: 44px; }
+    .ep-head p { margin: 6px 0 0; max-width: 640px; color: var(--muted); font-size: 15px; line-height: 1.6; }
+    .ep-head .grow { flex: 1; min-width: 240px; }
+    .ep-tools { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+    .ep-tools .chip { cursor: pointer; }
+    .ep-tools .chip.on { --edge: var(--gold); color: var(--gold); }
+    .ep-sec { padding: 16px; }
+    .ep-sec h2 { margin: 0 0 4px; font: 400 28px/1 var(--px); letter-spacing: 1px; color: var(--cream); }
+    html[lang="fa"] .ep-sec h2 { font-family: var(--fa); font-weight: 800; font-size: 22px; }
+    .ep-sec > p { margin: 0 0 14px; color: var(--muted); font-size: 14px; line-height: 1.6; }
+    .ep-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 16px; }
+    .ep-tile { --b: 2px; --edge: var(--violet); padding: 10px 12px; background: rgba(27, 11, 43, 0.86); display: flex; flex-direction: column; gap: 4px; }
+    .ep-tile small { color: var(--muted); font-size: 12px; }
+    .ep-tile b { font: 400 34px/0.9 var(--px); color: var(--gold); direction: ltr; text-align: start; }
+    .ep-tile i { font-style: normal; font-size: 11px; color: var(--cyan); direction: ltr; }
+    .ep-tile.hot b { color: var(--pink); }
+    .ep-tile.cy b { color: var(--cyan); }
+    .ep-tile.gr b { color: #5dffb0; }
+    .ep-pipe { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 16px; counter-reset: s; }
+    .ep-step { --b: 2px; --edge: var(--cyan); position: relative; padding: 10px 12px 12px; background: rgba(10, 40, 60, 0.6); }
+    .ep-step::before { counter-increment: s; content: counter(s); position: absolute; top: -12px; inset-inline-start: 10px; width: 22px; height: 22px; display: grid; place-items: center; background: var(--cyan); color: var(--ink); font: 400 18px/1 var(--px); }
+    .ep-step b { display: block; margin: 6px 0 4px; font-size: 15px; color: var(--cream); }
+    .ep-step span { font-size: 12.5px; line-height: 1.55; color: #bfe9f0; }
+    .ep-lab { display: grid; grid-template-columns: minmax(220px, 300px) 1fr; gap: 18px; }
+    @media (max-width: 720px) { .ep-lab { grid-template-columns: 1fr; } }
+    .ep-map { position: relative; aspect-ratio: 1; width: 100%; box-shadow: 0 0 0 2px var(--ink), 0 0 0 4px var(--violet), 0 0 0 6px var(--ink); background: #14082a; }
+    .ep-map canvas { width: 100%; height: 100%; display: block; }
+    .ep-map .ep-state { position: absolute; left: 8px; top: 8px; padding: 2px 8px; background: rgba(27, 11, 43, 0.85); font: 400 16px var(--px); color: var(--cyan); letter-spacing: 1px; direction: ltr; }
+    .ep-vs { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 14px; }
+    .ep-vs .ep-tile b { font-size: 40px; }
+    .ep-btns { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 14px; }
+    .ep-btns .btn { padding: 8px 14px; font-size: 14px; min-height: 0; }
+    .ep-btns .btn[disabled] { opacity: 0.4; pointer-events: none; }
+    .ep-log { --b: 2px; --edge: var(--violet); margin: 0; padding: 8px 10px; list-style: none; height: 230px; overflow: auto; background: rgba(14, 6, 24, 0.9); font: 400 15px/1.35 var(--px); direction: ltr; text-align: left; }
+    .ep-log li { padding: 2px 0; border-bottom: 1px dashed rgba(141, 84, 233, 0.25); color: var(--cream); }
+    .ep-log li.ok { color: #5dffb0; } .ep-log li.bad { color: #ff8fae; } .ep-log li.info { color: var(--cyan); }
+    .ep-bench-row { display: flex; flex-wrap: wrap; gap: 16px; align-items: center; }
+    .ep-table { width: 100%; border-collapse: collapse; font-size: 14px; direction: ltr; }
+    .ep-table th { text-align: left; color: var(--muted); font-weight: 500; padding: 4px 6px; border-bottom: 2px solid var(--violet); }
+    .ep-table td { padding: 5px 6px; border-bottom: 1px dashed rgba(141, 84, 233, 0.3); }
+    .ep-table td.n { font: 400 18px var(--px); color: var(--gold); }
+    .ep-bars { display: flex; flex-direction: column; gap: 8px; }
+    .ep-bar { display: grid; grid-template-columns: minmax(130px, 220px) 1fr 50px; gap: 10px; align-items: center; font-size: 13px; }
+    .ep-bar i { display: block; height: 12px; background: #2c1a48; }
+    .ep-bar i u { display: block; height: 100%; background: repeating-linear-gradient(90deg, var(--pink) 0 6px, var(--hot) 6px 8px); }
+    .ep-bar b { font: 400 18px var(--px); color: var(--pink); direction: ltr; }
+    .ep-foot { display: flex; justify-content: center; }
+    .ep-foot .btn { text-decoration: none; }
+    .ep-empty { color: var(--muted); font-size: 13px; }
+  </style>
+</head>
+<body class="edge-page">
+  <main class="ep">
+    <header class="ep-head">
+      <img src="./assets/logo.svg" alt="ESCAPE 60">
+      <div class="grow">
+        <h1 data-t="title">EDGE REFEREE</h1>
+        <p data-t="sub"></p>
+      </div>
+      <div class="ep-tools">
+        <span class="chip" id="ep-status">…</span>
+        <button class="chip" id="ep-lang">فارسی</button>
+      </div>
+    </header>
+
+    <section class="panel ep-sec">
+      <h2 data-t="countersTitle"></h2>
+      <p data-t="countersSub"></p>
+      <div class="ep-tools" style="margin-bottom:14px"><button class="chip on" data-scope="today" data-t="today"></button><button class="chip" data-scope="total" data-t="total"></button></div>
+      <div class="ep-grid" id="ep-counters"></div>
+    </section>
+
+    <section class="panel ep-sec">
+      <h2 data-t="pipeTitle"></h2>
+      <p data-t="pipeSub"></p>
+      <div class="ep-pipe" id="ep-pipe"></div>
+    </section>
+
+    <section class="panel ep-sec">
+      <h2 data-t="labTitle"></h2>
+      <p data-t="labSub"></p>
+      <div class="ep-lab">
+        <div class="ep-map"><canvas id="ep-map"></canvas><span class="ep-state" id="ep-state">IDLE</span></div>
+        <div>
+          <div class="ep-vs">
+            <div class="ep-tile"><small data-t="browserSays"></small><b id="ep-local">0</b><i id="ep-local-sub">tick 0</i></div>
+            <div class="ep-tile cy"><small data-t="edgeSays"></small><b id="ep-edge">—</b><i id="ep-edge-sub">—</i></div>
+          </div>
+          <div class="ep-btns">
+            <button class="btn btn-primary" id="lab-start"><b data-t="labStart"></b></button>
+            <button class="btn btn-secondary" id="lab-fake" disabled><b data-t="labFake"></b></button>
+            <button class="btn btn-secondary" id="lab-speed" disabled><b data-t="labSpeed"></b></button>
+            <button class="btn btn-secondary" id="lab-forge" disabled><b data-t="labForge"></b></button>
+            <button class="btn btn-secondary" id="lab-crash" disabled><b data-t="labCrash"></b></button>
+          </div>
+          <ol class="ep-log" id="ep-log"></ol>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel ep-sec">
+      <h2 data-t="benchTitle"></h2>
+      <p data-t="benchSub"></p>
+      <div class="ep-bench-row">
+        <button class="btn btn-primary" id="bench-run"><b data-t="benchRun"></b></button>
+        <div class="ep-tile cy"><small data-t="benchEdge"></small><b id="bench-edge">—</b><i id="bench-edge-sub">µs / tick</i></div>
+        <div class="ep-tile"><small data-t="benchLocal"></small><b id="bench-local">—</b><i>µs / tick</i></div>
+      </div>
+    </section>
+
+    <section class="panel ep-sec">
+      <h2 data-t="recentTitle"></h2>
+      <p data-t="recentSub"></p>
+      <div id="ep-recent"></div>
+    </section>
+
+    <section class="panel ep-sec">
+      <h2 data-t="rejectTitle"></h2>
+      <p data-t="rejectSub"></p>
+      <div class="ep-bars" id="ep-rejects"></div>
+    </section>
+
+    <footer class="ep-foot"><a class="btn btn-primary" href="./"><b data-t="play"></b></a></footer>
+  </main>
+  <script type="module" src="./src/edgepage.js"></script>
+</body>
+</html>

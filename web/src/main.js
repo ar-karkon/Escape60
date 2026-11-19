@@ -12,7 +12,7 @@ import * as api from './api.js';
 import { createMinimap } from './ui/minimap.js';
 
 const $ = (id) => document.getElementById(id);
-const VERSION = 'v3.2';
+const VERSION = 'v3.4';
 hydrateIcons();
 applyI18n();
 const canvas = $('game'), render = createRenderer(canvas);
@@ -39,9 +39,11 @@ const externalSeed = qs.get('seed');
 const sanitizedSeed = typeof externalSeed === 'string' && /^[a-zA-Z0-9_-]{2,64}$/.test(externalSeed) ? externalSeed : null;
 const initialSeed = sanitizedSeed || daySeed();
 const challenge = sanitizedSeed ? parseChallenge(qs) : null;
+const challengeRun = challenge && /^[a-f0-9]{12}$/.test(qs.get('r') || '') ? qs.get('r') : null; // opened from a verified /r/<id> link
 let seed = initialSeed, game = null, paused = false, runTicket = null, trace = [], last = 0, acc = 0, countdown = 0, countStep = -1;
 let lastEvent = -1, finishQueued = false, online = false, lastResult = null, view = 'loading', ready = false;
 let frozen = false;
+let live = null, ghost = null, lastShareUrl = null; // edge referee state, rival ghost, verified share link
 const persisted = (() => { try { return JSON.parse(localStorage.getItem('escape60-bests-' + SIM_VERSION) || '{}'); } catch { return {}; } })();
 const input = { left: false, right: false, tl: false, tr: false, brake: false, nitroLatch: false, kb: { brake: false, hand: false, nitro: false }, pad: { x: 0, brake: false, hand: false, nitro: false } };
 if (qs.has('capture')) window.__escape60 = { render, freeze: (v) => { frozen = !!v; }, state: () => game && { ticks: game.ticks, state: game.state, hp: game.health, repairs: game.repairs, points: game.points, end: game.end, view }, info: () => render.info(), input,
@@ -90,7 +92,7 @@ function renderHome() {
   $('mode-label').textContent = sanitizedSeed && seed === initialSeed ? t('friend') : seed.startsWith('daily-') ? t('daily') : t('random');
   const open = profile.missions.list.filter((m) => !m.done).length;
   $('missions-badge').textContent = open; $('missions-badge').classList.toggle('hidden', open === 0);
-  if (challenge) { const b = $('challenge-banner'); b.classList.remove('hidden'); b.innerHTML = `<span>${iconSVG('flame')}</span><p>${t('friendBanner', { score: fmtN(challenge.points), time: fmtTime(challenge.timeMs) })}</p>`; }
+  if (challenge) { const b = $('challenge-banner'); b.classList.remove('hidden'); b.innerHTML = `<span>${iconSVG('flame')}</span><p>${t('friendBanner', { score: fmtN(challenge.points), time: fmtTime(challenge.timeMs) })}${challengeRun ? ` <b class="verified">✓ ${t('verifiedTag')}</b>` : ''}</p>`; }
 }
 
 /* ---------- online ---------- */
@@ -216,6 +218,12 @@ function updateHud(dt) {
   $('chain-fill').style.width = `${(100 * game.comboTimer) / COMBO_WINDOW}%`;
   if (mult > shownMult) { m.classList.remove('pump'); void m.offsetWidth; m.classList.add('pump'); }
   shownMult = mult;
+  if (ghost) {
+    const target = ghost.out ? ghost.info.points : ghost.game.points, d = game.points - target;
+    $('rival-delta').textContent = (d >= 0 ? '+' : '−') + fmtN(Math.abs(d));
+    $('rival').classList.toggle('behind', d < 0);
+    $('rival-tag').textContent = `${ghost.out ? t('rivalTarget') : t('rivalTag')} #${ghost.info.rank}`;
+  }
   $('bust').classList.toggle('hidden', game.bust < 0.05 || game.state !== 'playing');
   $('bust-fill').style.width = `${game.bust * 100}%`;
   // nearest pit stop when damaged
@@ -228,6 +236,75 @@ function updateHud(dt) {
     const rel = Math.atan2(best.y - p.y, best.x - p.x) - p.a;
     pa.querySelector('.arw').style.transform = `rotate(${rel + Math.PI / 4}rad)`;
   } else pa.classList.add('hidden');
+}
+
+/* ---------- edge referee: live checks, live rank, ghost rival ---------- */
+function resetEdgeHud() {
+  ghost = null; render.setGhost(null);
+  for (const id of ['live', 'rival', 'ghost-tag']) $(id).classList.add('hidden');
+  $('rival').classList.remove('beaten', 'behind');
+  $('live-rank').textContent = '#—'; $('live-of').textContent = '';
+}
+function renderLive(state, standing) {
+  const el = $('live');
+  el.classList.remove('hidden'); el.dataset.state = state;
+  $('live-tag').textContent = state === 'warn' ? t('liveCheck') : state === 'sync' ? t('liveSync') : t('liveTag');
+  if (!standing) return;
+  const txt = standing.rank ? `#${standing.rank}` : '100+';
+  if ($('live-rank').textContent !== txt) {
+    if (live.rank && standing.rank && standing.rank < live.rank) audio.play('coin', { gain: 0.35, rate: 1.3 });
+    $('live-rank').textContent = txt; el.classList.remove('pump'); void el.offsetWidth; el.classList.add('pump');
+  }
+  live.rank = standing.rank;
+  $('live-of').textContent = standing.rank ? `/${standing.of}` : '';
+}
+/** Send the inputs so far; the edge replays the new ticks and answers with its own score and rank. */
+function sendLive() {
+  const started = game, lv = live, n = trace.length;
+  lv.sent = n; lv.expect.set(n, game.points);
+  lv.inflight = api.liveCheck(runTicket.runId, runTicket.token, encodeTrace(trace), lv.checkpoint).then((x) => {
+    if (game !== started) return;
+    lv.checkpoint = x.checkpoint; lv.fails = 0;
+    const want = lv.expect.get(x.verified);
+    for (const k of lv.expect.keys()) if (k <= x.verified) lv.expect.delete(k);
+    renderLive(want === undefined || want === x.points ? 'ok' : 'warn', x.standing);
+  }).catch((e) => {
+    if (game !== started) return;
+    lv.fails++;
+    if (e.status >= 400 && e.status < 500) renderLive('warn');
+    else if (lv.fails > 2) $('live').classList.add('hidden');
+  }).finally(() => { lv.inflight = null; });
+}
+function setGhost(rv) {
+  ghost = { info: rv, game: createGame(seed, { car: rv.car }), item: 0, used: 0, out: false, beaten: false, endTick: 0 };
+  render.setGhost(rv.car);
+  $('ghost-name').textContent = `${rv.label} · #${rv.rank}`;
+  $('rival-name').textContent = rv.label;
+  $('rival-tag').textContent = `${t('rivalTag')} #${rv.rank}`;
+  $('rival').classList.remove('hidden', 'beaten', 'behind');
+  ghostAdvance(); // catches up if the rival arrived after the start
+}
+/** Re-simulate the rival's verified inputs up to the current tick (bit-exact, like the edge does). */
+function ghostAdvance(cap = 900) {
+  const gg = ghost.game, tr = ghost.info.trace;
+  for (let n = 0; gg.ticks < game.ticks && gg.state === 'playing' && ghost.item < tr.length && n < cap; n++) {
+    stepGame(gg, tr[ghost.item][0]); gg.events.length = 0;
+    if (++ghost.used >= tr[ghost.item][1]) { ghost.item++; ghost.used = 0; }
+  }
+  if (!ghost.out && (gg.state !== 'playing' || ghost.item >= tr.length)) { ghost.out = true; ghost.endTick = game.ticks; }
+}
+function ghostPose() {
+  if (!ghost || !game) return null;
+  const p = ghost.game.player;
+  return { x: p.x, y: p.y, h: p.h, a: p.a, v: ghost.out ? 0 : p.v, moving: !ghost.out, fade: ghost.out ? Math.max(0, 1 - (game.ticks - ghost.endTick) / 120) : 1 };
+}
+function placeGhostTag(gp) {
+  const el = $('ghost-tag');
+  if (!gp || gp.fade < 0.1 || !game) { el.classList.add('hidden'); return; }
+  const [sx, sy, front] = render.project(gp.x, 2.4, gp.y), d = Math.hypot(gp.x - game.player.x, gp.y - game.player.y);
+  if (!front || d < 7 || d > 170 || sx < 0.04 || sx > 0.96 || sy < 0.12 || sy > 0.9) { el.classList.add('hidden'); return; }
+  el.classList.remove('hidden');
+  el.style.transform = `translate(${Math.round(sx * canvas.clientWidth)}px, ${Math.round(sy * canvas.clientHeight)}px) translate(-50%, -100%)`;
 }
 
 /* ---------- run flow ---------- */
@@ -243,7 +320,14 @@ function begin() {
   renderRepairs(REPAIRS); renderHeat(1);
   setView('game');
   updateHud(0);
-  if (online) { const started = game; api.startRun(seed, profile.car).then((r) => { if (game === started && !finishQueued) runTicket = r; }).catch(() => {}); }
+  resetEdgeHud();
+  live = { checkpoint: null, inflight: null, sent: 0, every: 300, expect: new Map(), fails: 0, rank: null };
+  if (online) {
+    const started = game;
+    api.startRun(seed, profile.car).then((r) => { if (game === started && !finishQueued) { runTicket = r; live.every = r.live?.every || 300; renderLive('sync'); } }).catch(() => {});
+    const best = persisted[seed], friend = challengeRun && seed === initialSeed ? challengeRun : null;
+    api.rival(seed, friend ? { id: friend } : { points: best ? best.points : null, not: best?.id }).then(({ rival }) => { if (game === started && !finishQueued && rival?.trace?.length) setGhost(rival); }).catch(() => {});
+  }
   audio.nextChaseTrack(); audio.setMode('chase');
   if (profile.runs < 3) { const h = $('howto'); h.innerHTML = `<b>${t('howTo')}</b><br>${touch ? t('howTouch') : t('howKeys')}<br>${t('howGoal')}`; h.classList.remove('hidden'); clearTimeout(howtoTimer); howtoTimer = setTimeout(() => h.classList.add('hidden'), 6500); }
   last = performance.now();
@@ -273,6 +357,8 @@ function tick() {
   const v = currentInput();
   trace.push(v);
   stepGame(game, v);
+  if (ghost) ghostAdvance();
+  if (runTicket && live && !live.inflight && game.state === 'playing' && trace.length - live.sent >= live.every) sendLive();
   const p = game.player;
   if (p.boost && !wasBoost) { audio.nitroBurst(); vibrate(15); }
   wasBoost = p.boost;
@@ -282,6 +368,7 @@ function tick() {
   if (e.length > 200) { e.splice(0, e.length - 50); lastEvent = e.length - 1; }
   const ms = (game.ticks * 1000) / TICK_RATE;
   if (!bestPassed && persisted[seed] && game.points > persisted[seed].points) { bestPassed = true; popup(t('newRecord'), '', 'good'); audio.play('levelup', { gain: 0.6 }); }
+  if (ghost && !ghost.beaten && game.points > ghost.info.points) { ghost.beaten = true; $('rival').classList.add('beaten'); popup(t('rivalBeaten'), ghost.info.label, 'hot'); audio.play('levelup'); vibrate(40); }
   if (!targetPassed && game.points > challenge.points) { targetPassed = true; popup(t('friendWon'), '', 'hot'); audio.play('levelup'); }
   const sec = Math.floor(ms / 1000);
   if (sec !== lastSecond) { lastSecond = sec; if (sec >= 55 && sec < 60) audio.play('beep', { rate: 1 + (sec - 55) * 0.1, gain: 0.7 }); }
@@ -360,11 +447,23 @@ function finish() {
   if (end === 'legend') audio.play('win'); else if (end === 'busted') audio.play('busted');
   if (meta.levelUp) audio.play('levelup', { delay: 1.2 });
   setTimeout(() => { if (game?.state === 'ended' && view === 'game') setView('results'); }, end === 'wrecked' ? 2600 : 1300);
+  if (ghost) {
+    const won = r.points > ghost.info.points, el = $('res-rival');
+    el.classList.remove('hidden'); el.classList.toggle('won', won);
+    const who = { name: ghost.info.label, rank: num(ghost.info.rank), n: num(ghost.info.points - r.points) };
+    $('res-rival-text').textContent = t(won ? 'rivalWon' : r.points === ghost.info.points ? 'rivalTie' : 'rivalAhead', who);
+  } else $('res-rival').classList.add('hidden');
+  lastShareUrl = null;
   if (runTicket) {
-    const finished = game;
-    api.finishRun(runTicket.runId, runTicket.token, encodeTrace(trace), r).then((x) => {
+    const finished = game, ticket = runTicket, inputs = encodeTrace(trace), lv = live;
+    // The edge already verified most of the run live; only the last seconds are replayed now.
+    (async () => { if (lv?.inflight) await lv.inflight; return api.finishRun(ticket.runId, ticket.token, inputs, r, () => {}, lv?.checkpoint || null); })().then((x) => {
       if (game !== finished) return;
-      $('rank').textContent = x.rank ? t('rankDone', { rank: num(x.rank), of: num(x.of) }) : t('rankSaved');
+      let txt = x.rank ? t('rankDone', { rank: num(x.rank), of: num(x.of) }) : t('rankSaved');
+      if (Number.isFinite(x.better)) txt += ' · ' + t('betterThan', { n: num(x.better) });
+      $('rank').textContent = txt;
+      if (x.share) lastShareUrl = new URL(x.share, location.href).href;
+      if (x.id && persisted[seed] && persisted[seed].points === r.points) { persisted[seed].id = x.id; try { localStorage.setItem('escape60-bests-' + SIM_VERSION, JSON.stringify(persisted)); } catch {} }
     }).catch(() => { if (game === finished) $('rank').textContent = t('rankFail'); });
   }
 }
@@ -402,9 +501,11 @@ function frame(now) {
   }
   const kmh = p ? p.v * 3.6 : 0, g = gearOf(kmh);
   audio.update({ active: playing, speed: p ? p.v / 70 : 0, rpm: g.rpm, gear: g.gear, drift: p ? Math.min(1, Math.abs(p.slip) * 1.6) * (p.v > 12 ? 1 : 0) : 0, brake: p && p.brake && p.v > 12 ? 1 : 0, nitro: !!p?.boost && playing, siren, sirenPan: pan, close, heli: game ? game.heat >= 4 : false });
-  if (game && view === 'game') minimap.draw(game, now);
+  const gp = view === 'game' ? ghostPose() : null;
+  if (game && view === 'game') minimap.draw(game, now, gp && gp.fade > 0.1 ? gp : null);
   const mode = view === 'garage' ? 'garage' : view === 'game' || view === 'results' ? 'game' : 'menu';
-  render.frame(view === 'game' || view === 'results' ? game : null, now, { mode, alpha: acc * TICK_RATE, countdown: Math.max(0, countdown), reduced: settings.motion, shakeOn: settings.shake });
+  render.frame(view === 'game' || view === 'results' ? game : null, now, { mode, alpha: acc * TICK_RATE, countdown: Math.max(0, countdown), reduced: settings.motion, shakeOn: settings.shake, ghost: gp });
+  placeGhostTag(gp);
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
@@ -476,15 +577,17 @@ async function openBoard() {
 }
 
 /* ---------- share ---------- */
+/** A verified run shares its edge link (/r/<id>: preview card drawn on the edge, same route as target). */
+const shareUrl = () => lastShareUrl || shareMod.challengeUrl(seed, lastResult);
 let shareFormat = 'story', shareMod = null, shareBlob = null, shareFrames = {};
 async function buildCard() {
   shareMod ??= await import('./share.js');
   const F = shareMod.FORMATS[shareFormat];
   shareFrames[shareFormat] ??= render.snapshot(Math.round(F.w * 0.6), Math.round(F.h * 0.6));
   const r = lastResult, car = carById(r.car);
-  const cv = await shareMod.drawCard(shareFormat, shareFrames[shareFormat], { result: r, car: car.name, title: t(r.end || 'legend'), level: profile.level, url: shareMod.challengeUrl(seed, r), labels: { score: t('score'), time: t('survived'), top: t('topSpeed'), td: t('takedowns') }, fa: getLang() === 'fa' });
+  const cv = await shareMod.drawCard(shareFormat, shareFrames[shareFormat], { result: r, car: car.name, title: t(r.end || 'legend'), level: profile.level, url: shareUrl(), labels: { score: t('score'), time: t('survived'), top: t('topSpeed'), td: t('takedowns') }, fa: getLang() === 'fa' });
   $('share-preview').src = cv.toDataURL('image/jpeg', 0.85);
-  const text = t('shareText', { time: fmtTime(r.timeMs), score: num(r.points), car: car.name }), url = shareMod.challengeUrl(seed, r);
+  const text = t('shareText', { time: fmtTime(r.timeMs), score: num(r.points), car: car.name }), url = shareUrl();
   $('net-telegram').href = shareMod.networkLink('telegram', text, url);
   $('net-x').href = shareMod.networkLink('x', text, url);
   $('net-whatsapp').href = shareMod.networkLink('whatsapp', text, url);
@@ -495,11 +598,11 @@ for (const tab of document.querySelectorAll('.tab.fmt')) tab.addEventListener('c
   for (const x of document.querySelectorAll('.tab.fmt')) x.classList.toggle('active', x === tab);
   shareFormat = tab.dataset.format; click(); await buildCard().catch(() => {});
 });
-button('share-image', async () => { if (!shareBlob) return; const car = carById(lastResult.car); try { await shareMod.shareImage(shareBlob, t('shareText', { time: fmtTime(lastResult.timeMs), score: num(lastResult.points), car: car.name }), shareMod.challengeUrl(seed, lastResult), `escape60-${shareFormat}.png`); } catch {} });
+button('share-image', async () => { if (!shareBlob) return; const car = carById(lastResult.car); try { await shareMod.shareImage(shareBlob, t('shareText', { time: fmtTime(lastResult.timeMs), score: num(lastResult.points), car: car.name }), shareUrl(), `escape60-${shareFormat}.png`); } catch {} });
 button('save-image', () => { if (shareBlob) shareMod.downloadBlob(shareBlob, `escape60-${shareFormat}.png`); });
 button('copy-link', async () => {
   shareMod ??= await import('./share.js');
-  const url = shareMod.challengeUrl(seed, lastResult), label = $('copy-link').querySelector('b');
+  const url = shareUrl(), label = $('copy-link').querySelector('b');
   try { await navigator.clipboard.writeText(url); label.textContent = t('copied'); } catch { label.textContent = url; }
   setTimeout(() => (label.textContent = t('copyLink')), 2200);
 });

@@ -22,12 +22,12 @@ async function diskStore() {
   return { ...mem, kind: 'disk', async put(k, b, o) { const ok = await mem.put(k, b, o); if (ok) await save(); return ok; } };
 }
 const store = process.env.NODE_ENV === 'test' ? memoryStore() : await diskStore();
-const app = createApp({ env: { ...process.env }, store, log: (...a) => console.log(...a) });
+const app = createApp({ env: { ...process.env }, store, log: (...a) => console.log(...a), loadIndex: () => readFile(path.join(ROOT, 'web/index.html'), 'utf8') });
 
 const mime = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.json': 'application/json', '.woff2': 'font/woff2', '.png': 'image/png', '.jpg': 'image/jpeg', '.mp3': 'audio/mpeg', '.wav': 'audio/wav', '.md': 'text/markdown; charset=utf-8', '.txt': 'text/plain; charset=utf-8' };
 async function staticFile(req, res) {
   const url = new URL(req.url, 'http://localhost');
-  const p = url.pathname === '/' ? '/index.html' : decodeURIComponent(url.pathname);
+  const p = url.pathname === '/' ? '/index.html' : url.pathname === '/edge' || url.pathname === '/edge/' ? '/edge.html' : decodeURIComponent(url.pathname);
   const file = path.resolve(ROOT, 'web', '.' + p);
   if (!file.startsWith(path.resolve(ROOT, 'web') + path.sep)) { res.writeHead(403); res.end(); return; }
   try {
@@ -45,10 +45,10 @@ async function staticFile(req, res) {
 }
 export function handler(req, res) {
   (async () => {
-    if (!req.url.startsWith('/api/')) return staticFile(req, res);
+    if (!req.url.startsWith('/api/') && !req.url.startsWith('/r/')) return staticFile(req, res);
     let body;
     if (req.method === 'POST') { const chunks = []; let n = 0; for await (const c of req) { n += c.length; if (n > 100000) break; chunks.push(c); } body = Buffer.concat(chunks); }
-    const request = new Request(new URL(req.url, 'http://localhost'), { method: req.method, headers: { 'x-real-ip': req.socket.remoteAddress || 'local', 'content-type': 'application/json' }, body });
+    const request = new Request(new URL(req.url, `http://${req.headers.host || 'localhost'}`), { method: req.method, headers: { 'x-real-ip': req.socket.remoteAddress || 'local', 'content-type': 'application/json' }, body });
     const response = await app.handle(request);
     res.writeHead(response.status, Object.fromEntries(response.headers));
     res.end(Buffer.from(await response.arrayBuffer()));

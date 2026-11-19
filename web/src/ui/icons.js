@@ -40,6 +40,7 @@ const ICONS = {
   sirenOff: ["..nn..", ".nnnn.", "nnnnnn", "nnnnnn", "kkkkkk"],
   shield: ["wwwwwwww", "wccccccw", "wccwwccw", "wcwccwcw", "wccccccw", ".wccccw.", "..wccw..", "...ww..."],
   flame: ["...r....", "...rr...", "..rro...", ".rrorr..", ".roooor.", "rroyyorr", "royyyyor", "royywyor", ".royyor.", "..rrrr.."],
+  ghost: ["...cccccc...", "..cw.nnwwc..", ".cccccccccc.", "cccccccccccc", "cwcwwwwwwcwc", ".nn......nn.", ".nn......nn."],
   car: ["...oooooo...", "..ow.kkwwo..", ".oooooooooo.", "oooooooooooo", "oyowwwwwworo", ".kk......kk.", ".kk......kk."],
   combo: ["cc......cc", ".cc....cc.", "..cc..cc..", "...cccc...", "....cc....", "...cccc...", "..cc..cc..", ".cc....cc.", "cc......cc"],
   lock: ["..kkkk..", ".k....k.", ".k....k.", "ssssssss", "sssnnsss", "sssnnsss", "ssssssss"],

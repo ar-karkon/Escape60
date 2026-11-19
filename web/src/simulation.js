@@ -632,6 +632,13 @@ export function restoreGame(json) {
 /** Advance `game` along `trace` from tick `game.ticks` for at most `budget` ticks.
     Returns true once the whole trace has been applied (and the game must then have ended). */
 export function replayChunk(game, trace, budget = MAX_TICKS) {
+  if (!advanceTrace(game, trace, budget)) return false;
+  if (game.state !== 'ended') throw Error('Game has not ended');
+  return true;
+}
+/** Like replayChunk, but `trace` may be the prefix of a run still in progress (live verification).
+    Returns true once every tick of `trace` has been applied. */
+export function advanceTrace(game, trace, budget = MAX_TICKS) {
   let start = game.ticks, pos = 0, done = 0;
   for (const [v, n] of trace) {
     if (pos + n <= start) { pos += n; continue; }
@@ -643,8 +650,13 @@ export function replayChunk(game, trace, budget = MAX_TICKS) {
     }
     pos += n;
   }
-  if (game.state !== 'ended') throw Error('Game has not ended');
   return true;
+}
+/** The first `n` ticks of an RLE trace, as an RLE trace (checkpoints are bound to this prefix). */
+export function tracePrefix(trace, n) {
+  const out = []; let pos = 0;
+  for (const [v, c] of trace) { if (pos >= n) break; const k = Math.min(c, n - pos); out.push([v, k]); pos += k; }
+  return out;
 }
 export function replayTrace(seed, trace, car) {
   traceTicks(trace);
