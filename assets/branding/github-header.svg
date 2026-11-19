@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2560 640" role="img" aria-label="Escape 60 neon coastal night">
+<defs>
+<linearGradient id="sky" x1="0" y1="0" x2="0.1" y2="1"><stop stop-color="#24113e"/><stop offset=".42" stop-color="#a82d86"/><stop offset=".8" stop-color="#f66e78"/><stop offset="1" stop-color="#ffb366"/></linearGradient>
+<linearGradient id="road" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#5a275a"/><stop offset="1" stop-color="#0b102c"/></linearGradient>
+<linearGradient id="title" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#fff6f1"/><stop offset="1" stop-color="#eeb3ce"/></linearGradient>
+<filter id="glow"><feGaussianBlur stdDeviation="18"/></filter>
+</defs>
+<rect width="2560" height="640" fill="url(#sky)"/>
+<circle cx="2020" cy="226" r="168" fill="#ffce78"/><g fill="#ef668d"><rect x="1844" y="180" width="355" height="12"/><rect x="1850" y="208" width="346" height="10"/><rect x="1863" y="243" width="327" height="13"/><rect x="1882" y="279" width="299" height="14"/><rect x="1907" y="318" width="241" height="16"/></g>
+<path d="M0 360L40 360V280H80V325H124V220H160V280H210V205H256V340H302V268H347V298H388V180H425V350H470V270H512V310H545V205H590V356H610V246H655V360H690V285H731V370H776V240H817V342H858V210H891V358H925V284H971V356H1025V320H1058V220H1090V342H1128V264H1164V360H1197V245H1239V370H1285V315H1333V245H1377V345H1422V282H1464V350H1520V315H1562V235H1607V356H1650V267H1691V360H1745V289H1790V350H1833V220H1875V345H1926V269H1982V380H2025V310H2088V380H2150V283H2205V370H2240V312H2303V370H2370V320H2450V370H2560V460H0Z" fill="#23132f"/>
+<path d="M0 448L2560 405V640H0Z" fill="url(#road)"/>
+<path d="M0 470L2560 425" stroke="#45e1e5" stroke-width="8" opacity=".65"/>
+<path d="M0 555L2560 474" stroke="#f05caa" stroke-width="7" opacity=".6"/>
+<path d="M-30 635L2560 525" stroke="#ffa85d" stroke-width="10" opacity=".35"/>
+<g transform="translate(1930 362)"><path d="M-16 0L-18 -158" stroke="#201332" stroke-width="25"/><path d="M-17 -132 Q-195 -224 -223 -155Q-125 -172 -17 -134Q45 -242 152 -221Q77 -185 -17 -132Q97 -174 223 -108Q119 -105 -17 -132" fill="#201332"/></g>
+<g transform="translate(2380 350) scale(.7)"><path d="M-18 0L-18 -190" stroke="#201332" stroke-width="35"/><path d="M-18 -159Q-198 -238 -240 -168Q-111 -177 -18 -158Q40 -271 168 -222Q75 -191 -18 -158Q116 -202 232 -130Q124 -132 -18 -158" fill="#201332"/></g>
+<g transform="translate(1630 446)">
+<ellipse cx="470" cy="121" rx="380" ry="44" fill="#000" opacity=".42"/>
+<path d="M85 32L230 -36H576L746 31L772 111H57Z" fill="#f68534" stroke="#4d2046" stroke-width="16"/>
+<path d="M250 -27L321 -99H505L578 -26Z" fill="#e57b5c" stroke="#4d2046" stroke-width="12"/>
+<path d="M327 -82H500L550 -26H282Z" fill="#191932"/>
+<path d="M196 25L654 25" stroke="#ffcb87" stroke-width="18"/>
+<rect x="112" y="39" width="100" height="39" fill="#fff3c6"/><rect x="616" y="39" width="93" height="39" fill="#fff3c6"/>
+<rect x="149" y="-3" width="580" height="16" fill="#f5b3b4" opacity=".45"/>
+<circle cx="206" cy="105" r="48" fill="#161529" stroke="#8b7193" stroke-width="18"/><circle cx="618" cy="105" r="48" fill="#161529" stroke="#8b7193" stroke-width="18"/>
+</g>
+<rect x="0" y="0" width="1230" height="640" fill="#130d2d" opacity=".38"/>
+<g font-family="Arial,Helvetica,sans-serif" font-weight="900" font-style="italic">
+<text x="112" y="288" font-size="156" fill="#080b25" transform="translate(8 12)">ESCAPE</text>
+<text x="112" y="288" font-size="156" fill="url(#title)">ESCAPE</text>
+<text x="743" y="288" font-size="180" fill="#080b25" transform="translate(8 12)">60</text>
+<text x="743" y="288" font-size="180" fill="#ff328f">60</text>
+</g>
+<rect x="119" y="318" width="816" height="11" fill="#27d7df"/>
+<text x="121" y="389" fill="#fff6eb" font-size="44" font-family="Arial,Helvetica,sans-serif" font-weight="bold" letter-spacing="1">DRIFT. BOOST. OUTRUN THE HEAT.</text>
+<rect x="121" y="427" width="558" height="64" rx="7" fill="#100f2e" stroke="#ef46a9" stroke-width="3"/>
+<text x="148" y="470" fill="#28e0e1" font-size="37" font-family="Arial,Helvetica,sans-serif" font-weight="bold">MADE FOR ARVAN EDGE GAMES</text>
+<text x="124" y="569" fill="#fff1de" font-size="28" font-family="Arial,Helvetica,sans-serif" letter-spacing="5">SUNSET BAY  •  STREET PURSUIT</text>
+</svg>

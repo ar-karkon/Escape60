@@ -1,10 +1,51 @@
-# ESCAPE 60 — Street Pursuit
+<div align="center">
+  <a href="https://escape60.lavanai2525-3qem7.arvanedge.ir/">
+    <img src="assets/branding/github-header.svg" width="100%" alt="Escape 60 — Sunset Bay" />
+  </a>
 
-**An original, free browser street-pursuit racing game.** Drift, boost and take down the police in Sunset Bay — an open coastal city with curved boulevards, a roundabout, canyon hairpins, a coastal highway and a port. Survive the first 60 seconds to "escape", then keep going in overtime while the heat rises, until your car is wrecked or busted. Runs on phones, tablets and desktops (touch, keyboard and gamepad), in English and Persian.
+  <br />
 
-![Gameplay](docs/screenshots/desktop-drive.png)
+  [![Play Online](https://img.shields.io/badge/PLAY-ONLINE-FF5D95?style=for-the-badge&labelColor=111633)](https://escape60.lavanai2525-3qem7.arvanedge.ir/)
+  [![فارسی](https://img.shields.io/badge/%D9%81%D8%A7%D8%B1%D8%B3%DB%8C-README-3DD8E7?style=for-the-badge&labelColor=111633)](README.fa.md)
+  [![Arvan Edge Games](https://img.shields.io/badge/MADE_FOR-EDGE_GAMES-8D54E9?style=for-the-badge&labelColor=111633)](https://try.arvancloud.ir/edge-games/)
 
-## Play locally
+  ### 🌴 One city. No easy escape.
+
+  **Drift. Boost. Outrun the heat.**
+
+  A free, pixel-inspired **3D street-pursuit game** set in the tropical neon city of **Sunset Bay**. Survive your first **60 seconds**, then keep going — the chase only gets wilder.
+
+  **[🎮 Play in your browser](https://escape60.lavanai2525-3qem7.arvanedge.ir/)** · **[🇮🇷 فارسی](README.fa.md)** · **[📖 Documentation](docs/README.md)**
+
+</div>
+
+> [!NOTE]
+> **Live version:** The hosted game is a public preview and may still run an earlier release. The latest source on `main` is **not verified as redeployed**. Promotional art is distinct from actual gameplay screenshots.
+
+## ✨ Why Escape 60?
+
+| 🏎️ **Drive it your way** | 🚨 **Survive the pursuit** | 🌇 **Get lost in Sunset Bay** |
+| :--- | :--- | :--- |
+| **14 cars**, garage customisation, arcade drift, handbrake and nitro | Escalating police heat, roadblocks, takedowns and overtime chases | A coastal city with winding roads, landmarks, waterfront, canyon and neon nightscapes |
+
+| 🎯 **Keep getting better** | 🎨 **Make it yours** | 📱 **Pick up and play** |
+| :--- | :--- | :--- |
+| Near misses, combos, XP, daily missions and shareable challenges | Vehicle paints, liveries, trails, smoke and nitro effects | Phone, desktop and gamepad; English and Persian |
+
+## 📸 Actual gameplay
+
+<p align="center">
+  <a href="docs/screenshots/desktop-drive.png"><img src="docs/screenshots/desktop-drive.png" width="49%" alt="Escape 60 gameplay" /></a>
+  <a href="docs/screenshots/desktop-menu.png"><img src="docs/screenshots/desktop-menu.png" width="49%" alt="Escape 60 main menu" /></a>
+  <br />
+  <a href="docs/screenshots/drift.png"><img src="docs/screenshots/drift.png" width="32%" alt="Drifting gameplay" /></a>
+  <a href="docs/screenshots/garage.png"><img src="docs/screenshots/garage.png" width="32%" alt="Garage and custom cars" /></a>
+  <a href="docs/screenshots/night.png"><img src="docs/screenshots/night.png" width="32%" alt="Sunset Bay by night" /></a>
+  <br />
+  <sub>Real captures from the browser. For the artistic vision, see the <a href="design/references/">concept references</a>.</sub>
+</p>
+
+## 🚀 Run locally
 
 Requires Node.js 20+.
 
@@ -19,9 +60,20 @@ npm run capture        # real screenshots into docs/screenshots (needs npm start
 npm run deploy         # release to Arvan from your computer (asks for the storage keys)
 ```
 
-**Controls** — touch: hold the left or right half of the screen to steer · BRAKE (drifts with the handbrake while you steer) · tap NITRO to boost (tap again to stop). Keyboard: ← → / A D steer · ↓ / S brake · Space handbrake · Shift / ↑ / W nitro · P pause · Enter retry. Gamepad: stick steer · A handbrake · RT / X nitro · LT / B brake · Start pause.
+## 🎮 Controls
 
-## What's in the game
+| Action | Touchscreen | Keyboard | Gamepad |
+| :--- | :--- | :--- | :--- |
+| Steer | Hold left/right half of screen | `←` `→` / `A` `D` | Left stick |
+| Brake | **BRAKE** | `↓` / `S` | LT / B |
+| Drift / handbrake | **DRIFT** | `Space` | A |
+| Nitro | **NITRO** | `Shift` / `↑` / `W` | RT / X |
+| Pause | Pause button | `P` | Start |
+| Retry | Retry button | `Enter` | Retry button |
+
+<sub>Gamepad mapping may depend on device and browser.</sub>
+
+## 🔥 Features — under the hood
 
 - **Sunset Bay map** (`web/src/map.js`): ~24 km of hand-authored roads (Catmull-Rom curves) — warped downtown grid with a roundabout and a plaza, Ocean Boulevard, a sweeping coastal highway with a bridge over the marina, a winding canyon with hairpins, a lake loop, Old Town lanes, the port road and five **pit stops**. Drivable space is a smooth signed-distance field (filleted junction corners), shared bit-for-bit by the game, the server replay, the renderer and the minimap.
 - **Arcade drift physics** (`web/src/simulation.js`, SIM 2.0.0): automatic throttle, brake, handbrake slides, counter-steer, nitro, impact-scaled damage, a car that **limps and smokes when damaged**, **3 repairs** at pit stops, **explosion** at zero health, busted meter, takedowns (ram cops or make them crash), near misses, roadblock dodges, drift banking and a ×8 skill chain. Heat rises 1→5 over time with cruisers, interceptors, SUVs, roadblocks, spike strips and a helicopter. The 60 s mark is a milestone (+2,500, slow-motion celebration) — the run continues.
@@ -34,7 +86,7 @@ npm run deploy         # release to Arvan from your computer (asks for the stora
 - **Progression & sharing**: XP and levels unlock cars, paints and effects; three daily missions and a day streak; daily shared route and friend-challenge links; share cards (story / post / wide) from a real in-engine frame with a QR code.
 - **Fair leaderboard**: the browser records only the input trace. The game service (`edge/app.mjs`) re-simulates every run with the same simulation (signed tickets bind route and car, chunked replay with HMAC checkpoints, single-use runs) before it is ranked. `web/src/dmath.js` keeps trigonometry identical across engines.
 
-## Project layout
+## 🗂️ Project layout
 
 ```text
 web/index.html, web/style.css   UI shell (HUD, garage, results, dialogs)
@@ -54,12 +106,35 @@ scripts/                        build, checks, smoke test, screenshot capture, m
 docs/                           design, decisions, deployment and status
 ```
 
-## Deployment
+## ☁️ Edge deployment
 
 `npm run build` produces `dist/web/` (static site; works on any static host and on the edge proxy) and `dist/edge/worker.js` (API + static proxy). See `docs/22_DEPLOYMENT.md`. `npm run deploy` releases from your own computer without CI: it uploads only changed files, guides the one panel step (pasting the edge worker) and verifies the live URL. The game service needs only an S3-compatible bucket (`S3_ACCESS_KEY`, `S3_SECRET_KEY`); without it the leaderboard falls back to memory. Replays run in chunks (`REPLAY_CHUNK`, default 300 ticks) to fit small per-request CPU budgets.
 
 **Status:** see `docs/00_STATUS.md`. Real-device FPS and an audible mix check are still outstanding; the live deployment must be rebuilt and redeployed for this version.
 
-## License
+## 🏁 Release status
+
+| Area | Status |
+| :--- | :--- |
+| Driving, cars, garage and map | ✅ Implemented in source |
+| Deterministic replay and ranking logic | ✅ Implemented; local tests available |
+| Arvan Edge service | ✅ Prior live version tested; **latest build pending verification** |
+| iOS Safari / real-device FPS / final audio mix | 🟡 Still needs hands-on QA |
+
+Source-of-truth documents: **[Status](docs/00_STATUS.md)** · **[Deployment guide](docs/22_DEPLOYMENT.md)** · **[Changelog](docs/CHANGELOG.md)** · **[Documentation index](docs/README.md)**.
+
+## 🤝 Contribute and connect
+
+Want to improve the game? Open an [issue](https://github.com/ar-karkon/Escape60/issues) and see the [contributing guide](CONTRIBUTING.md). The repo is publicly readable, but it does **not** currently grant a general reuse licence for original source/assets. Third-party [audio credits](web/assets/audio/CREDITS.md) and [font licence texts](web/assets/fonts/) remain in the repository.
+
+**Made for [ArvanCloud Edge Games](https://try.arvancloud.ir/edge-games/)** as an independent project; ArvanCloud's name and logo indicate event context, not an endorsement of the game.
+
+## ⚖️ Licensing & attribution
 
 The repository is public but there is currently **no explicit open-source license**. All game art is original procedural code; car shapes are inspired by real cars but carry no brands, names or logos. Fonts (Rooyin Free, Jersey 10, Vazirmatn — SIL OFL) and audio (CC0 / CC-BY) keep their own licenses.
+
+<div align="center">
+  <img src="assets/branding/github-footer.svg" width="100%" alt="Escape 60 — Made for Arvan Edge Games" />
+  <br />
+  <sub>🌴 An original Sunset Bay escape. Built for the thrill of the chase.</sub>
+</div>

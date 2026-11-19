@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2560 320" role="img" aria-label="Escape 60 footer">
+<defs><linearGradient id="bg" x1="0" y1="0" x2="1" y2=".9"><stop stop-color="#110d2b"/><stop offset=".46" stop-color="#542161"/><stop offset="1" stop-color="#0e1536"/></linearGradient></defs>
+<rect width="2560" height="320" fill="url(#bg)"/>
+<path d="M0 0H2560" stroke="#ff5d95" stroke-width="13"/>
+<path d="M0 315H2560" stroke="#33deeb" stroke-width="8"/>
+<g fill="#ec4c9b" opacity=".55"><path d="M20 62H220L177 108H-23Z"/><path d="M115 128H275L235 167H78Z"/><path d="M2395 65H2560V110H2362Z"/><path d="M2300 133H2560V173H2250Z"/></g>
+<path d="M0 260Q720 220 1280 258T2560 240" fill="none" stroke="#f99b73" stroke-width="7" opacity=".4"/>
+<text x="365" y="175" fill="#fff2e7" font-family="Arial,Helvetica,sans-serif" font-size="95" font-weight="900" font-style="italic">ESCAPE</text>
+<text x="730" y="175" fill="#ff4395" font-family="Arial,Helvetica,sans-serif" font-size="104" font-weight="900" font-style="italic">60</text>
+<rect x="922" y="97" width="4" height="88" fill="#3ee3e7"/>
+<text x="975" y="149" fill="#fff2e7" font-family="Arial,Helvetica,sans-serif" font-size="54" font-weight="bold">MADE FOR ARVAN EDGE GAMES</text>
+<text x="976" y="192" fill="#52e4e0" font-family="Arial,Helvetica,sans-serif" font-size="25" letter-spacing="5">NEON STREETS  •  ARCADE HEAT  •  SUNSET BAY</text>
+</svg>
