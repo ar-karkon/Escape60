@@ -42,8 +42,14 @@ void main(){
   vec3 bl=texture2D(tB1,uv).rgb*.7+texture2D(tB2,uv).rgb*.9;
   c+=bl*uBloom;
   c*=uExposure;
-  c=aces(c);
-  c=pow(c,vec3(1./2.2));
+  // hue-preserving tone curve: compress luminance, keep chroma so neon and sunset stay saturated
+  float Lin=dot(c,vec3(.2126,.7152,.0722));
+  float Lout=Lin*(1.+Lin/6.)/(1.+Lin);
+  c*=Lout/max(Lin,1e-4);
+  c=mix(c,aces(c),.35);
+  float mx=max(c.r,max(c.g,c.b)); if(mx>1.)c=mix(c/mx,vec3(1.),clamp((mx-1.)*.5,0.,1.));
+  c=pow(clamp(c,0.,1.),vec3(1./2.2));
+  c=mix(c,c*c*(3.-2.*c),.22);
   float l=dot(c,vec3(.299,.587,.114));
   c=mix(vec3(l),c,uSat*(1.-uDesat));
   c+=vec3(.035,.0,.07)*(1.-c)*(1.-l);
@@ -77,8 +83,8 @@ export function createPost(renderer) {
   const blur = mat(BLUR, { tSrc: { value: null }, uDir: { value: new T.Vector2() } });
   const comp = mat(COMPOSITE, {
     tScene: { value: main.texture }, tB1: { value: b1.texture }, tB2: { value: b2.texture },
-    uBloom: { value: 1 }, uExposure: { value: 0.94 }, uFlash: { value: 0 }, uFlashCol: { value: new T.Color(1, 0.1, 0.3) },
-    uDesat: { value: 0 }, uSat: { value: 1.22 }, uTime: { value: 0 }, uRes: { value: new T.Vector2() }, uSpeed: { value: 0 }, uVignette: { value: 1 },
+    uBloom: { value: 1 }, uExposure: { value: 1.15 }, uFlash: { value: 0 }, uFlashCol: { value: new T.Color(1, 0.1, 0.3) },
+    uDesat: { value: 0 }, uSat: { value: 1.3 }, uTime: { value: 0 }, uRes: { value: new T.Vector2() }, uSpeed: { value: 0 }, uVignette: { value: 1 },
   });
   let W = 1, H = 1;
   const pass = (m, target) => {

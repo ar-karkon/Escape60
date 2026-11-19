@@ -113,7 +113,7 @@ body[data-view="results"] .overlay { background: linear-gradient(180deg, rgba(27
 .time-label { display: flex; align-items: center; justify-content: center; gap: 8px; margin: 0 0 -4px; font-size: 13px; font-weight: 800; color: var(--muted); }
 .time-label [data-icon] { width: 18px; height: 18px; }
 .time-row { display: flex; align-items: center; justify-content: center; gap: 12px; }
-.laurel { width: 22px; height: 38px; }
+.laurel { width: 24px; height: 40px; }
 .results.bust .laurel { visibility: hidden; }
 .result-time { font: 400 74px/0.86 var(--px); direction: ltr; color: var(--gold); letter-spacing: 1px;
   text-shadow: 3px 0 var(--ink), -3px 0 var(--ink), 0 3px var(--ink), 0 -3px var(--ink), 3px 3px var(--ink), -3px 3px var(--ink), 3px -3px var(--ink), -3px -3px var(--ink), 0 6px #c8174a, 0 0 22px rgba(255, 227, 124, 0.6); }
@@ -151,7 +151,7 @@ body[data-view="results"] .overlay { background: linear-gradient(180deg, rgba(27
 .hud-wanted { order: 1; display: flex; flex-direction: column; align-items: center; gap: 2px; padding-top: 4px; }
 .hud-wanted small { font-size: 10px; color: var(--muted); }
 .sirens { display: flex; gap: 3px; direction: ltr; }
-.sirens span { width: 14px; height: 12px; }
+.sirens span { width: 19px; height: 16px; }
 .sirens .on { filter: drop-shadow(0 0 4px var(--hot)); animation: siren 0.5s steps(2) infinite; }
 .sirens .on:nth-child(even) { animation-delay: 0.25s; }
 @keyframes siren { 50% { filter: hue-rotate(200deg) drop-shadow(0 0 4px var(--cyan)); } }
@@ -169,7 +169,7 @@ body[data-view="results"] .overlay { background: linear-gradient(180deg, rgba(27
 .pop.bad { color: #ff7b93; }
 .pop.cyan { color: var(--cyan); }
 @keyframes pop { 0% { transform: translateY(10px) scale(0.6); opacity: 0; } 15% { transform: translateY(0) scale(1.15); opacity: 1; } 30% { transform: scale(1); } 100% { transform: translateY(-60px); opacity: 0; } }
-.banner { --b: 2px; --edge: var(--hot); position: absolute; top: calc(var(--safe-t) + 92px); left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 8px; padding: 6px 16px; white-space: nowrap; font-size: 15px; font-weight: 800; color: #fff; background: repeating-linear-gradient(-45deg, rgba(160, 20, 60, 0.92) 0 10px, rgba(120, 10, 45, 0.92) 10px 20px); animation: banner 0.5s steps(2) 3; }
+.banner { --b: 2px; --edge: var(--hot); position: absolute; top: calc(var(--safe-t) + 122px); left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 8px; padding: 6px 16px; white-space: nowrap; font-size: 15px; font-weight: 800; color: #fff; background: repeating-linear-gradient(-45deg, rgba(160, 20, 60, 0.92) 0 10px, rgba(120, 10, 45, 0.92) 10px 20px); animation: banner 0.5s steps(2) 3; }
 .banner.info { --edge: var(--cyan); background: rgba(20, 60, 90, 0.9); animation: none; }
 @keyframes banner { 50% { --edge: var(--gold); filter: brightness(1.3); } }
 .countdown { position: absolute; inset: 0; display: grid; place-items: center; pointer-events: none; }
@@ -202,9 +202,9 @@ dialog { width: min(330px, 88vw); border: 0; padding: 20px; color: var(--cream);
 dialog::backdrop { background: rgba(17, 8, 30, 0.75); }
 dialog h2 { display: flex; align-items: center; justify-content: center; gap: 10px; margin: 0 0 16px; font-size: 22px; }
 dialog h2 [data-icon] { width: 24px; height: 24px; }
-.toggle-row { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 48px; margin-bottom: 10px; padding: 8px 12px; font-size: 14px; text-align: start; background: rgba(20, 10, 38, 0.8); box-shadow: inset 0 -3px 0 rgba(0, 0, 0, 0.3), 0 0 0 2px #4a3474; cursor: pointer; }
+.toggle-row { position: relative; display: flex; align-items: center; gap: 12px; width: 100%; min-height: 48px; margin-bottom: 10px; padding: 8px 12px; font-size: 14px; text-align: start; background: rgba(20, 10, 38, 0.8); box-shadow: inset 0 -3px 0 rgba(0, 0, 0, 0.3), 0 0 0 2px #4a3474; cursor: pointer; }
 .toggle-row [data-icon] { width: 22px; height: 18px; }
-.toggle-row input { position: absolute; opacity: 0; pointer-events: none; }
+.toggle-row input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
 .switch { position: relative; flex: none; width: 40px; height: 20px; background: #3a2a5a; box-shadow: 0 0 0 2px var(--ink); }
 .switch::after { content: ""; position: absolute; top: 3px; right: 3px; width: 14px; height: 14px; background: var(--muted); transition: right 0.1s steps(2); }
 .toggle-row input:checked + .switch { background: #1d8f8a; }

@@ -27,6 +27,12 @@ const qs = new URLSearchParams(location.search);
 const externalSeed = qs.get('seed');
 const sanitizedSeed = typeof externalSeed === 'string' && /^[a-zA-Z0-9_-]{2,64}$/.test(externalSeed) ? externalSeed : null;
 const initialSeed = sanitizedSeed || daySeed();
+// ?q=high pins full quality (benchmarks / screenshot capture); ?q=low forces the light renderer.
+const qualityLock = qs.get('q');
+if (qualityLock === 'low') document.getElementById('quality').checked = true;
+// ?capture=1 exposes a freeze switch so screenshot scripts can hold an exact frame without UI.
+let frozen = false;
+if (qs.has('capture')) window.__escape60 = { freeze: (v) => { frozen = !!v; } };
 const persisted = {};
 try { Object.assign(persisted, JSON.parse(localStorage.getItem('escape60-bests-' + SIM_VERSION) || '{}')); } catch {}
 const formatTime = (ms) => (ms / 1000).toFixed(2).padStart(5, '0');
@@ -185,7 +191,7 @@ function frame(t) {
   if (!last) last = t;
   const dt = Math.min((t - last) / 1000, 0.25);
   last = t;
-  if (!paused && game?.state === 'playing') {
+  if (!paused && !frozen && game?.state === 'playing') {
     if (countdown > 0) {
       countdown -= dt;
       showCount(countdown > 1.2 ? 0 : countdown > 0.6 ? 1 : countdown > 0 ? 2 : 3);
@@ -199,7 +205,7 @@ function frame(t) {
   }
   const p = game?.player;
   sound.engine(game?.state === 'playing' && !paused && countdown <= 0, p ? p.speed / 279 : 0, p ? p.drift : 0, game?.police.length ?? 0);
-  render(game, t, { reducedMotion, low: $('quality').checked, seed, alpha: acc * TICK_RATE, countdown: Math.max(0, countdown) });
+  render(game, t, { reducedMotion, low: $('quality').checked, seed, alpha: acc * TICK_RATE, countdown: Math.max(0, countdown), lockHigh: qualityLock === 'high' });
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);

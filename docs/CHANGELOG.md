@@ -9,3 +9,14 @@
 
 ## Sunset Bay
 Added local Three.js rendering, seeded voxel districts, procedural vehicles, Persian settings and leaderboard dialogs, synth sequence and four browser captures. Simulation 1.1.0 updates pursuit timing, damage deceleration, downtown traffic and highway speed.
+
+## Visual overhaul (renderer + UI) — 2026-11-19
+Simulation, scoring, daily seed and server replay are unchanged (`SIM_VERSION` 1.1.0); a scripted 60-second run was accepted by the local replay API after the change.
+- New renderer split into `web/src/gfx/` (voxel builder + shader patterns, city kit, props, cars, sky, FX, HDR post).
+- Chase camera moved from ~39 units high/behind to ~9.4 high / 14 behind with heading damping, speed FOV, steer roll, hit shake; cinematic menu, countdown swoop and results orbit.
+- City: Art Deco hotels with Ocean-Drive colonnades, glass towers, apartments with balconies, motels, gas stations, parking garages, Old Town shop houses, marina / beach / park waterfronts, ferris wheel, overpass with highway signs, neon welcome arches, string lights, varied palms, two lamp styles, traffic lights, benches, bus stops, café sets and static pedestrians inside solid footprints.
+- Vehicles: detailed hero coupe (hood bulge, sloped glass, stripes, spoiler, chrome rims, lights), police cruiser + SUV with strobing light bars, taxi / van / sedan / hatch traffic, helicopter with searchlight, roadblock barricade.
+- Lighting: low magenta sun with shadows, cool sky fill, camera key light, police point lights, headlight spot, additive light pools, wet-road reflection streaks, sky-reflecting puddles, sunset fog, two-level bloom, ACES grade.
+- FX: voxel drift smoke, skid marks, sparks, exhaust pops, confetti on win, hit flash, desaturation on bust.
+- UI: one clean pixel stylesheet, new logo, icon set, countdown, event popups, banners, wanted sirens, laurel results card; Vazirmatn + Jersey 10 bundled locally (OFL).
+- Tooling: `npm run capture` (real 390×780 screenshots), `scripts/make-comparison.cjs`, `npm run logo`, syntax check of all modules.

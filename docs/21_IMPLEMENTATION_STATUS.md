@@ -7,7 +7,11 @@
 - `tests/`: deterministic, tamper and backend checks.
 - `.github/workflows/test.yml`: CI without external NPM packages.
 
+- `web/src/gfx/` + `web/src/render.js`: visual overhaul (voxel city kit, detailed vehicles, HDR bloom, close chase camera, FX); `web/style.css` + `web/src/ui/icons.js`: pixel UI. Real screenshots: `docs/screenshots/`.
+
 ## Not done / must not be represented as done
+- Owner sign-off on the visual overhaul (concept references in `design/references/` are targets, not achieved parity).
+- Frame-rate measurement on a real mid-range phone (only software-GL numbers exist).
 - Actual Arvan Edge environment smoke test and deployment.
 - Credential provisioning and origin persistence (production).
 - Real mobile browser manual QA and playtest / performance benchmarks.

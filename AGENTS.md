@@ -3,12 +3,14 @@ Read README.md, docs/02_GAME_DESIGN.md and docs/13_DECISIONS.md before changing 
 
 ## Current state
 Playable WebGL2 voxel browser game with Node replay-verified local online leaderboard. Edge adapter exists but is untested on ArvanCloud. Do **not** claim Arvan deployed, official entry completed or mobile QA passed.
+Visual overhaul (renderer in `web/src/gfx/`, pixel UI, closer chase camera) is implemented and documented with real 390×780 screenshots in `docs/screenshots/`; it still awaits the owner's visual approval and real-device performance measurement (see docs/25 section «پاس بازطراحی گرافیک»). Do not mark it as matching the concept references.
 
 ## Commands
 - `npm start`: serve game + local API on localhost:4173
 - `npm test`: deterministic replay tests
 - `npm run check`: tests plus syntax checks
 - `npm run build`: create deployable static site at dist/
+- `npm run test:browser` / `npm run capture`: mobile smoke test and real screenshot capture (server must be running)
 
 ## Rules
 - Never change physics without syncing browser and `server` authoritative replay behavior; bump SIM_VERSION for breaking changes.

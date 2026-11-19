@@ -29,7 +29,7 @@ const ICONS = {
   drift: ["..oooooo..", ".oyyyyyyo.", "ookkookkoo", "oooooooooo", ".kk....kk.", "..........", "yy.yy.yy..", ".yy.yy.yy."],
   bars: [".........ww", ".........ww", "......ww.ww", "......ww.ww", "...ww.ww.ww", "...ww.ww.ww", "ww.ww.ww.ww", "ww.ww.ww.ww"],
   check: [".........cc", "........ccc", ".......ccc.", "cc....ccc..", "ccc..ccc...", ".ccccccc...", "..ccccc....", "...ccc....."],
-  laurel: ["....yy", "..yy..", ".yyy..", "yy..y.", "yyyy..", "yy..y.", ".yyy..", "..yyy.", "...yyy", "....yy"],
+  laurel: [".....y..", "..yy.y..", ".yyo.y..", "..o.y...", ".yy.y...", "yyo.y...", ".o.y....", ".yyy....", "yyo.y...", ".o..y...", "..yy.y..", ".yyo..y.", "..o....y"],
   sound: ["....w.....", "...ww..w..", "wwwww...w.", "wwwww.w..w", "wwwww.w..w", "wwwww...w.", "...ww..w..", "....w....."],
   mute: ["....w.....", "...ww.....", "wwwww.r..r", "wwwww..rr.", "wwwww..rr.", "wwwww.r..r", "...ww.....", "....w....."],
   arrowL: [

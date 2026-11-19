@@ -27,9 +27,9 @@ export function createRenderer(canvas) {
   scene.add(sky.group);
 
   // Lighting: warm low sun, cool sky fill, hemisphere ambience, practical lights.
-  const hemi = new T.HemisphereLight(0x8f6dff, 0x2c1238, 0.95);
-  const sunLight = new T.DirectionalLight(0xff8a50, 2.5);
-  const fill = new T.DirectionalLight(0x6f7bff, 0.75);
+  const hemi = new T.HemisphereLight(0x8a6cff, 0x2a1240, 1.05);
+  const sunLight = new T.DirectionalLight(0xff7a7a, 2.1);
+  const fill = new T.DirectionalLight(0x6a78ff, 0.85);
   scene.add(hemi, sunLight, sunLight.target, fill, fill.target);
   sunLight.castShadow = true;
   sunLight.shadow.mapSize.set(1024, 1024);
@@ -144,6 +144,10 @@ export function createRenderer(canvas) {
   let prevGame = null, heading = 0, lastAngle = 0, steerVis = 0, eventIndex = 0, shake = 0, flash = 0, flashCol = new T.Color();
   let wheelRot = 0, skidTimer = 0, lastDrift = 0, endTime = 0, menuStart = 0;
   const seenTmp = new Set();
+  const demo = {
+    police: [{ x: -36, y: 0, angle: Math.PI / 2, speed: 70 }, { x: 30, y: 0, angle: Math.PI / 2, speed: 70 }],
+    traffic: [{ x: 45, y: 0, angle: -Math.PI / 2, speed: 60, color: 1 }],
+  };
   const eye = new T.Vector3(), look = new T.Vector3(), tmp = new T.Vector3(), camLook = new T.Vector3();
   const heroPos = new T.Vector3();
   let camInit = false;
@@ -171,14 +175,14 @@ export function createRenderer(canvas) {
   }
 
   return function draw(game, t, opts = {}) {
-    const { reducedMotion = false, low = false, seed = "", alpha = 0, countdown = 0 } = opts;
+    const { reducedMotion = false, low = false, seed = "", alpha = 0, countdown = 0, lockHigh = false } = opts;
     const dt = Math.max(0.0001, Math.min(0.1, (t - lastTime) / 1000));
     lastTime = t;
     SHARED.uTime.value = t / 1000;
     // Adaptive quality: keep steering responsive by trading resolution, shadows and bloom first.
     cost += 0.05 * (dt * 1000 - cost);
     if (cost > 34) { slowFrames++; fastFrames = 0; } else if (cost < 19) { fastFrames++; slowFrames = 0; } else { slowFrames = 0; fastFrames = 0; }
-    if (slowFrames > 90 && scale > 0.6) { scale = Math.max(0.6, scale - 0.15); slowFrames = 0; }
+    if (slowFrames > 90 && scale > 0.6 && !lockHigh) { scale = Math.max(0.6, scale - 0.15); slowFrames = 0; }
     if (fastFrames > 240 && scale < 1) { scale = Math.min(1, scale + 0.1); fastFrames = 0; }
     const tier = low ? 0 : scale < 0.8 ? 1 : 2;
     const dpr = Math.min(window.devicePixelRatio || 1, 1.25);
@@ -242,10 +246,13 @@ export function createRenderer(canvas) {
     for (const a of animated) a.rotation.x += (a.userData.spin || 0) * dt * (reducedMotion ? 0.2 : 1);
 
     // ---------- actors ----------
-    const policeStates = game ? game.police : [
-      { x: -36, y: pz * 10 - 115, angle: Math.PI / 2, speed: 70 },
-      { x: 30, y: pz * 10 - 215, angle: Math.PI / 2, speed: 70 },
-    ];
+    if (!game) {
+      // Persistent demo actors (identity matters: actors are keyed by state object).
+      demo.police[0].y = pz * 10 - 115;
+      demo.police[1].y = pz * 10 - 215;
+      demo.traffic[0].y = pz * 10 + 420;
+    }
+    const policeStates = game ? game.police : demo.police;
     sync("police", policeStates, (s, i) => makePolice(i), seenTmp);
     dyn.count = 0;
     let beaconUsed = 0;
@@ -278,7 +285,7 @@ export function createRenderer(canvas) {
     });
     for (let i = beaconUsed; i < 2; i++) beacons[i].intensity = 0;
 
-    const trafficStates = game ? game.traffic : [{ x: 45, y: pz * 10 + 420, angle: -Math.PI / 2, speed: 60, color: 1 }];
+    const trafficStates = game ? game.traffic : demo.traffic;
     sync("traffic", trafficStates, makeTraffic, seenTmp);
     for (const s of trafficStates) {
       const o = actorMap.get(s);
@@ -337,10 +344,10 @@ export function createRenderer(canvas) {
         if (e.type === "hit") {
           shake = reducedMotion ? 0 : 1;
           flash = 0.55; flashCol.setRGB(1, 0.12, 0.3);
-          if (!reducedMotion) for (let k = 0; k < 26; k++) fx.spark(px + hx * 1.5, 0.9, pz + hz * 1.5, 11, k % 3 ? 0xffd27a : 0xff6a3d, 7);
+          if (!reducedMotion) for (let k = 0; k < 14; k++) fx.spark(px + hx * 1.5, 0.9, pz + hz * 1.5, 10, k % 3 ? 0xffd27a : 0xff6a3d, 3.2);
           for (let k = 0; k < 10; k++) fx.puff(px + (Math.random() - 0.5) * 2, 0.6, pz + (Math.random() - 0.5) * 2, (Math.random() - 0.5) * 3, (Math.random() - 0.5) * 3, 0x9a8aa8, 1.1);
         } else if (e.type === "scrape" && !reducedMotion) {
-          for (let k = 0; k < 8; k++) fx.spark(px + hx * 2, 0.6, pz + hz * 2, 7, 0xffd27a, 6);
+          for (let k = 0; k < 5; k++) fx.spark(px + hx * 2, 0.6, pz + hz * 2, 7, 0xffd27a, 3);
           shake = Math.max(shake, 0.35);
         } else if (e.type === "near") {
           flash = Math.max(flash, 0.12); flashCol.setRGB(0.25, 0.9, 1);
@@ -367,12 +374,12 @@ export function createRenderer(canvas) {
       } else if (!game && Math.random() < dt * 6) {
         fx.puff(rx - hz * 1.1, 0.35, rz + hx * 1.1, -hx, -hz, 0xf6e2ee, 0.8);
       }
-      if (lastDrift > 0.6 && drift < 0.35) for (let k = 0; k < 6; k++) fx.spark(px - hx * 2.9, 0.4, pz - hz * 2.9, 3, 0xff8a3d, 5);
+      if (lastDrift > 0.6 && drift < 0.35) for (let k = 0; k < 4; k++) fx.spark(px - hx * 2.9, 0.4, pz - hz * 2.9, 3, 0xff8a3d, 3);
     }
     lastDrift = drift;
     if (ended) {
       if (!endTime) endTime = t;
-      if (game.win && !reducedMotion && t - endTime < 4500 && Math.random() < dt * 40) fx.confetti(px, 0, pz);
+      if (game.win && !reducedMotion && t - endTime < 6000) for (let k = 0; k < 2; k++) if (Math.random() < dt * 30) fx.confetti(px, 0, pz);
     }
     fx.update(dt);
     dyn.flush();
@@ -398,10 +405,10 @@ export function createRenderer(canvas) {
       post.uniforms.uSpeed.value = reducedMotion ? 0 : fast * 0.6 + drift * 0.15;
     } else if (ended) {
       const et = (t - endTime) / 1000;
-      const a = heading + Math.PI * 0.75 + (reducedMotion ? 0 : et * 0.12);
-      const r = 15.5 - Math.min(1.5, et * 0.5);
-      eye.set(px + Math.cos(a) * r, 4.6, pz + Math.sin(a) * r);
-      look.set(px, -3.4, pz);
+      const a = angle + 0.55 + (reducedMotion ? 0 : et * 0.1);
+      const r = 19 - Math.min(2, et * 0.5);
+      eye.set(px + Math.cos(a) * r, 4.4, pz + Math.sin(a) * r);
+      look.set(px, -2.4, pz);
       fov = 50;
       post.uniforms.uSpeed.value = 0;
     } else {

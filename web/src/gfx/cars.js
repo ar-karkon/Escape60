@@ -253,10 +253,11 @@ export function makeCar(geometry, material, opts = {}) {
 }
 
 /** Light bar pieces whose colour is animated every frame. */
+const BAR_GEO = new T.BoxGeometry(0.72, 0.2, 0.44);
 export function lightBar(group, y, heavy) {
   const red = new T.MeshBasicMaterial({ color: 0xff2040 });
   const blue = new T.MeshBasicMaterial({ color: 0x2f7dff });
-  const geo = new T.BoxGeometry(0.72, 0.2, 0.44);
+  const geo = BAR_GEO;
   const L = new T.Mesh(geo, red), R = new T.Mesh(geo, blue);
   L.position.set(-0.58, y, 0.3);
   R.position.set(0.58, y, 0.3);

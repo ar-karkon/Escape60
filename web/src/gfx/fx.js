@@ -42,12 +42,12 @@ export function createFX(scene) {
     },
     spark(x, y, z, speed = 9, color = 0xffd27a, k = 6) {
       const a = Math.random() * Math.PI * 2, u = Math.random();
-      sparks.spawn({ x, y, z, vx: Math.cos(a) * speed * (0.3 + u), vy: 2 + Math.random() * speed * 0.7, vz: Math.sin(a) * speed * (0.3 + u), age: 0, life: 0.35 + Math.random() * 0.4, size: 0.12 + Math.random() * 0.12, color, k, g: 18 });
+      sparks.spawn({ x, y, z, vx: Math.cos(a) * speed * (0.3 + u), vy: 2 + Math.random() * speed * 0.7, vz: Math.sin(a) * speed * (0.3 + u), age: 0, life: 0.3 + Math.random() * 0.3, size: 0.07 + Math.random() * 0.07, color, k, g: 18 });
     },
     confetti(x, y, z) {
       const cols = [0xffe37c, 0xff5d95, 0x3dd8e7, 0xc77dff, 0x5dffb0];
       const a = Math.random() * Math.PI * 2, r = Math.random() * 7;
-      sparks.spawn({ x: x + Math.cos(a) * r, y: y + 6 + Math.random() * 6, z: z + Math.sin(a) * r, vx: (Math.random() - 0.5) * 2, vy: -1 - Math.random() * 2, vz: (Math.random() - 0.5) * 2, age: 0, life: 2.6, size: 0.22, color: cols[Math.floor(Math.random() * cols.length)], k: 1.6, g: 1.2, spin: Math.random() * 8 });
+      sparks.spawn({ x: x + Math.cos(a) * r, y: y + 6 + Math.random() * 6, z: z + Math.sin(a) * r, vx: (Math.random() - 0.5) * 2, vy: -1 - Math.random() * 2, vz: (Math.random() - 0.5) * 2, age: 0, life: 2.8, size: 0.38, color: cols[Math.floor(Math.random() * cols.length)], k: 1.6, g: 1.2, spin: Math.random() * 8 });
     },
     skid(x, z, yaw, len = 0.9) {
       skids.spawn({ x, z, yaw, len, age: 0, life: 4.5 });

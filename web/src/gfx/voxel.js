@@ -63,8 +63,8 @@ float fogAmt(vec3 wp){
   return clamp(f,0.,1.);
 }
 vec3 fogCol(vec3 wp){vec3 d=normalize(wp-cameraPosition);float s=sunSide(d);
-  vec3 h=mix(mix(uHorA,uMidA,.45),mix(uHorB,uMidB,.35),s);
-  return h*mix(.5,.72,s)*mix(1.,.8,smoothstep(.0,.3,d.y));}
+  vec3 h=mix(mix(uHorA,uUpper,.35),mix(uMidB,uHorB,.3),s);
+  return h*mix(.55,.7,s)*mix(1.,.8,smoothstep(.0,.3,d.y));}
 `;
 
 /* Fragment pattern library. Inputs: base albedo (linear), uv in world units, fw face width,
