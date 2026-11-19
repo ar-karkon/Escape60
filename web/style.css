@@ -653,3 +653,16 @@ body.no-touch .cluster { bottom: calc(var(--safe-b) + 16px); }
   .vbar { width: 36px; top: calc(var(--safe-t) + 112px); bottom: calc(var(--safe-b) + 10px); }
 }
 .mm-count, .mm-count small { white-space: nowrap; }
+/* v3.3: slimmer, shorter side bars */
+.vbar { top: calc(50% - 96px); bottom: auto; height: min(232px, 34vh); width: 28px; gap: 4px; padding: 5px 0; }
+.vbar-health { left: 6px; } .vbar-nitro { right: 6px; }
+.vb-ico { width: 14px; height: 14px; }
+.vb-track { width: 10px; min-height: 40px; }
+.vb-track i { left: 2px; right: 2px; }
+.vbar b { font-size: 15px; }
+.vbar .repairs { gap: 2px; }
+.vbar .repairs span { width: 12px; height: 10px; }
+body.no-touch .vbar { bottom: auto; }
+@media (orientation: landscape) and (min-width: 600px) { .vbar { top: calc(var(--safe-t) + 128px); bottom: auto; height: min(220px, calc(100% - 160px)); width: 28px; } }
+@media (orientation: landscape) and (max-height: 520px) { .vbar { top: calc(var(--safe-t) + 112px); height: calc(100% - 132px); width: 26px; } }
+@media (max-height: 680px) and (orientation: portrait) { .vbar { top: calc(50% - 88px); bottom: auto; height: min(200px, 32vh); } }
