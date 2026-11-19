@@ -1,317 +1,473 @@
 import * as T from "../vendor/three.js";
-import { chunk, vehicle, batch, cube, paint } from "./city.js";
-const skyVertex =
-  "varying vec3 ray; void main(){ray=position;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}";
-const skyFragment = `varying vec3 ray;
-void main(){
- vec3 d=normalize(ray);
- vec3 col=mix(vec3(1.,.53,.40),vec3(.96,.34,.59),smoothstep(-.04,.17,d.y));
- col=mix(col,vec3(.11,.09,.33),smoothstep(.08,.52,d.y));
- vec2 pixel=floor(vec2(atan(d.x,-d.z),d.y)*160.);
- float bands=sin(pixel.x*.031+pixel.y*.117)+.48*sin(pixel.x*.083-pixel.y*.37);
- if(d.y>.16 && d.y<.43 && bands>1.04+abs(sin(pixel.y*.23))*.25)
-   col=mix(col,vec3(.94,.51,.67),.48);
- float sun=distance(d,normalize(vec3(.38,.17,-1.)));
- if(sun<.091 && (d.y>.14 || mod(d.y,.026)>.004)) col=vec3(1.,.88,.52);
- gl_FragColor=vec4(col,1.);
-}`;
+import { SHARED, voxelMaterial, glowMaterial, GlowBuilder, GLOW } from "./gfx/voxel.js";
+import { atlasTexture } from "./gfx/signs.js";
+import { buildChunk, disposeChunk, TILE } from "./gfx/city.js";
+import { heroBody, policeBody, trafficBody, TRAFFIC_TYPES, wheelGeometry, makeCar, lightBar, barricadeGeometry, helicopter } from "./gfx/cars.js";
+import { createSky } from "./gfx/sky.js";
+import { createFX } from "./gfx/fx.js";
+import { createPost } from "./gfx/post.js";
+import { CAR_COLORS } from "./gfx/palette.js";
+
+/* Sunset Bay renderer. Consumes simulation state only; it never changes gameplay. */
+const TICK = 1 / 60;
+const RED = new T.Color(0xff2a4a), BLUE = new T.Color(0x2f86ff), WARM = new T.Color(0xffd9a0), CYAN = new T.Color(0x3dd8e7), AMBER = new T.Color(0xffa020), PINK = new T.Color(0xff5d95);
+
 export function createRenderer(canvas) {
-  const renderer = new T.WebGLRenderer({
-    canvas,
-    antialias: false,
-    powerPreference: "high-performance",
-  });
-  const scene = new T.Scene(),
-    camera = new T.PerspectiveCamera(51, 1, 0.16, 245);
-  scene.fog = new T.FogExp2(0xf9a0a2, 0.009);
-  const sky = new T.Mesh(
-    new T.SphereGeometry(205, 32, 18),
-    new T.ShaderMaterial({
-      vertexShader: skyVertex,
-      fragmentShader: skyFragment,
-      side: T.BackSide,
-      depthWrite: false,
-    }),
-  );
-  scene.add(sky, new T.HemisphereLight(0xffecdf, 0x847ba6, 2.15));
-  const sun = new T.DirectionalLight(0xffcf8f, 2);
-  sun.position.set(-32, 46, -25);
-  scene.add(sun, sun.target);
+  const renderer = new T.WebGLRenderer({ canvas, antialias: false, powerPreference: "high-performance", stencil: false });
+  renderer.setPixelRatio(1);
+  renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = T.BasicShadowMap;
-  sun.castShadow = true;
-  sun.shadow.mapSize.set(512, 512);
-  Object.assign(sun.shadow.camera, {
-    left: -38,
-    right: 38,
-    top: 38,
-    bottom: -38,
-    near: 1,
-    far: 135,
-  });
-  sun.shadow.camera.updateProjectionMatrix();
-  sun.shadow.normalBias = 0.09;
-  const glow = new T.PointLight(0xff5d95, 22, 14);
-  scene.add(glow);
-  const beacon = [0xff416a, 0x3f98ff].map((color) => {
-    const light = new T.PointLight(color, 52, 13);
-    scene.add(light);
-    return light;
-  });
-  // Remove only city fragments that project in front of the hero. This also
-  // covers signs and bridge decks whose bases lie outside the camera ray.
-  const cityPaint = paint.clone(),
-    cutout = new T.Vector4();
-  cityPaint.onBeforeCompile = (shader) => {
-    shader.uniforms.heroCutout = { value: cutout };
-    shader.fragmentShader =
-      "uniform vec4 heroCutout;\n" +
-      shader.fragmentShader.replace(
-        "#include <clipping_planes_fragment>",
-        "#include <clipping_planes_fragment>\nif(gl_FragCoord.z < heroCutout.z && distance(gl_FragCoord.xy,heroCutout.xy)<heroCutout.w) discard;",
-      );
-  };
-  const hero = vehicle(),
-    police = [],
-    traffic = [],
-    blocks = [],
-    tiles = new Map();
+  const post = createPost(renderer);
+  SHARED.uAtlas.value = atlasTexture;
+
+  const scene = new T.Scene();
+  const camera = new T.PerspectiveCamera(58, 0.5, 0.3, 1300);
+  const mats = { city: voxelMaterial({ cutout: true }), car: voxelMaterial(), glow: glowMaterial() };
+  const sky = createSky(mats.city);
+  scene.add(sky.group);
+
+  // Lighting: warm low sun, cool sky fill, hemisphere ambience, practical lights.
+  const hemi = new T.HemisphereLight(0x8f6dff, 0x2c1238, 0.95);
+  const sunLight = new T.DirectionalLight(0xff8a50, 2.5);
+  const fill = new T.DirectionalLight(0x6f7bff, 0.75);
+  scene.add(hemi, sunLight, sunLight.target, fill, fill.target);
+  sunLight.castShadow = true;
+  sunLight.shadow.mapSize.set(1024, 1024);
+  Object.assign(sunLight.shadow.camera, { left: -42, right: 42, top: 42, bottom: -42, near: 1, far: 220 });
+  sunLight.shadow.camera.updateProjectionMatrix();
+  sunLight.shadow.bias = -0.0008;
+  sunLight.shadow.normalBias = 0.06;
+  const headSpot = new T.SpotLight(0xffe2b8, 60, 34, 0.55, 0.6, 1.2);
+  // Photographer-style key light that travels with the camera so the hero always reads.
+  const key = new T.PointLight(0xffd2b0, 60, 30, 1.4);
+  scene.add(key);
+  scene.add(headSpot, headSpot.target);
+  const beacons = [new T.PointLight(0xff2a4a, 40, 16, 1.6), new T.PointLight(0x2f86ff, 40, 16, 1.6)];
+  for (const l of beacons) scene.add(l);
+
+  const fx = createFX(scene);
+  const dyn = new GlowBuilder(160, true);
+  const dynMesh = dyn.mesh(mats.glow);
+  scene.add(dynMesh);
+
+  // Vehicles
+  const heroWheel = wheelGeometry(0xe6e6f0, true);
+  const hero = makeCar(heroBody(), mats.car, { wheel: heroWheel, zf: -1.72, zb: 1.72, wx: 1.12 });
   scene.add(hero);
-  const trail = new T.InstancedMesh(cube, paint, 96),
-    ring = [],
-    dummy = new T.Object3D();
-  scene.add(trail);
-  trail.count = 0;
-  trail.frustumCulled = false;
-  let seed = "",
-    tileKey = "",
-    previous = null,
-    lastTick = -1,
-    heading = 0,
-    prevAngle = 0,
-    lastTime = 0,
-    cost = 16,
-    economy = false;
-  const center = new T.Vector3(),
-    eye = new T.Vector3(),
-    target = new T.Vector3();
-  function actors(list, states, make, t) {
-    while (list.length < states.length) {
-      const object = make(list.length);
-      list.push(object);
-      scene.add(object);
-    }
-    list.forEach((o, i) => {
-      const s = states[i];
-      o.visible = !!s;
-      if (!s) return;
-      o.position.set(s.x / 10, 0, s.y / 10);
-      o.rotation.y = -s.angle - Math.PI / 2;
-      if (o.userData.bar)
-        o.userData.bar.rotation.y = (Math.floor(t / 280 + i) % 2) * Math.PI;
-    });
+  const policeGeo = [policeBody(false), policeBody(true)];
+  const trafficGeo = new Map();
+  const getTrafficGeo = (type, color) => {
+    const key = type + color;
+    if (!trafficGeo.has(key)) trafficGeo.set(key, trafficBody(type, color));
+    return trafficGeo.get(key);
+  };
+  const barricadeGeo = barricadeGeometry();
+  const actorMap = new WeakMap();
+  const live = { police: new Set(), traffic: new Set(), marks: new Set() };
+  const heli = helicopter(mats.car);
+  heli.visible = false;
+  scene.add(heli);
+
+  function makePolice(i) {
+    const heavy = i % 3 === 2;
+    const g = makeCar(policeGeo[heavy ? 1 : 0].geometry, mats.car, { zf: heavy ? -1.7 : -1.75, zb: heavy ? 1.8 : 1.7, wx: 1.15 });
+    lightBar(g, policeGeo[heavy ? 1 : 0].barY, heavy);
+    g.userData.phase = Math.random() * 6;
+    return g;
   }
-  return function draw(game, t, { reducedMotion, low, seed: menuSeed }) {
-    const dt = Math.max(0, Math.min(0.1, (t - lastTime) / 1000));
+  function makeTraffic(state, idx) {
+    const type = TRAFFIC_TYPES[state.color ?? idx % 4];
+    const seed = Math.abs(Math.floor((state.x ?? 0) * 7 + (state.y ?? 0) * 13));
+    const paint = CAR_COLORS[seed % CAR_COLORS.length];
+    return makeCar(getTrafficGeo(type, paint), mats.car, { zf: type === "hatch" ? -1.4 : -1.75, zb: type === "hatch" ? 1.35 : 1.7 });
+  }
+  function makeMark() {
+    const m = new T.Mesh(barricadeGeo, mats.car);
+    m.castShadow = true;
+    return m;
+  }
+  function sync(kind, states, factory, seen) {
+    const set = live[kind];
+    seen.clear();
+    states.forEach((s, i) => {
+      let o = actorMap.get(s);
+      if (!o) {
+        o = factory(s, i);
+        actorMap.set(s, o);
+        scene.add(o);
+      }
+      seen.add(o);
+    });
+    for (const o of set) if (!seen.has(o)) scene.remove(o);
+    set.clear();
+    for (const o of seen) set.add(o);
+  }
+
+  // City tiles
+  const tiles = new Map();
+  const animated = new Set();
+  let tileSeed = "";
+  function ensureTiles(seed, cx, cz, budget) {
+    if (seed !== tileSeed) {
+      for (const [, c] of tiles) { scene.remove(c.object); disposeChunk(c); for (const a of c.animated) animated.delete(a); }
+      tiles.clear();
+      tileSeed = seed;
+    }
+    const ci = Math.floor(cx / TILE), cj = Math.floor(cz / TILE);
+    const want = [];
+    for (let i = ci - 2; i <= ci + 2; i++) for (let j = cj - 2; j <= cj + 2; j++) {
+      const key = i + "/" + j;
+      if (!tiles.has(key)) want.push([Math.hypot(i + 0.5 - cx / TILE, j + 0.5 - cz / TILE), i, j, key]);
+    }
+    want.sort((a, b) => a[0] - b[0]);
+    const t0 = performance.now();
+    for (const [, i, j, key] of want) {
+      if (budget >= 0 && performance.now() - t0 > budget) break;
+      const c = buildChunk(seed, i, j, mats);
+      tiles.set(key, c);
+      scene.add(c.object);
+      for (const a of c.animated) animated.add(a);
+    }
+    for (const [key, c] of tiles) {
+      const [i, j] = key.split("/").map(Number);
+      if (Math.abs(i - ci) > 3 || Math.abs(j - cj) > 3) {
+        scene.remove(c.object);
+        disposeChunk(c);
+        for (const a of c.animated) animated.delete(a);
+        tiles.delete(key);
+      }
+    }
+  }
+
+  // State
+  let lastTime = 0, cost = 16, scale = 1, slowFrames = 0, fastFrames = 0;
+  let prevGame = null, heading = 0, lastAngle = 0, steerVis = 0, eventIndex = 0, shake = 0, flash = 0, flashCol = new T.Color();
+  let wheelRot = 0, skidTimer = 0, lastDrift = 0, endTime = 0, menuStart = 0;
+  const seenTmp = new Set();
+  const eye = new T.Vector3(), look = new T.Vector3(), tmp = new T.Vector3(), camLook = new T.Vector3();
+  const heroPos = new T.Vector3();
+  let camInit = false;
+  const arrow = document.getElementById("threat");
+
+  function lerpAngle(a, b, k) { return a + Math.atan2(Math.sin(b - a), Math.cos(b - a)) * k; }
+  function placeCar(o, x, z, angle, speed, dt) {
+    o.position.set(x, 0, z);
+    o.rotation.y = -angle - Math.PI / 2;
+    const ud = o.userData;
+    if (ud.wheels) {
+      ud.spin = (ud.spin ?? 0) - (speed * dt) / (ud.radius || 0.5);
+      for (const w of ud.wheels) w.mesh.rotation.x = ud.spin;
+    }
+  }
+  function policeLights(o, t, reduced, i) {
+    const bar = o.userData.bar;
+    if (!bar) return 0;
+    const ph = (t / 1000) * 7 + o.userData.phase;
+    const a = reduced ? 1 : Math.floor(ph) % 2 === 0 && ph % 1 < 0.75 ? 1 : 0.12;
+    const b = reduced ? 1 : Math.floor(ph) % 2 === 1 && ph % 1 < 0.75 ? 1 : 0.12;
+    bar.red.color.setRGB(5 * a + 0.2, 0.25 * a, 0.5 * a);
+    bar.blue.color.setRGB(0.2 * b, 1.2 * b, 6 * b + 0.2);
+    return a > b ? 1 : -1;
+  }
+
+  return function draw(game, t, opts = {}) {
+    const { reducedMotion = false, low = false, seed = "", alpha = 0, countdown = 0 } = opts;
+    const dt = Math.max(0.0001, Math.min(0.1, (t - lastTime) / 1000));
     lastTime = t;
-    cost += 0.03 * (dt * 1000 - cost);
-    if (cost > 35) economy = true;
-    if (cost < 23) economy = false;
-    renderer.shadowMap.enabled = !low && !economy;
-    const h = Math.min(canvas.clientHeight, low ? 320 : economy ? 408 : 568),
-      w = Math.max(
-        1,
-        Math.round((canvas.clientWidth * h) / canvas.clientHeight),
-      );
+    SHARED.uTime.value = t / 1000;
+    // Adaptive quality: keep steering responsive by trading resolution, shadows and bloom first.
+    cost += 0.05 * (dt * 1000 - cost);
+    if (cost > 34) { slowFrames++; fastFrames = 0; } else if (cost < 19) { fastFrames++; slowFrames = 0; } else { slowFrames = 0; fastFrames = 0; }
+    if (slowFrames > 90 && scale > 0.6) { scale = Math.max(0.6, scale - 0.15); slowFrames = 0; }
+    if (fastFrames > 240 && scale < 1) { scale = Math.min(1, scale + 0.1); fastFrames = 0; }
+    const tier = low ? 0 : scale < 0.8 ? 1 : 2;
+    const dpr = Math.min(window.devicePixelRatio || 1, 1.25);
+    const cw = canvas.clientWidth || 390, ch = canvas.clientHeight || 780;
+    const k = (low ? 0.62 : scale) * dpr * Math.min(1, 1000 / ch);
+    const w = Math.max(1, Math.round(cw * k)), h = Math.max(1, Math.round(ch * k));
     if (canvas.width !== w || canvas.height !== h) {
       renderer.setSize(w, h, false);
       camera.aspect = w / h;
       camera.updateProjectionMatrix();
     }
-    const demo = !game,
-      playing = game?.state === "playing",
-      p = game?.player ?? { x: 0, y: 228, angle: Math.PI * 0.31, drift: 0 };
-    const x = p.x / 10,
-      z = p.y / 10,
-      ix = Math.floor(x / 52),
-      iz = Math.floor(z / 52),
-      currentSeed = game?.seed ?? menuSeed,
-      key = [currentSeed, ix, iz].join("/");
-    if (key !== tileKey) {
-      const keep = new Set();
-      for (let i = ix - 2; i <= ix + 2; i++)
-        for (let j = iz - 3; j <= iz + 2; j++) {
-          const id = [currentSeed, i, j].join("/");
-          keep.add(id);
-          if (!tiles.has(id)) {
-            const tile = chunk(currentSeed, i, j);
-            tile.material = cityPaint;
-            scene.add(tile);
-            tiles.set(id, tile);
-          }
-        }
-      for (const [id, obj] of tiles)
-        if (!keep.has(id)) {
-          scene.remove(obj);
-          obj.dispose();
-          tiles.delete(id);
-        }
-      tileKey = key;
+    post.setSize(w, h);
+    renderer.shadowMap.enabled = tier === 2;
+    sunLight.castShadow = tier === 2;
+    headSpot.visible = tier > 0;
+    mats.glow.uniforms.uGlowScale.value = tier === 0 ? 0.8 : 1;
+
+    const playing = game?.state === "playing";
+    const ended = game?.state === "ended";
+    if (game !== prevGame) {
+      prevGame = game;
+      eventIndex = 0;
+      camInit = false;
+      fx.clear();
+      endTime = 0;
+      menuStart = t;
+      if (game) heading = game.player.angle;
     }
-    const snap = game !== previous || seed !== currentSeed;
-    if (snap) {
-      heading = p.angle;
-      prevAngle = p.angle;
-      ring.length = 0;
-      lastTick = -1;
-    }
-    sun.target.position.set(x, 0, z);
-    sun.position.set(x - 32, 46, z - 25);
-    previous = game;
-    seed = currentSeed;
-    hero.position.set(x, 0, z);
-    hero.rotation.y = -p.angle - Math.PI / 2;
-    const steer = Math.sin(p.angle - prevAngle);
-    prevAngle = p.angle;
-    hero.rotation.z +=
-      (Math.sign(steer) * p.drift * 0.075 - hero.rotation.z) * 0.24;
-    hero.userData.wheels.forEach((w) => (w.rotation.y = hero.rotation.z * 3));
-    hero.visible =
-      reducedMotion ||
-      !game?.invuln ||
-      game.state === "ended" ||
-      game.ticks % 12 < 9;
-    actors(
-      police,
-      game?.police ?? [
-        { x: -28, y: 112, angle: 1.45 },
-        { x: 30, y: 48, angle: 1.52 },
-      ],
-      () => vehicle(true),
-      reducedMotion ? 0 : t,
-    );
-    const nearest = police
-      .filter((o) => o.visible)
-      .sort(
-        (a, b) =>
-          a.position.distanceToSquared(hero.position) -
-          b.position.distanceToSquared(hero.position),
-      )[0];
-    beacon.forEach((lamp, i) => {
-      lamp.visible = !!nearest && !low;
-      if (!nearest) return;
-      lamp.position.copy(nearest.position);
-      lamp.position.x += i ? 1 : -1;
-      lamp.position.y = 3;
-      lamp.intensity = reducedMotion
-        ? 16
-        : Math.floor(t / 260) % 2 === i
-          ? 65
-          : 8;
-    });
-    actors(
-      traffic,
-      game?.traffic ?? [],
-      (i) =>
-        vehicle(false, [0x19b8bc, 0xffe37c, 0xae86db, 0xc85976][i % 4], i % 4),
-      t,
-    );
-    actors(
-      blocks,
-      game?.marks ?? [],
-      () =>
-        batch((b) => {
-          b(0, 0.7, 0, 5, 1.4, 1.7, 0xff8872);
-          for (let i = -2; i <= 2; i += 2)
-            b(i, 0.75, 0.01, 0.72, 1.46, 1.73, 0xffead0);
-        }),
-      t,
-    );
-    heading +=
-      Math.atan2(Math.sin(p.angle - heading), Math.cos(p.angle - heading)) *
-      (1 - Math.exp(-dt * 3.6));
-    if (playing) {
-      const dx = Math.cos(heading),
-        dz = Math.sin(heading);
-      eye.set(x - dx * 39 - dz * 9, 39, z - dz * 39 + dx * 9);
-      target.set(x + dx * 7, 0, z + dz * 7);
+
+    // ---------- hero pose ----------
+    let px, pz, angle, speed, drift = 0;
+    if (game) {
+      const p = game.player;
+      const ex = playing ? alpha * TICK : 0;
+      px = (p.x + Math.cos(p.angle) * p.speed * ex) / 10;
+      pz = (p.y + Math.sin(p.angle) * p.speed * ex) / 10;
+      angle = p.angle;
+      speed = playing ? p.speed / 10 : 0;
+      drift = playing ? p.drift : 0;
     } else {
-      const a = reducedMotion ? 0 : Math.sin(t * 0.00015) * 0.6;
-      if (demo) {
-        eye.set(x - 3.2 + a, 4.1, z + 12.5);
-        target.set(x, 2.2, z - 1);
-      } else {
-        const dx = Math.cos(p.angle),
-          dz = Math.sin(p.angle);
-        eye.set(x + dx * 12 - dz * 4, 6, z + dz * 12 + dx * 4);
-        target.set(x + dx * 2, -0.25, z + dz * 2);
+      // Menu: the hero cruises up the sunset boulevard toward the camera, police in tow.
+      const span = 150, v = 7;
+      const s = (((t - menuStart) / 1000) * v) % span;
+      px = -3.6; pz = -150 + s; angle = Math.PI / 2; speed = v; drift = 0.15 + 0.15 * Math.sin(t / 900);
+    }
+    const turn = Math.atan2(Math.sin(angle - lastAngle), Math.cos(angle - lastAngle));
+    lastAngle = angle;
+    steerVis += ((Math.abs(turn) > 0.0005 ? Math.sign(turn) : 0) - steerVis) * Math.min(1, dt * 10);
+    const yawOffset = steerVis * drift * 0.38;
+    placeCar(hero, px, pz, angle + yawOffset, speed, dt);
+    heroPos.set(px, 0, pz);
+    hero.userData.body.rotation.z = -steerVis * drift * 0.06;
+    hero.userData.body.position.y = Math.sin(t / 70) * 0.012 * (speed > 0 ? 1 : 0);
+    for (const wh of hero.userData.wheels) if (wh.front) wh.pivot.rotation.y = -steerVis * 0.38;
+    hero.visible = reducedMotion || !game || !game.invuln || !playing || game.ticks % 10 < 6;
+
+    // ---------- tiles ----------
+    const dirx = Math.cos(angle), dirz = Math.sin(angle);
+    const ahead = game ? 50 : -25;
+    ensureTiles(game?.seed ?? seed, px + dirx * ahead, pz + dirz * ahead, camInit ? 7 : -1);
+    for (const a of animated) a.rotation.x += (a.userData.spin || 0) * dt * (reducedMotion ? 0.2 : 1);
+
+    // ---------- actors ----------
+    const policeStates = game ? game.police : [
+      { x: -36, y: pz * 10 - 115, angle: Math.PI / 2, speed: 70 },
+      { x: 30, y: pz * 10 - 215, angle: Math.PI / 2, speed: 70 },
+    ];
+    sync("police", policeStates, (s, i) => makePolice(i), seenTmp);
+    dyn.count = 0;
+    let beaconUsed = 0;
+    const policeList = [];
+    for (const s of policeStates) {
+      const o = actorMap.get(s);
+      const moving = playing && !(s.stun > 0);
+      const ex = moving ? alpha * TICK : 0;
+      const sx = (s.x + Math.cos(s.angle) * (s.speed ?? 0) * ex) / 10, sz = (s.y + Math.sin(s.angle) * (s.speed ?? 0) * ex) / 10;
+      placeCar(o, game ? sx : sx, game ? sz : sz, s.angle, game ? (moving ? s.speed / 10 : 0) : speed, dt);
+      policeList.push(o);
+    }
+    policeList.sort((a, b) => a.position.distanceToSquared(heroPos) - b.position.distanceToSquared(heroPos));
+    policeList.forEach((o, i) => {
+      const side = policeLights(o, t, reducedMotion, i);
+      if (i < 4) {
+        const ox = o.position.x, oz = o.position.z;
+        const k = reducedMotion ? 0.35 : 0.55;
+        dyn.add(GLOW.POOL, ox, 0.07, oz, 5.2, 5.2, 0, side > 0 ? RED : BLUE, k);
+        dyn.add(GLOW.STREAK, ox, 0.06, oz, 1.2, 11, 0, side > 0 ? RED : BLUE, 0.9);
+        const a = -o.rotation.y - Math.PI / 2;
+        dyn.add(GLOW.CONE, ox + Math.cos(a) * 2.6, 0.06, oz + Math.sin(a) * 2.6, 2.6, 11, a, WARM, 0.22);
+      }
+      if (i < 2 && tier > 0) {
+        const l = beacons[beaconUsed++];
+        l.position.set(o.position.x, 3, o.position.z);
+        l.color.copy(side > 0 ? RED : BLUE);
+        l.intensity = reducedMotion ? 18 : 45;
+      }
+    });
+    for (let i = beaconUsed; i < 2; i++) beacons[i].intensity = 0;
+
+    const trafficStates = game ? game.traffic : [{ x: 45, y: pz * 10 + 420, angle: -Math.PI / 2, speed: 60, color: 1 }];
+    sync("traffic", trafficStates, makeTraffic, seenTmp);
+    for (const s of trafficStates) {
+      const o = actorMap.get(s);
+      const ex = playing ? alpha * TICK : 0;
+      const sx = (s.x + Math.cos(s.angle) * s.speed * ex) / 10, sz = (s.y + Math.sin(s.angle) * s.speed * ex) / 10;
+      placeCar(o, sx, sz, s.angle, playing || !game ? s.speed / 10 : 0, dt);
+      if (o.position.distanceToSquared(heroPos) < 90 * 90) {
+        dyn.add(GLOW.CONE, sx + Math.cos(s.angle) * 2.6, 0.06, sz + Math.sin(s.angle) * 2.6, 2.4, 10, s.angle, WARM, 0.2);
+        dyn.add(GLOW.STREAK, sx - Math.cos(s.angle) * 2.7, 0.06, sz - Math.sin(s.angle) * 2.7, 0.8, 5, 0, RED, 0.35);
       }
     }
-    if (snap) camera.position.copy(eye);
-    else camera.position.lerp(eye, 1 - Math.exp(-dt * 8));
-    if (game?.invuln > 0.83 && !reducedMotion && playing)
-      camera.position.x += Math.sin(t) * 0.09;
-    camera.lookAt(target);
-    camera.updateMatrixWorld();
-    center.set(x, 1.2, z).project(camera);
-    cutout.set(
-      ((center.x + 1) * w) / 2,
-      ((center.y + 1) * h) / 2,
-      (center.z + 1) / 2 - 0.00005,
-      playing ? h * 0.055 : 0,
-    );
-    glow.position.set(x - 2, 3, z + 1);
-    glow.color.setHex(
-      !reducedMotion && Math.floor(t / 420) % 2 ? 0x3dd8e7 : 0xff5d95,
-    );
-    if (!reducedMotion && !low && playing && game.ticks !== lastTick) {
-      if (p.drift > 0.25 || game.invuln > 0.82) {
-        for (const side of [-1, 1]) {
-          const spark = game.invuln > 0.82;
-          ring.push({
-            x: x - Math.cos(p.angle) * 2 + Math.sin(p.angle) * side,
-            y: spark ? 0.95 : 0.08,
-            z: z - Math.sin(p.angle) * 2 - Math.cos(p.angle) * side,
-            t,
-            color: spark ? 0xffe37c : 0x252036,
-          });
-          if (p.drift > 0.6) ring.push({ x, y: 0.8, z, t, color: 0xb49bae });
+    const markStates = game ? game.marks : [];
+    sync("marks", markStates, makeMark, seenTmp);
+    for (const s of markStates) {
+      const o = actorMap.get(s);
+      o.position.set(s.x / 10, 0, s.y / 10);
+      o.rotation.y = -(s.angle ?? 0) - Math.PI / 2;
+      const pulse = reducedMotion ? 0.6 : 0.45 + 0.4 * Math.abs(Math.sin(t / 160));
+      dyn.add(GLOW.POOL, s.x / 10, 0.07, s.y / 10, 6, 6, 0, AMBER, pulse);
+      dyn.add(GLOW.STREAK, s.x / 10, 0.06, s.y / 10, 1.6, 14, 0, RED, pulse);
+    }
+
+    // ---------- hero lights ----------
+    const ha = angle + yawOffset;
+    const hx = Math.cos(ha), hz = Math.sin(ha);
+    dyn.add(GLOW.CONE, px + hx * 2.8, 0.07, pz + hz * 2.8, 3.6, 15, ha, WARM, 0.32);
+    dyn.add(GLOW.POOL, px, 0.07, pz, 1.9, 3.4, ha, t % 1600 < 800 || reducedMotion ? CYAN : PINK, 0.42);
+    dyn.add(GLOW.STREAK, px - hx * 2.85 - hz * 0.85, 0.06, pz - hz * 2.85 + hx * 0.85, 0.5, 6, 0, RED, 0.75);
+    dyn.add(GLOW.STREAK, px - hx * 2.85 + hz * 0.85, 0.06, pz - hz * 2.85 - hx * 0.85, 0.5, 6, 0, RED, 0.75);
+    dyn.add(GLOW.HALO, px - hx * 2.85, 0.9, pz - hz * 2.85, 1.6, 0, 0, RED, 0.25);
+    headSpot.position.set(px + hx * 2.2, 1.3, pz + hz * 2.2);
+    headSpot.target.position.set(px + hx * 14, 0, pz + hz * 14);
+
+    // ---------- helicopter ----------
+    const elapsed = game ? game.ticks / 60 : 30;
+    heli.visible = elapsed >= 25 && !low;
+    if (heli.visible) {
+      const ht = t / 1000;
+      const sway2 = Math.sin(ht * 0.35) * 5;
+      const hx2 = px + Math.cos(heading) * 44 - Math.sin(heading) * sway2, hz2 = pz + Math.sin(heading) * 44 + Math.cos(heading) * sway2;
+      heli.position.set(hx2, 15.5 + Math.sin(ht * 0.8) * 0.8, hz2);
+      heli.rotation.set(0.12, Math.atan2(hx2 - px, hz2 - pz), 0.08 * Math.sin(ht));
+      heli.userData.rotor.rotation.y += dt * 28;
+      heli.userData.tail.rotation.x += dt * 30;
+      const sx = px + dirx * 4 + Math.sin(ht * 1.3) * 2, sz = pz + dirz * 4 + Math.cos(ht * 1.1) * 2;
+      const bx = sx - heli.position.x, bz = sz - heli.position.z;
+      dyn.add(GLOW.BEAM, heli.position.x, heli.position.y - 0.8, heli.position.z, 3.2, Math.hypot(bx, bz), Math.atan2(bz, bx), new T.Color(0.75, 0.82, 1), 0.16);
+      dyn.add(GLOW.POOL, sx, 0.08, sz, 4.6, 4.6, 0, new T.Color(0.8, 0.85, 1), 0.38);
+    }
+
+    // ---------- events -> FX ----------
+    if (game) {
+      const ev = game.events;
+      for (; eventIndex < ev.length; eventIndex++) {
+        const e = ev[eventIndex];
+        if (e.type === "hit") {
+          shake = reducedMotion ? 0 : 1;
+          flash = 0.55; flashCol.setRGB(1, 0.12, 0.3);
+          if (!reducedMotion) for (let k = 0; k < 26; k++) fx.spark(px + hx * 1.5, 0.9, pz + hz * 1.5, 11, k % 3 ? 0xffd27a : 0xff6a3d, 7);
+          for (let k = 0; k < 10; k++) fx.puff(px + (Math.random() - 0.5) * 2, 0.6, pz + (Math.random() - 0.5) * 2, (Math.random() - 0.5) * 3, (Math.random() - 0.5) * 3, 0x9a8aa8, 1.1);
+        } else if (e.type === "scrape" && !reducedMotion) {
+          for (let k = 0; k < 8; k++) fx.spark(px + hx * 2, 0.6, pz + hz * 2, 7, 0xffd27a, 6);
+          shake = Math.max(shake, 0.35);
+        } else if (e.type === "near") {
+          flash = Math.max(flash, 0.12); flashCol.setRGB(0.25, 0.9, 1);
+        } else if (e.type === "win") {
+          flash = 0.4; flashCol.setRGB(1, 0.85, 0.4);
+        } else if (e.type === "end") {
+          flash = 0.6; flashCol.setRGB(1, 0.15, 0.25);
         }
       }
-      lastTick = game.ticks;
     }
-    while (
-      ring.length > (economy ? 40 : 96) ||
-      (ring.length && t - ring[0].t > 700)
-    )
-      ring.shift();
-    trail.count = low || reducedMotion ? 0 : ring.length;
-    for (let i = 0; i < trail.count; i++) {
-      const e = ring[i],
-        age = (t - e.t) / 700;
-      dummy.position.set(e.x, e.y + (e.y > 0.2 ? age * 1.8 : 0), e.z);
-      dummy.scale.set(0.34, e.y > 0.2 ? 0.35 : 0.04, 0.57);
-      dummy.updateMatrix();
-      trail.setMatrixAt(i, dummy.matrix);
-      trail.setColorAt(i, new T.Color(e.color));
+    if (!reducedMotion && !low && speed > 0) {
+      const rx = px - hx * 2.1, rz = pz - hz * 2.1;
+      if (drift > 0.3) {
+        const n = Math.random() < dt * 45 * drift ? 2 : 0;
+        for (let k = 0; k < n; k++) {
+          const s = k ? 1 : -1;
+          fx.puff(rx - hz * 1.15 * s, 0.35, rz + hx * 1.15 * s, -hx * 2 + (Math.random() - 0.5) * 2.5, -hz * 2 + (Math.random() - 0.5) * 2.5, Math.random() < 0.5 ? 0xf6e2ee : 0xd9c4e8, 1.1);
+        }
+        skidTimer += dt;
+        if (skidTimer > 0.045) {
+          skidTimer = 0;
+          for (const s of [-1, 1]) fx.skid(rx - hz * 1.12 * s, rz + hx * 1.12 * s, -angle - Math.PI / 2, Math.max(0.6, speed * 0.06));
+        }
+      } else if (!game && Math.random() < dt * 6) {
+        fx.puff(rx - hz * 1.1, 0.35, rz + hx * 1.1, -hx, -hz, 0xf6e2ee, 0.8);
+      }
+      if (lastDrift > 0.6 && drift < 0.35) for (let k = 0; k < 6; k++) fx.spark(px - hx * 2.9, 0.4, pz - hz * 2.9, 3, 0xff8a3d, 5);
     }
-    trail.instanceMatrix.needsUpdate = true;
-    if (trail.instanceColor) trail.instanceColor.needsUpdate = true;
-    sky.position.copy(camera.position);
-    renderer.render(scene, camera);
-    const arrow = document.getElementById("threat");
-    arrow.hidden = true;
-    if (playing)
-      for (const car of police) {
-        if (!car.visible || car.position.distanceTo(hero.position) > 48)
-          continue;
-        const v = center.copy(car.position).project(camera);
-        if (Math.abs(v.x) <= 1 && Math.abs(v.y) <= 1 && v.z < 1) continue;
-        const a = Math.atan2(-v.y, v.x) + (v.z > 1 ? Math.PI : 0);
-        arrow.style.left = 50 + 44 * Math.cos(a) + "%";
-        arrow.style.top = 50 + 32 * Math.sin(a) + "%";
-        arrow.style.transform = "rotate(" + (a + Math.PI / 2) + "rad)";
+    lastDrift = drift;
+    if (ended) {
+      if (!endTime) endTime = t;
+      if (game.win && !reducedMotion && t - endTime < 4500 && Math.random() < dt * 40) fx.confetti(px, 0, pz);
+    }
+    fx.update(dt);
+    dyn.flush();
+
+    // ---------- camera director ----------
+    let fov = 58;
+    if (playing || (game && !ended)) {
+      heading = lerpAngle(heading, angle, 1 - Math.exp(-dt * 4.2));
+      const dx = Math.cos(heading), dz = Math.sin(heading);
+      const fast = Math.max(0, Math.min(1, (speed * 10 - 240) / 39));
+      const back = 14.2 + fast * 1.2, height = 9.4;
+      eye.set(px - dx * back - dz * steerVis * 0.9, height, pz - dz * back + dx * steerVis * 0.9);
+      look.set(px + dx * 11, 1.2, pz + dz * 11);
+      fov = 58 + fast * 6;
+      if (countdown > 0) {
+        // Swoop from a low front three-quarter view into the chase position.
+        const k2 = Math.min(1, countdown / 1.8);
+        const e2 = k2 * k2 * (3 - 2 * k2);
+        tmp.set(px + dx * 9 - dz * 5, 2.4, pz + dz * 9 + dx * 5);
+        eye.lerp(tmp, e2);
+        look.lerp(tmp.set(px, 1.1, pz), e2);
+      }
+      post.uniforms.uSpeed.value = reducedMotion ? 0 : fast * 0.6 + drift * 0.15;
+    } else if (ended) {
+      const et = (t - endTime) / 1000;
+      const a = heading + Math.PI * 0.75 + (reducedMotion ? 0 : et * 0.12);
+      const r = 15.5 - Math.min(1.5, et * 0.5);
+      eye.set(px + Math.cos(a) * r, 4.6, pz + Math.sin(a) * r);
+      look.set(px, -3.4, pz);
+      fov = 50;
+      post.uniforms.uSpeed.value = 0;
+    } else {
+      const sway = reducedMotion ? 0 : Math.sin(t * 0.00025) * 0.8;
+      eye.set(px + 2.4 + sway, 2.3, pz + 11.2);
+      look.set(px - 0.7, 1.35, pz - 4);
+      fov = 54;
+      post.uniforms.uSpeed.value = 0;
+    }
+    if (!camInit || !game) { camera.position.copy(eye); camLook.copy(look); camInit = true; }
+    else {
+      const kpos = 1 - Math.exp(-dt * (playing ? 9 : 3));
+      camera.position.lerp(eye, kpos);
+      camLook.lerp(look, 1 - Math.exp(-dt * (playing ? 12 : 3)));
+    }
+    if (shake > 0) {
+      camera.position.x += (Math.random() - 0.5) * shake * 0.7;
+      camera.position.y += (Math.random() - 0.5) * shake * 0.5;
+      shake = Math.max(0, shake - dt * 3.2);
+    }
+    camera.fov += (fov - camera.fov) * Math.min(1, dt * 4);
+    camera.updateProjectionMatrix();
+    camera.up.set(playing && !reducedMotion ? steerVis * 0.035 : 0, 1, 0).normalize();
+    camera.lookAt(camLook);
+    camera.updateMatrixWorld();
+
+    // hero cut-out for buildings in front of the car
+    tmp.set(px, 1.0, pz).project(camera);
+    SHARED.uCut.value.set(((tmp.x + 1) * w) / 2, ((tmp.y + 1) * h) / 2, tmp.z * 0.5 + 0.5 - 0.0004, game ? h * 0.11 : 0);
+
+    // lights follow the action
+    const sunDir = SHARED.uSunDir.value;
+    sunLight.position.set(px + sunDir.x * 80, 70, pz + sunDir.z * 80);
+    sunLight.target.position.set(px + dirx * 12, 0, pz + dirz * 12);
+    fill.position.set(px - sunDir.x * 50, 60, pz - sunDir.z * 50);
+    fill.target.position.set(px, 0, pz);
+    sky.update(camera);
+    key.visible = tier > 0;
+    key.position.copy(camera.position).lerp(heroPos, 0.35).add(tmp.set(0, 3, 0));
+    key.intensity = game && playing ? 14 : ended ? 26 : 34;
+
+    // post
+    flash = Math.max(0, flash - dt * 1.8);
+    post.uniforms.uFlash.value = reducedMotion ? flash * 0.4 : flash;
+    post.uniforms.uFlashCol.value.copy(flashCol);
+    post.uniforms.uDesat.value = ended && !game.win ? Math.min(0.35, (t - endTime) / 1500) : 0;
+    post.uniforms.uTime.value = t / 1000;
+    post.render(scene, camera, tier > 0);
+
+    // ---------- off-screen threat indicator ----------
+    if (arrow) {
+      arrow.hidden = true;
+      if (playing) for (const o of policeList) {
+        if (o.position.distanceTo(heroPos) > 46) break;
+        const v = tmp.copy(o.position).setY(1).project(camera);
+        const behind = v.z > 1;
+        if (!behind && Math.abs(v.x) <= 0.92 && Math.abs(v.y) <= 0.92) continue;
+        let ax = behind ? -v.x : v.x, ay = behind ? -v.y : v.y;
+        if (behind && Math.abs(ay) < 0.5) ay = -1;
+        const a = Math.atan2(-ay, ax);
+        arrow.style.left = 50 + 42 * Math.cos(a) + "%";
+        arrow.style.top = 52 + 36 * Math.sin(a) + "%";
+        arrow.style.transform = "translate(-50%,-50%) rotate(" + (a + Math.PI / 2) + "rad)";
         arrow.hidden = false;
         break;
       }
+    }
   };
 }

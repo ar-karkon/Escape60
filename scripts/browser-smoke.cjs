@@ -1,8 +1,9 @@
-const { chromium } = require("playwright-core");
+let chromium;
+try { ({ chromium } = require("playwright")); } catch { ({ chromium } = require("playwright-core")); }
 const assert = require("node:assert/strict");
 (async () => {
   const browser = await chromium.launch({
-    executablePath: process.env.CHROME_BIN || "/usr/bin/chromium",
+    executablePath: process.env.CHROME_BIN || undefined,
     args: [
       "--no-sandbox",
       "--use-gl=angle",
@@ -23,7 +24,7 @@ const assert = require("node:assert/strict");
       if (e.type() === "error") errors.push(e.text());
     });
     const shot = (name) =>
-      p.screenshot({ path: "docs/screenshots/" + name + ".png" });
+      process.env.SMOKE_SHOTS ? p.screenshot({ path: process.env.SMOKE_SHOTS + "/" + name + ".png" }) : null;
     await p.goto(
       new URL(
         "/?seed=sunset-1",
@@ -76,7 +77,7 @@ const assert = require("node:assert/strict");
       type: "touchEnd",
       touchPoints: [],
     });
-    assert.ok((await p.locator("#score").innerText()) !== "۰");
+    assert.ok(Number((await p.locator("#score").innerText()).replace(/,/g, "")) > 0, "steering should earn drift points");
     await p.locator("#pause-button").tap();
     await p.locator("#quit").tap();
     await p.locator("#home").waitFor();
