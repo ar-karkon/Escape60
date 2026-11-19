@@ -45,7 +45,7 @@ function refreshMissions(p) {
 }
 export function missionInfo(m) { const def = MISSIONS.find((x) => x.id === m.id); return { ...m, goal: def.goal }; }
 export const carUnlocked = (p, c) => c.level <= p.level;
-export function carLook(p, id) { const l = p.paints[id] || {}; return { paint: l.paint ?? 'stock', livery: l.livery ?? 'clean' }; }
+export function carLook(p, id) { const l = p.paints[id] || {}; return { paint: l.paint ?? 'stock', livery: l.livery ?? (CARS.find((c) => c.id === id)?.livery || 'clean') }; }
 
 /** Apply a finished run. Returns a summary for the results screen. */
 export function applyRun(p, r) {

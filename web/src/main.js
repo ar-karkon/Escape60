@@ -12,7 +12,7 @@ import * as api from './api.js';
 import { createMinimap } from './ui/minimap.js';
 
 const $ = (id) => document.getElementById(id);
-const VERSION = 'v3.0';
+const VERSION = 'v3.1';
 hydrateIcons();
 applyI18n();
 const canvas = $('game'), render = createRenderer(canvas);
@@ -51,6 +51,7 @@ $('ver').textContent = `${VERSION} · SIM ${SIM_VERSION}`;
 
 const fmtTime = (ms) => { const s = ms / 1000, m = Math.floor(s / 60); return `${m}:${(s - m * 60).toFixed(2).padStart(5, '0')}`; };
 const hex = (c) => '#' + c.toString(16).padStart(6, '0');
+const fmtN = (n) => Math.round(n).toLocaleString('en-US');
 
 function applyLook() {
   const c = carById(profile.car), look = carLook(profile, profile.car);
@@ -85,11 +86,11 @@ function renderHome() {
   $('streak').classList.toggle('hot', profile.streak.days >= 2);
   $('home-cls').textContent = c.cls; $('home-cls').dataset.c = c.cls;
   $('home-car').textContent = c.name; $('home-tag').textContent = c.tag;
-  $('home-fx').innerHTML = ['smoke', 'nitro', 'trail'].map((k) => `<span>${t(k + '_' + profile.fx[k])}</span>`).join('');
+  $('home-fx').innerHTML = ['smoke', 'nitro'].map((k) => `<span>${t(k + '_' + profile.fx[k])}</span>`).join('');
   $('mode-label').textContent = sanitizedSeed && seed === initialSeed ? t('friend') : seed.startsWith('daily-') ? t('daily') : t('random');
   const open = profile.missions.list.filter((m) => !m.done).length;
   $('missions-badge').textContent = open; $('missions-badge').classList.toggle('hidden', open === 0);
-  if (challenge) { const b = $('challenge-banner'); b.classList.remove('hidden'); b.innerHTML = `${iconSVG('flame')}<span>${t('friendBanner', { score: num(challenge.points), time: fmtTime(challenge.timeMs) })}</span>`; }
+  if (challenge) { const b = $('challenge-banner'); b.classList.remove('hidden'); b.innerHTML = `<span>${iconSVG('flame')}</span><p>${t('friendBanner', { score: fmtN(challenge.points), time: fmtTime(challenge.timeMs) })}</p>`; }
 }
 
 /* ---------- online ---------- */
@@ -158,7 +159,7 @@ document.querySelector('.garage-panel').addEventListener('click', (e) => {
 
 /* ---------- HUD helpers ---------- */
 let shownHp = 100, trailHp = 100, trailHold = 0, shownMult = 1, shownHeat = 0, lastSecond = -1, bestPassed = false, targetPassed = false, msTimer = 0, howtoTimer = 0;
-function renderHeat(n) { $('heat').innerHTML = [0, 1, 2, 3, 4].map((i) => `<span class="${i < n ? 'on' : ''}">${iconSVG('siren')}</span>`).join(''); }
+function renderHeat(n) { $('heat').innerHTML = [0, 1, 2, 3, 4].map((i) => `<span class="${i < n ? 'on' : ''}">${iconSVG(i < n ? 'siren' : 'sirenOff')}</span>`).join(''); }
 function renderRepairs(n) { $('repairs').innerHTML = Array.from({ length: REPAIRS }, (_, i) => `<span class="${i < n ? '' : 'used'}">${iconSVG('wrench')}</span>`).join(''); }
 const pops = $('popups');
 function popup(text, sub = '', cls = '') {
@@ -188,26 +189,27 @@ function updateHud(dt) {
   if (!game) return;
   const ms = (game.ticks * 1000) / TICK_RATE, p = game.player;
   $('time').textContent = fmtTime(ms);
-  $('score').textContent = num(game.points);
+  $('score').textContent = fmtN(game.points);
   const over = game.ticks >= MILESTONE_TICKS;
   $('hud').classList.toggle('overtime', over);
-  $('time-label').textContent = over ? t('overtime') : t('escapeIn', { n: Math.max(0, 60 - Math.floor(ms / 1000)) });
+  $('time-label').textContent = over ? t('overtime') : t('timeLabel');
+  $('mm-count').textContent = over ? '∞' : String(Math.max(0, 60 - Math.floor(ms / 1000)));
+  $('mm-label').textContent = over ? t('overtime') : t('mmLeft');
   $('milestone-fill').style.width = `${Math.min(100, (100 * game.ticks) / MILESTONE_TICKS)}%`;
   const kmh = p.v * 3.6, g = gearOf(kmh);
   $('speed').textContent = Math.round(kmh);
   $('gear').textContent = g.gear;
-  $('rpm-arc').style.strokeDashoffset = String(164 * (1 - g.rpm));
-  $('rpm-arc').style.stroke = p.boost ? '#b6ff2e' : g.rpm > 0.85 ? '#ff3b4e' : '#19e3ff';
+  const rpm = $('rpm-arc'); rpm.style.width = `${g.rpm * 100}%`; rpm.className = p.boost ? 'boost' : g.rpm > 0.85 ? 'red' : '';
   $('nitro-fill').style.width = `${game.nitro * 100}%`;
   document.querySelector('.bar.nitro').classList.toggle('full', game.nitro > 0.98);
-  $('nitro-ring').style.strokeDashoffset = String(283 * (1 - game.nitro));
+  $('nitro-ring').style.strokeDashoffset = String(352 * (1 - game.nitro));
   $('nitro').classList.toggle('ready', game.nitro > 0.25);
   if (game.health < shownHp - 0.5) { const h = $('health'); h.classList.remove('hit'); void h.offsetWidth; h.classList.add('hit'); trailHold = 0.4; }
   shownHp = game.health;
   renderHealth(game.health, dt);
   if (game.heat !== shownHeat) { shownHeat = game.heat; renderHeat(game.heat); }
-  const mult = comboMult(game), m = $('mult');
-  m.classList.toggle('off', mult < 2); m.textContent = `×${mult}`;
+  const mult = comboMult(game), m = $('mult-box');
+  m.classList.toggle('off', mult < 2); m.dataset.m = mult; $('mult').textContent = `${mult}×`;
   $('chain-fill').style.width = `${(100 * game.comboTimer) / COMBO_WINDOW}%`;
   if (mult > shownMult) { m.classList.remove('pump'); void m.offsetWidth; m.classList.add('pump'); }
   shownMult = mult;
@@ -282,29 +284,29 @@ function onEvent(ev) {
   switch (ev.type) {
     case 'near': case 'dodge': {
       const m = ev.mult || 1;
-      popup(`+${num(ev.pts)}`, ev.type === 'dodge' ? t('dodge') : ev.cop ? t('nearCop') : t('near'), m >= 3 ? 'hot' : '');
+      popup(`+${fmtN(ev.pts)}`, ev.type === 'dodge' ? t('dodge') : ev.cop ? t('nearCop') : t('near'), m >= 3 ? 'hot' : '');
       audio.play('near', { rate: 1 + 0.08 * (m - 1), gain: 0.7 }); audio.play('whoosh', { gain: 0.6, rate: 0.9 + Math.random() * 0.2 });
       if (m >= 2) audio.play('combo', { rate: 0.85 + 0.08 * m, gain: 0.55, delay: 0.05 });
       vibrate(m >= 3 ? 25 : 12); break;
     }
-    case 'drift': popup(`+${num(ev.pts)}`, `${t('drift')}${ev.mult > 1 ? ' ×' + ev.mult : ''}`, 'drift'); audio.play('coin', { gain: 0.4, rate: 1.1 }); break;
-    case 'driftLost': popup(t('driftLost'), `-${num(ev.pts)}`, 'bad'); break;
-    case 'takedown': popup(t('takedown'), `+${num(ev.pts)}`, 'take'); audio.play('crash', { gain: 0.8 }); audio.explosion(0.55); audio.play('combo', { delay: 0.15, gain: 0.6 }); vibrate(60); break;
+    case 'drift': popup(`+${fmtN(ev.pts)}`, `${t('drift')}${ev.mult > 1 ? ' ×' + ev.mult : ''}`, 'drift'); audio.play('coin', { gain: 0.4, rate: 1.1 }); break;
+    case 'driftLost': popup(`-${fmtN(ev.pts)}`, t('driftLost'), 'bad'); break;
+    case 'takedown': popup(`+${fmtN(ev.pts)}`, t('takedown'), 'take'); audio.play('crash', { gain: 0.8 }); audio.explosion(0.55); audio.play('combo', { delay: 0.15, gain: 0.6 }); vibrate(60); break;
     case 'hit': {
       popup(`-${ev.dmg}`, '', 'bad');
       audio.play('crash', { gain: Math.min(1, 0.35 + ev.dmg / 40) }); audio.duckMusic(0.45, 400); vibrate(30 + ev.dmg * 2);
       const h = $('hurt'); h.classList.remove('on'); void h.offsetWidth; h.classList.add('on'); break;
     }
     case 'scrape': audio.play('scrape', { gain: 0.5 }); vibrate(10); break;
-    case 'repair': popup(ev.left > 0 ? t('repaired', { n: ev.left }) : t('repairedLast'), `+${ev.gained}`, 'good'); renderRepairs(ev.left); audio.repairSound(); audio.play('levelup', { gain: 0.4, delay: 0.3 }); vibrate(30); break;
+    case 'repair': popup(`+${ev.gained}`, ev.left > 0 ? t('repaired', { n: ev.left }) : t('repairedLast'), 'good'); renderRepairs(ev.left); audio.repairSound(); audio.play('levelup', { gain: 0.4, delay: 0.3 }); vibrate(30); break;
     case 'repairEmpty': banner(t('noRepairs'), '', 1600); audio.play('beep', { rate: 0.6 }); break;
     case 'roadblock': banner(t('roadblock') + (ev.spike ? ' · ' + t('spikes') : '')); for (let k = 0; k < 3; k++) audio.play('beep', { delay: k * 0.14, rate: 1.4 }); break;
-    case 'spikes': popup(t('spikes'), '', 'bad'); audio.play('scrape', { gain: 0.9, rate: 1.5 }); break;
+    case 'spikes': popup('!!', t('spikes'), 'bad'); audio.play('scrape', { gain: 0.9, rate: 1.5 }); break;
     case 'heat': if (ev.heat > 1) { banner(t('heatUp', { n: ev.heat }), 'info', 1400); audio.play('busted', { gain: 0.35, rate: 1.3 }); } break;
     case 'milestone': {
       const ms = $('milestone'); ms.classList.remove('hidden', 'out');
-      $('ms-score').textContent = num(ev.points);
-      const best = persisted[seed]; $('ms-best').textContent = best ? num(best.points) : '—';
+      $('ms-score').textContent = fmtN(ev.points);
+      const best = persisted[seed]; $('ms-best').textContent = best ? fmtN(best.points) : '—';
       audio.play('win'); audio.play('levelup', { delay: 0.4 }); audio.duckMusic(0.3, 1500); vibrate(80);
       clearTimeout(msTimer); msTimer = setTimeout(() => { ms.classList.add('out'); setTimeout(() => ms.classList.add('hidden'), 600); }, 3200);
       break;
@@ -328,14 +330,14 @@ function finish() {
   const end = r.end || 'legend';
   const res = $('results');
   res.classList.remove('wrecked', 'busted', 'legend'); res.classList.add(end);
-  $('res-tag').textContent = t(end); $('res-title').textContent = t(end); $('res-sub').textContent = t(end + 'Sub');
-  $('res-score').textContent = num(r.points);
+  $('res-tag').textContent = end.toUpperCase(); $('res-title').textContent = t(end); $('res-sub').textContent = t(end + 'Sub');
+  $('res-score').textContent = fmtN(r.points);
   $('res-time').textContent = fmtTime(r.timeMs);
   $('res-best').classList.toggle('hidden', !(newBest && prev));
   $('res-escaped').classList.toggle('hidden', !r.escaped);
-  $('res-stats').innerHTML = [['topSpeed', `${num(r.topSpeed)} km/h`], ['driftPts', num(r.driftPts)], ['nearMisses', num(r.near)], ['takedowns', num(r.takedowns)], ['bestChain', `×${num(r.bestChain)}`], ['repairsUsed', `${num(r.repairs)}/${num(REPAIRS)}`]]
-    .map(([k, v]) => `<div class="rs"><small>${t(k)}</small><b>${v}</b></div>`).join('');
-  $('lvl2').textContent = `LV ${meta.level}`; $('xp-gain').textContent = `+${num(meta.gained)} XP`;
+  $('res-stats').innerHTML = [['topSpeed', 'speed', `${r.topSpeed}`], ['driftPts', 'drift', fmtN(r.driftPts)], ['nearMisses', 'combo', `${r.near}`], ['takedowns', 'siren', `${r.takedowns}`], ['bestChain', 'flame', `${r.bestChain}×`], ['repairsUsed', 'wrench', `${r.repairs}/${REPAIRS}`]]
+    .map(([k, ic, v]) => `<div class="stat"><span class="stat-ico">${iconSVG(ic)}</span><small>${t(k)}</small><strong>${v}</strong></div>`).join('');
+  $('lvl2').textContent = `LV ${meta.level}`; $('xp-gain').textContent = `+${fmtN(meta.gained)} XP`;
   $('xp-fill2').style.width = '0%';
   setTimeout(() => ($('xp-fill2').style.width = `${(100 * profile.xp) / xpForLevel(profile.level)}%`), 400);
   const notes = [];
@@ -451,7 +453,7 @@ $('motion').onchange = () => { settings.motion = $('motion').checked; saveSettin
 function renderMissions() {
   $('mission-list').innerHTML = profile.missions.list.map((m) => {
     const info = missionInfo(m), pct = Math.min(100, (100 * m.progress) / info.goal);
-    return `<li class="${m.done ? 'done' : ''}">${iconSVG(m.done ? 'check' : 'star')}<b>${t('m_' + m.id)}</b><small>${m.done ? t('done') : `${num(Math.min(m.progress, info.goal))}/${num(info.goal)}`}</small><i><u style="width:${pct}%"></u></i></li>`;
+    return `<li class="${m.done ? 'done' : ''}"><span>${iconSVG(m.done ? 'check' : 'star')}</span><b>${t('m_' + m.id)}</b><small>${m.done ? t('done') : `${fmtN(Math.min(m.progress, info.goal))}/${fmtN(info.goal)}`}</small><i><u style="width:${pct}%"></u></i></li>`;
   }).join('');
 }
 async function openBoard() {
@@ -462,7 +464,7 @@ async function openBoard() {
   const own = mine ? `<p class="own">${t('lbYou', { score: num(mine.points), time: fmtTime(mine.timeMs) })}</p>` : '';
   try {
     const { entries } = await api.leaderboard(seed);
-    list.innerHTML = own + (entries.length ? entries.map((r, i) => `<div class="row"><b>#${i + 1}</b><span class="who">${String(r.label || '').replace(/[<>&"]/g, '')} · ${String(carById(r.car).name)}</span><span>${fmtTime(r.timeMs)}</span><b>${num(r.points)}</b></div>`).join('') : `<p>${t('lbEmpty')}</p>`);
+    list.innerHTML = own + (entries.length ? entries.map((r, i) => `<div class="row"><b>#${i + 1}</b><span class="who">${String(r.label || '').replace(/[<>&"]/g, '')} · ${String(carById(r.car).name)}</span><span>${fmtTime(r.timeMs)}</span><b>${fmtN(r.points)}</b></div>`).join('') : `<p>${t('lbEmpty')}</p>`);
   } catch { list.innerHTML = own + `<p>${t('lbOff')}</p>`; }
 }
 

@@ -7,7 +7,7 @@ Version 3.0 (2026-11-19): a full rebuild toward a stylised world-class street ra
 - **Simulation** `web/src/simulation.js` (SIM 2.0.0): drift physics, brake / handbrake / nitro inputs (trace values 0..63), 14 car stat sets (`web/src/cars.js`), damage limp, 3 repairs, wreck explosion, busted meter, takedowns, 60 s milestone then endless overtime (10 min cap). Must use `web/src/dmath.js` instead of Math.sin/cos/atan2/hypot and must not use Math.exp/pow.
 - **Renderer** `web/src/render.js` + `web/src/gfx/` (Three.js r170 bundled): PBR-ish materials patched via onBeforeCompile (each patch needs its own `customProgramCacheKey`), procedural facades, city builder with marching-squares walls on the collision boundary, instanced streamed props with knock-over breakables, particles + selectable effects, camera director, HDR post. Visual only.
 - **Game service** `edge/app.mjs` (API 3.0.0): tickets bind seed + car, chunked authoritative replay, leaderboard. No AI endpoints anymore. Deployment notes in docs/22_DEPLOYMENT.md (the live edge still runs the previous version until redeployed).
-- UI: `web/index.html`, `web/style.css`, `web/src/main.js`, English/Persian strings in `web/src/i18n.js` (add every new string in both languages).
+- UI: `web/index.html`, `web/style.css` (original pixel-neon system), `web/src/main.js`, English/Persian strings in `web/src/i18n.js` (add every new string in both languages).
 - Do **not** claim real-device FPS, audio mix or the live deployment of v3 as verified.
 - Audio rule: only CC0 / CC-BY sources with a verified license page; synthesised Web Audio sounds are original. Never GPL, share-alike, non-commercial or ripped game audio.
 
@@ -28,4 +28,4 @@ Version 3.0 (2026-11-19): a full rebuild toward a stylised world-class street ra
 - When production changes are made, run tests and verify the actual URL.
 
 ## Visual direction
-The earlier voxel/pixel-art target (docs/23, docs/24) is superseded by D30 in docs/13_DECISIONS.md: clean stylised low-poly PBR world, glossy cars, filmic grade, with comic/graffiti effects as selectable layers. Report actual browser screenshots (`npm run capture`), never concept art. Preserve deterministic gameplay and server replay; update both version constants and replay tests when changing rules.
+Keep the Sunset Bay identity (D32 in docs/13_DECISIONS.md): pixel-art UI system (pixel frames, `web/src/ui/icons.js` pixel icons, Rooyin Free for Persian, Jersey 10 for digits/Latin, original logo `web/assets/logo.svg`), magenta/purple synthwave sunset with the striped retro sun and pixel clouds, pink/cyan/gold neon accents — merged with the clean stylised 3D world of v3 (no global ink outlines or voxel noise). New UI must use the existing pixel primitives in `web/style.css`. Report actual browser screenshots (`npm run capture`), never concept art. Preserve deterministic gameplay and server replay; update both version constants and replay tests when changing rules.

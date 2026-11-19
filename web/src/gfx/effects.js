@@ -8,7 +8,7 @@ export const EFFECTS = {
   trail: [{ id: "tail", level: 1 }, { id: "neon", level: 1 }, { id: "off", level: 1 }],
   burst: [{ id: "graffiti", level: 1 }, { id: "electric", level: 2 }, { id: "clean", level: 1 }],
 };
-export const ACCENTS = [0xff2d6f, 0x19e3ff, 0xb6ff2e, 0xffd23f, 0xc77dff, 0xff7a1a, 0xffffff];
+export const ACCENTS = [0xff5d95, 0x3dd8e7, 0xffe37c, 0x8d54e9, 0x5dffb0, 0xffad65, 0xfff4e6];
 const rgb = (hex, k = 1) => [((hex >> 16) & 255) / 255 * k, ((hex >> 8) & 255) / 255 * k, (hex & 255) / 255 * k];
 const rnd = (a = 1) => (Math.random() - 0.5) * 2 * a;
 function hsl(h, s, l) { const f = (n) => { const k = (n + h * 12) % 12, a = s * Math.min(l, 1 - l); return l - a * Math.max(-1, Math.min(k - 3, 9 - k, 1)); }; return [f(0), f(8), f(4)]; }

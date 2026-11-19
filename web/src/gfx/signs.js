@@ -32,7 +32,7 @@ function put(name, x, y, w, h) { const S = ATLAS.size; cells[name] = [x / S, 1 -
 function draw() {
   const c = canvas.getContext("2d"), S = ATLAS.size;
   c.clearRect(0, 0, S, S);
-  const font = (px, w = 900) => `italic ${w} ${px}px "Barlow Condensed", "Vazirmatn", "Arial Narrow", sans-serif`;
+  const font = (px, w = 400) => `${w} ${Math.round(px * 1.15)}px "Jersey 10", "Rooyin", "Vazirmatn", monospace`;
   ADS.forEach((ad, i) => {
     const x = (i % 2) * 512, y = Math.floor(i / 2) * 256;
     const g = c.createLinearGradient(x, y, x + 512, y + 256);
@@ -70,7 +70,7 @@ function draw() {
   {
     const x = 512, y = 896, w = 512, h = 128;
     c.clearRect(x, y, w, h);
-    c.fillStyle = "#f6f3ec"; c.textAlign = "center"; c.textBaseline = "middle"; c.font = `900 96px "Barlow Condensed", "Arial Narrow", sans-serif`;
+    c.fillStyle = "#f6f3ec"; c.textAlign = "center"; c.textBaseline = "middle"; c.font = `400 112px "Jersey 10", monospace`;
     c.fillText("SUNSET BAY", x + w / 2, y + h / 2 + 4, w - 20);
     put("hill", x, y, w, h);
   }

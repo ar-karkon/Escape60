@@ -63,7 +63,7 @@ void main(){
   c=(c-.5)*uContrast+.5;
   float l=lum(c);
   c=mix(vec3(l),c,uSat*(1.-uDesat));
-  c+=uShadowTint*(1.-smoothstep(0.,.45,l))*.06+uHighTint*smoothstep(.55,1.,l)*.05;
+  c+=uShadowTint*(1.-smoothstep(0.,.5,l))*.09+uHighTint*smoothstep(.55,1.,l)*.06;
   // vignette
   vec2 q=(uv-.5)*vec2(1.,1.1);
   c*=mix(1.,smoothstep(1.05,.32,length(q)),uVignette);

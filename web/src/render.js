@@ -509,7 +509,7 @@ export function createRenderer(canvas) {
       const garage = mode === "garage";
       const et = (t - menuT0) / 1000;
       if (garage) { garageYaw += realDt * 0.25; const ang = h0 + garageYaw; eye.set(px + Math.cos(ang) * (portrait ? 8.8 : 7.2), portrait ? 2.6 : 1.7, pz + Math.sin(ang) * (portrait ? 8.8 : 7.2)); look.set(px, portrait ? -1.6 : 0.55, pz); fov = portrait ? 52 : 40; if (!portrait) { look.x += Math.sin(ang) * 1.7; look.z -= Math.cos(ang) * 1.7; } }
-      else { const ang = h0 + 0.75 + Math.sin(et * 0.12) * 0.35; const r0 = portrait ? 8.6 : 7.4; eye.set(px + Math.cos(ang) * r0, portrait ? 2.2 : 1.35 + Math.sin(et * 0.2) * 0.2, pz + Math.sin(ang) * r0); look.set(px, portrait ? -0.9 : 0.8, pz); fov = portrait ? 56 : 44; if (!portrait) { look.x -= Math.sin(ang) * -1.8; look.z += Math.cos(ang) * -1.8; } }
+      else { const ang = h0 + 0.75 + Math.sin(et * 0.12) * 0.35; const r0 = portrait ? 8.6 : 7.4; eye.set(px + Math.cos(ang) * r0, portrait ? 2.2 : 1.35 + Math.sin(et * 0.2) * 0.2, pz + Math.sin(ang) * r0); look.set(px, portrait ? -0.15 : 0.8, pz); fov = portrait ? 56 : 44; if (!portrait) { look.x -= Math.sin(ang) * -1.8; look.z += Math.cos(ang) * -1.8; } }
     }
     if (!cam.init || (!game && mode !== "garage" && t - menuT0 < 50)) { camera.position.copy(eye); camLook.copy(look); cam.init = true; }
     else {
@@ -555,6 +555,7 @@ export function createRenderer(canvas) {
     pu.uFlash.value = reduced ? cam.flash * 0.3 : cam.flash;
     pu.uFlashCol.value.copy(cam.flashCol);
     pu.uExposure.value = tod.exposure;
+    pu.uShadowTint.value.setRGB(...tod.shadowTint); pu.uHighTint.value.setRGB(...tod.highTint);
     pu.uSat.value = tod.sat;
     pu.uDesat.value = ended && game.end !== "legend" ? Math.min(0.45, (t - endT) / 2500) : 0;
     pu.uTime.value = t / 1000;

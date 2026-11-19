@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no"/>
-  <meta name="theme-color" content="#0b0b12"/>
+  <meta name="theme-color" content="#1b0b2b"/>
   <meta name="description" content="ESCAPE 60 — a free street-pursuit racing game in your browser. 14 cars, drifts, nitro, takedowns and an open coastal city. Lose the cops, survive, set a record."/>
   <meta property="og:type" content="website"/>
   <meta property="og:title" content="ESCAPE 60 — Street Pursuit"/>
@@ -11,8 +11,8 @@
   <meta property="og:image" content="./assets/og-card.jpg"/>
   <meta name="twitter:card" content="summary_large_image"/>
   <link rel="icon" href="./assets/logo.svg"><title>ESCAPE 60 — Street Pursuit</title>
-  <link rel="preload" href="./assets/fonts/barlow-condensed-latin-800-italic.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="preload" href="./assets/fonts/barlow-condensed-latin-900-italic.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="./assets/fonts/RooyinFree-Bold.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="./assets/fonts/jersey-10-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="./style.css"/>
 </head>
 <body data-view="loading">
@@ -23,40 +23,41 @@
 
     <!-- LOADING -->
     <section id="loading" class="screen loading">
-      <div class="logo"><span class="l1">ESCAPE</span><span class="l2">60</span></div>
+      <h1 class="logo"><img src="./assets/logo.svg" alt="ESCAPE 60" width="182" height="112"></h1>
       <div class="load-bar"><i id="load-fill"></i></div>
       <p id="load-text" data-i18n="loading">Building Sunset Bay…</p>
     </section>
 
     <!-- HOME -->
     <section id="home" class="screen home hidden">
-      <header class="topbar">
-        <div class="logo small"><span class="l1">ESCAPE</span><span class="l2">60</span></div>
-        <div class="profile">
-          <b id="lvl" class="lvl">LV 1</b>
+      <header class="brand">
+        <h1 class="logo"><img src="./assets/logo.svg" alt="ESCAPE 60 — فرار ۶۰" width="182" height="112"></h1>
+        <p class="tagline" data-i18n="tagline"></p>
+      </header>
+      <div class="dock">
+        <div id="challenge-banner" class="challenge hidden" role="status"></div>
+        <div class="profile" id="profile">
+          <b class="lvl" id="lvl">LV 1</b>
           <div class="xpbar"><i id="xp-fill"></i></div>
           <span class="streak" id="streak"><span data-icon="flame"></span><b id="streak-n">0</b></span>
         </div>
-        <button id="settings-open" class="icon-btn" data-i18n-label="settings"><span data-icon="gear"></span></button>
-      </header>
-      <div id="challenge-banner" class="challenge hidden" role="status"></div>
-      <div class="home-bottom">
-        <div class="car-plate">
+        <div class="car-plate panel">
           <span class="cls" id="home-cls">B</span>
-          <div><b id="home-car">Kaze S15</b><small id="home-tag"></small></div>
+          <div class="car-name"><b id="home-car">Kaze S15</b><small id="home-tag"></small></div>
           <div class="fx-chips" id="home-fx"></div>
         </div>
-        <p class="chip mode" id="mode-label"></p>
-        <button id="play" class="btn-play">
-          <span class="ico-wrap" data-icon="play"></span>
-          <span class="txt"><b data-i18n="play">START RUN</b><small data-i18n="playSub"></small></span>
+        <p class="chip chip-daily" id="mode-label"></p>
+        <button id="play" class="btn btn-primary btn-xl">
+          <span class="btn-ico" data-icon="play"></span>
+          <span class="btn-text"><b data-i18n="play">START ESCAPE</b><small data-i18n="playTag">START ESCAPE</small></span>
         </button>
-        <div class="tiles">
-          <button id="garage-open" class="tile"><span data-icon="car"></span><b data-i18n="garage">GARAGE</b></button>
-          <button id="missions-open" class="tile"><i class="badge" id="missions-badge">3</i><span data-icon="calendar"></span><b data-i18n="missions">MISSIONS</b></button>
-          <button id="board-open" class="tile"><span data-icon="trophy"></span><b data-i18n="records">RECORDS</b></button>
+        <div class="cards">
+          <button id="board-open" class="card"><span class="card-ico" data-icon="trophy"></span><b data-i18n="records">RECORDS</b></button>
+          <button id="missions-open" class="card"><i class="badge" id="missions-badge">3</i><span class="card-ico" data-icon="calendar"></span><b data-i18n="missions">MISSIONS</b></button>
+          <button id="garage-open" class="card"><span class="card-ico" data-icon="car"></span><b data-i18n="garage">GARAGE</b></button>
+          <button id="settings-open" class="card"><span class="card-ico" data-icon="gear"></span><b data-i18n="settings">SETTINGS</b></button>
         </div>
-        <footer class="status-row"><small id="online-state" class="status" data-i18n="checking"></small><small class="ver" id="ver"></small></footer>
+        <footer class="status-row"><small id="online-state" class="chip chip-status" data-i18n="checking"></small><small class="ver" id="ver"></small></footer>
       </div>
     </section>
 
@@ -64,11 +65,11 @@
     <section id="garage" class="screen garage hidden">
       <header class="topbar">
         <button id="garage-back" class="icon-btn" data-i18n-label="back"><span data-icon="back"></span></button>
-        <h2 data-i18n="garage">GARAGE</h2>
+        <h2><span data-icon="car"></span><span data-i18n="garage">GARAGE</span></h2>
         <b id="lvl-g" class="lvl">LV 1</b>
       </header>
       <div class="garage-drag" id="garage-drag" aria-hidden="true"></div>
-      <div class="garage-panel">
+      <div class="garage-panel panel">
         <div class="tabs" role="tablist">
           <button class="tab active" data-tab="cars" data-i18n="cars">CARS</button>
           <button class="tab" data-tab="paint" data-i18n="paint">PAINT</button>
@@ -90,61 +91,60 @@
           <div class="swatches small" id="accent-list"></div>
           <p class="hint" data-i18n="fxHint"></p>
         </div>
-        <button id="garage-race" class="btn-play slim"><span class="ico-wrap" data-icon="play"></span><span class="txt"><b data-i18n="race">RACE</b></span></button>
+        <button id="garage-race" class="btn btn-primary"><span class="btn-ico" data-icon="play"></span><b data-i18n="race">RACE</b></button>
       </div>
     </section>
 
     <!-- RESULTS -->
     <section id="results" class="screen results hidden">
-      <div class="res-head">
-        <p class="res-tag" id="res-tag">WRECKED</p>
-        <h2 id="res-title">WRECKED</h2>
-        <small id="res-sub"></small>
-      </div>
-      <div class="res-card">
-        <div class="res-score"><small data-i18n="score">SCORE</small><b id="res-score">0</b><span id="res-best" class="new-best hidden" data-i18n="newRecord">NEW RECORD</span></div>
-        <div class="res-time"><small data-i18n="survived">Survived</small><b id="res-time">0:00.00</b><span id="res-escaped" class="escaped hidden" data-i18n="escapedBadge">ESCAPED 60</span></div>
-        <div class="res-stats" id="res-stats"></div>
+      <header class="brand brand-small">
+        <h1 class="logo"><img src="./assets/logo.svg" alt="ESCAPE 60" width="182" height="112"></h1>
+        <p class="ribbon" id="res-tag">WRECKED</p>
+      </header>
+      <div class="panel result-panel res-card">
+        <div class="title-ribbon"><span class="ti" data-icon="trophy"></span><h2 id="res-title">WRECKED</h2><span class="ti" data-icon="trophy"></span></div>
+        <small class="res-sub" id="res-sub"></small>
+        <p class="time-label"><span data-icon="star"></span><span data-i18n="score">SCORE</span> <b id="res-best" class="new-best hidden" data-i18n="newRecord">NEW RECORD</b></p>
+        <div class="time-row"><span class="laurel" data-icon="laurel"></span><div class="result-time" id="res-score">0</div><span class="laurel" data-icon="laurel" data-mirror></span></div>
+        <p class="status-chip"><span data-icon="stopwatch"></span><small data-i18n="survived">Survived</small> <b id="res-time" class="num">0:00.00</b> <i id="res-escaped" class="escaped hidden" data-i18n="escapedBadge">ESCAPED 60</i></p>
+        <div class="stats" id="res-stats"></div>
         <p id="challenge-result" class="challenge-result hidden"></p>
         <div class="xp-row"><b class="lvl" id="lvl2">LV 1</b><div class="xpbar"><i id="xp-fill2"></i></div><b class="xp-gain" id="xp-gain">+0 XP</b></div>
         <p class="unlocks hidden" id="res-unlocks"></p>
-        <p class="rank" id="rank"></p>
+        <div class="rank-row"><span data-icon="bars"></span><p class="rank" id="rank"></p></div>
         <div class="actions">
-          <button id="replay" class="btn-play slim"><span class="ico-wrap" data-icon="retry"></span><span class="txt"><b data-i18n="retry">RETRY</b></span></button>
-          <button id="res-garage" class="tile"><span data-icon="car"></span><b data-i18n="garage">GARAGE</b></button>
-          <button id="share" class="tile"><span data-icon="share"></span><b data-i18n="share">SHARE</b></button>
-          <button id="home-button" class="tile"><span data-icon="home"></span><b data-i18n="menu">MENU</b></button>
+          <button id="share" class="btn btn-secondary btn-share"><span class="btn-ico" data-icon="share"></span><b data-i18n="share">SHARE</b></button>
+          <button id="replay" class="btn btn-primary"><span class="btn-ico" data-icon="play"></span><b data-i18n="retry">RETRY</b></button>
+          <button id="res-garage" class="btn btn-secondary"><span class="btn-ico" data-icon="car"></span><b data-i18n="garage">GARAGE</b></button>
         </div>
+        <button id="home-button" class="link"><span data-icon="home"></span><span data-i18n="menu">MENU</span></button>
       </div>
     </section>
 
     <!-- HUD -->
     <section id="hud" class="hud hidden" aria-live="off">
-      <div class="hud-score">
-        <b id="score">0</b>
-        <span id="mult" class="mult off">×1</span>
-        <i class="chainbar"><u id="chain-fill"></u></i>
-      </div>
-      <div class="hud-timer">
-        <b id="time">0:00.00</b>
-        <small id="time-label">ESCAPE 60</small>
-        <i class="mbar"><u id="milestone-fill"></u></i>
-      </div>
-      <div class="hud-right">
-        <button id="pause-btn" class="icon-btn small" aria-label="Pause"><span data-icon="pause"></span></button>
-        <div class="heat" id="heat"></div>
-      </div>
-      <div class="minimap"><canvas id="minimap"></canvas></div>
-      <div id="pit-arrow" class="pit-arrow hidden"><span class="arw" data-icon="wrench"></span><small id="pit-dist"></small></div>
-      <div class="cluster">
-        <div class="speedo">
-          <svg viewBox="0 0 120 70" class="rpm"><path d="M10 64 A52 52 0 0 1 110 64" class="track"/><path id="rpm-arc" d="M10 64 A52 52 0 0 1 110 64" class="fill"/></svg>
-          <b id="speed">0</b><small data-i18n="kmh">KM/H</small><span id="gear" class="gear">1</span>
+      <div class="hud-top">
+        <button id="pause-btn" class="hud-pause" aria-label="Pause"><span data-icon="pause"></span></button>
+        <div class="hud-timer">
+          <b id="time">0:00.00</b>
+          <small id="time-label">ESCAPE 60</small>
+          <div class="progress"><div id="milestone-fill"></div></div>
         </div>
+        <div class="hud-wanted"><div id="heat" class="sirens"></div><small data-i18n="heat">HEAT</small></div>
+      </div>
+      <div class="hud-score"><span data-icon="star"></span><b id="score">0</b></div>
+      <div id="mult-box" class="combo off"><b id="mult">×1</b><div class="combo-bar"><i id="chain-fill"></i></div><small data-i18n="chain">CHAIN</small></div>
+      <div class="minimap"><canvas id="minimap"></canvas><div class="mm-count"><b id="mm-count">60</b><small id="mm-label"></small></div></div>
+      <div id="pit-arrow" class="pit-arrow hidden"><span class="arw" data-icon="wrench"></span><small id="pit-dist"></small></div>
+      <div class="hud-bottom">
         <div class="bars">
-          <div class="bar nitro"><span data-icon="bolt"></span><i class="track"><u id="nitro-fill"></u></i></div>
-          <div class="bar health" id="health"><span data-icon="wrench"></span><i class="track"><u class="trail" id="hp-trail"></u><u class="fillb" id="hp-fill"></u></i><b id="hp-num">100</b></div>
-          <div class="repairs" id="repairs"></div>
+          <div class="hud-health bar" id="health"><span class="hp-ico" data-icon="shield"></span><div class="hp-bar"><i class="hp-trail" id="hp-trail"></i><i class="hp-fill" id="hp-fill"></i></div><b id="hp-num">100</b></div>
+          <div class="hud-nitro bar nitro"><span class="hp-ico" data-icon="bolt"></span><div class="hp-bar"><i class="nitro-fill" id="nitro-fill"></i></div><span class="repairs" id="repairs"></span></div>
+        </div>
+        <div class="speedo">
+          <b id="speed">0</b>
+          <div class="speed-meta"><span class="gear" id="gear">1</span><small data-i18n="kmh">KM/H</small></div>
+          <div class="rpm"><i id="rpm-arc"></i></div>
         </div>
       </div>
       <div id="bust" class="bust hidden"><b data-i18n="busting">BUSTING</b><i><u id="bust-fill"></u></i></div>
@@ -154,37 +154,39 @@
       <div id="milestone" class="milestone hidden">
         <div class="ms-burst"></div>
         <h2 data-i18n="milestone">60 SECONDS!</h2>
-        <p data-i18n="milestoneSub">YOU ESCAPED — KEEP GOING</p>
-        <div class="ms-stats"><span><small data-i18n="score">SCORE</small><b id="ms-score">0</b></span><span><small data-i18n="bestTime">Best</small><b id="ms-best">—</b></span></div>
+        <p class="ribbon" data-i18n="milestoneSub">YOU ESCAPED — KEEP GOING</p>
+        <div class="ms-stats"><span class="panel"><small data-i18n="score">SCORE</small><b id="ms-score">0</b></span><span class="panel"><small data-i18n="bestTime">Best</small><b id="ms-best">—</b></span></div>
         <em data-i18n="bonus">+2,500 BONUS</em>
       </div>
-      <p id="howto" class="howto hidden"></p>
+      <p id="howto" class="howto panel hidden"></p>
     </section>
+    <span id="threat" class="threat" aria-hidden="true" hidden></span>
     <nav id="controls" class="controls hidden">
       <div class="steer-pad">
-        <button id="left" class="ctl steer" data-i18n-label="left"><span data-icon="left"></span></button>
-        <button id="right" class="ctl steer" data-i18n-label="right"><span data-icon="right"></span></button>
+        <button id="left" class="steer" data-i18n-label="left"><span data-icon="arrowL"></span></button>
+        <button id="right" class="steer" data-i18n-label="right"><span data-icon="arrowL" data-mirror></span></button>
       </div>
       <div class="act-pad">
-        <button id="brake" class="ctl brake"><span data-icon="brake"></span><small data-i18n="brake">BRAKE</small></button>
-        <button id="hand" class="ctl hand"><span data-icon="drift"></span><small data-i18n="handbrake">DRIFT</small></button>
-        <button id="nitro" class="ctl nitro"><svg viewBox="0 0 100 100" class="ring"><circle cx="50" cy="50" r="45" class="track"/><circle id="nitro-ring" cx="50" cy="50" r="45" class="fill"/></svg><span data-icon="bolt"></span><small data-i18n="nitro">NITRO</small></button>
+        <button id="brake" class="act brake"><span data-icon="brake"></span><small data-i18n="brake">BRAKE</small></button>
+        <button id="hand" class="act hand"><span data-icon="drift"></span><small data-i18n="handbrake">DRIFT</small></button>
+        <button id="nitro" class="act nitro"><svg viewBox="0 0 100 100" class="ring"><rect x="6" y="6" width="88" height="88" class="track"/><rect id="nitro-ring" x="6" y="6" width="88" height="88" class="fill"/></svg><span data-icon="bolt"></span><small data-i18n="nitro">NITRO</small></button>
       </div>
     </nav>
 
     <!-- PAUSE -->
-    <section id="pause" class="screen pause hidden">
-      <div class="panel">
+    <section id="pause" class="pause-overlay hidden">
+      <div class="panel pause-card">
+        <p class="ribbon">PAUSED</p>
         <h2 data-i18n="pause">PAUSED</h2>
-        <button id="resume" class="btn-play slim"><span class="ico-wrap" data-icon="play"></span><span class="txt"><b data-i18n="resume">RESUME</b></span></button>
-        <button id="restart" class="tile wide"><span data-icon="retry"></span><b data-i18n="restart">RESTART</b></button>
-        <button id="pause-settings" class="tile wide"><span data-icon="gear"></span><b data-i18n="settings">SETTINGS</b></button>
-        <button id="quit" class="tile wide"><span data-icon="home"></span><b data-i18n="quit">QUIT TO MENU</b></button>
+        <button id="resume" class="btn btn-primary"><span class="btn-ico" data-icon="play"></span><b data-i18n="resume">RESUME</b></button>
+        <button id="restart" class="btn btn-secondary"><span class="btn-ico" data-icon="retry"></span><b data-i18n="restart">RESTART</b></button>
+        <button id="pause-settings" class="btn btn-secondary"><span class="btn-ico" data-icon="gear"></span><b data-i18n="settings">SETTINGS</b></button>
+        <button id="quit" class="btn btn-secondary"><span class="btn-ico" data-icon="home"></span><b data-i18n="quit">QUIT TO MENU</b></button>
       </div>
     </section>
 
-    <dialog id="config" class="panel dlg">
-      <h2 data-i18n="settingsTitle">SETTINGS</h2>
+    <dialog id="config" class="dlg">
+      <h2><span data-icon="gear"></span><span data-i18n="settingsTitle">SETTINGS</span></h2>
       <div class="row-set"><span data-icon="globe"></span><b data-i18n="language">Language</b><div class="seg" id="lang-seg"><button data-v="en">English</button><button data-v="fa">فارسی</button></div></div>
       <div class="row-set"><span data-icon="sun"></span><b data-i18n="tod">Time of day</b><div class="seg" id="tod-seg"><button data-v="sunset" data-i18n="tod_sunset"></button><button data-v="night" data-i18n="tod_night"></button><button data-v="day" data-i18n="tod_day"></button></div></div>
       <div class="row-set"><span data-icon="speed"></span><b data-i18n="graphics">Graphics</b><div class="seg" id="gfx-seg"><button data-v="auto" data-i18n="g_auto"></button><button data-v="high" data-i18n="g_high"></button><button data-v="low" data-i18n="g_low"></button></div></div>
@@ -193,50 +195,50 @@
       <label class="toggle-row"><input id="shake-toggle" type="checkbox"><i class="switch"></i><b data-i18n="shake">Camera shake</b></label>
       <label class="toggle-row"><input id="motion" type="checkbox"><i class="switch"></i><b data-i18n="motion">Reduce motion</b></label>
       <button id="credits-open" class="link" data-i18n="credits">Credits & licenses</button>
-      <button id="close-config" class="btn-play slim"><span class="txt"><b data-i18n="close">CLOSE</b></span></button>
+      <button id="close-config" class="btn btn-primary"><b data-i18n="close">CLOSE</b></button>
     </dialog>
-    <dialog id="records" class="panel dlg">
-      <h2 data-i18n="lbTitle">LEADERBOARD</h2>
+    <dialog id="records" class="dlg">
+      <h2><span data-icon="trophy"></span><span data-i18n="lbTitle">LEADERBOARD</span></h2>
       <div id="entries" class="entries"></div>
-      <button id="close-board" class="btn-play slim"><span class="txt"><b data-i18n="close">CLOSE</b></span></button>
+      <button id="close-board" class="btn btn-primary"><b data-i18n="close">CLOSE</b></button>
     </dialog>
-    <dialog id="missions" class="panel dlg">
-      <h2 data-i18n="missionsTitle">DAILY MISSIONS</h2>
+    <dialog id="missions" class="dlg">
+      <h2><span data-icon="calendar"></span><span data-i18n="missionsTitle">DAILY MISSIONS</span></h2>
       <ul id="mission-list" class="mission-list"></ul>
       <p class="hint" data-i18n="missionHint"></p>
-      <button id="daily-play" class="btn-play slim"><span class="ico-wrap" data-icon="play"></span><span class="txt"><b data-i18n="playDaily">PLAY TODAY'S ROUTE</b></span></button>
+      <button id="daily-play" class="btn btn-primary"><span class="btn-ico" data-icon="play"></span><b data-i18n="playDaily">PLAY TODAY'S ROUTE</b></button>
       <button id="close-missions" class="link" data-i18n="close">CLOSE</button>
     </dialog>
-    <dialog id="share-sheet" class="panel dlg share-sheet">
-      <h2 data-i18n="shareTitle">SHOW OFF YOUR RUN</h2>
+    <dialog id="share-sheet" class="dlg share-sheet">
+      <h2><span data-icon="share"></span><span data-i18n="shareTitle">SHOW OFF YOUR RUN</span></h2>
       <div class="tabs" role="tablist">
         <button class="tab active fmt" data-format="story" data-i18n="story">Story 9:16</button>
         <button class="tab fmt" data-format="post" data-i18n="post">Post 4:5</button>
         <button class="tab fmt" data-format="wide" data-i18n="wide">Wide 16:9</button>
       </div>
       <div class="preview"><img id="share-preview" alt=""><p id="share-hint" class="hint"></p></div>
-      <button id="share-image" class="btn-play slim"><span class="ico-wrap" data-icon="share"></span><span class="txt"><b data-i18n="shareImage">SHARE IMAGE</b></span></button>
+      <button id="share-image" class="btn btn-primary"><span class="btn-ico" data-icon="share"></span><b data-i18n="shareImage">SHARE IMAGE</b></button>
       <div class="net-row">
         <a id="net-telegram" class="net tg" target="_blank" rel="noopener">Telegram</a>
         <a id="net-x" class="net x" target="_blank" rel="noopener">X</a>
         <a id="net-whatsapp" class="net wa" target="_blank" rel="noopener">WhatsApp</a>
         <button id="save-image" class="net save" data-i18n="save">Save</button>
       </div>
-      <button id="copy-link" class="tile wide"><b data-i18n="copyLink">COPY CHALLENGE LINK</b></button>
+      <button id="copy-link" class="btn btn-secondary"><b data-i18n="copyLink">COPY CHALLENGE LINK</b></button>
       <button id="close-share" class="link" data-i18n="close">CLOSE</button>
     </dialog>
-    <dialog id="credits" class="panel dlg credits">
+    <dialog id="credits" class="dlg credits">
       <h2 data-i18n="credits">Credits & licenses</h2>
       <div class="credit-list">
         <p><b>Music (OpenGameArt)</b></p>
         <p>Law In The City — Alexandr Zhelanov (CC-BY 4.0) · Neon Action II — Bogart VGM (CC-BY 4.0) · Maximum Overdrive — Bogart VGM (CC-BY 3.0) · Vice Police — tausdei (CC-BY 3.0) · Cold Night — Kim Lightyear (CC-BY 3.0)</p>
         <p><b>Sound effects</b></p>
         <p>aquinn · qubodup · domasx2 · ggbotnet · pyranostudios · rubberduck · Kenney · lukerustltd (CC0 / CC-BY 3.0). Explosion, nitro, repair and backfire sounds are synthesised in-game.</p>
-        <p><b>Fonts</b> Barlow Condensed — The Barlow Project Authors · Vazirmatn — Saber Rastikerdar (SIL OFL)</p>
+        <p><b>Fonts</b> Rooyin Free — Mohamad Darvishi · Jersey 10 — Sarah Cadigan-Fried · Vazirmatn — Saber Rastikerdar (SIL OFL)</p>
         <p><b>Engine</b> Three.js (MIT). Cars, city and effects are original procedural designs; car shapes are inspired by classic road cars and carry no brands.</p>
         <p>Full details: assets/audio/CREDITS.md</p>
       </div>
-      <button id="close-credits" class="btn-play slim"><span class="txt"><b data-i18n="close">CLOSE</b></span></button>
+      <button id="close-credits" class="btn btn-primary"><b data-i18n="close">CLOSE</b></button>
     </dialog>
   </main>
   <script type="module" src="./src/main.js"></script>

@@ -1,5 +1,10 @@
 # Changelog
 
+## 3.1 — identity merge — 2026-11-19
+- Restored the original Sunset Bay soul on top of every 3.0 feature: pixel logo, Rooyin Free + Jersey 10 fonts, pixel icon set (plus new pixel icons for nitro, brake, wrench, globe, sun…), pixel-frame panels, buttons and cards, the yellow START ESCAPE button, the gold pixel timer, sirens, combo box, segmented health bar and square minimap.
+- Magenta/purple synthwave palette with the striped retro sun and pixel clouds; purple-shadow / pink-highlight grade; sunset-orange hero with racing stripe; original paint names.
+- Original Persian wording (شروع فرار، مأموریت روز، زمان بقا، تعقیب، زنجیره، گیر افتادی!) and an English counterpart.
+
 ## 3.0 — world-class rebuild — 2026-11-19
 - **Map v2**: hand-authored Sunset Bay with curved roads (warped downtown grid, roundabout, plaza, Ocean Boulevard, coastal highway with marina bridge, canyon hairpins, lake loop, Old Town, port) and five pit stops; smooth distance-field collision.
 - **Simulation 2.0.0** (browser + server replay + tests): drift physics, brake, handbrake, nitro; 14 car stat sets; damage limp + smoke/fire; 3 repairs; explosion at zero health; busted meter; takedowns; roadblocks with spike strips; heat 1–5; 60 s milestone then endless overtime (10 min cap); points-first ranking.

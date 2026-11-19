@@ -7,7 +7,7 @@
 const S = (top, accel, grip, steer, drift, nitro, tank, armor, mass) => ({ top, accel, grip, steer, drift, nitro, tank, armor, mass });
 
 export const CARS = [
-  { id: 'kaze', name: 'Kaze S15', tag: 'JDM drift coupe', cls: 'B', level: 1, paint: 0xf2f4f7, stripe: 0x111318,
+  { id: 'kaze', name: 'Kaze S15', tag: 'JDM drift coupe', cls: 'B', level: 1, paint: 0xff873c, stripe: 0xfff1de, livery: 'stripes',
     stats: S(60, 11.5, 7.2, 2.15, 1.2, 13, 4.2, 1.0, 1.0),
     body: { L: 4.45, W: 1.72, H: 1.29, wb: 2.52, fo: 0.92, wr: 0.33, nose: 0.62, hood: 0.84, cowl: 0.34, r0: 0.46, r1: 0.68, deck: 0.86, deckY: 0.92, tail: 0.86, belt: 0.86, roofW: 0.74, noseW: 0.86, tailW: 0.92, lights: 'slim', tails: 'slim', spoiler: 'duck', exhaust: 1 } },
   { id: 'volta', name: 'Volta GTI', tag: 'Hot hatch', cls: 'C', level: 1, paint: 0xd8202a, stripe: 0x111111,
@@ -84,11 +84,11 @@ export const TRAFFIC_COLORS = [0xe9ecef, 0x1c1f24, 0x8a9099, 0xb3121b, 0x1f3f7a,
 /** Paints players can pick for any unlocked car (cosmetic). */
 export const PAINTS = [
   { id: 'stock', color: null, level: 1 },
-  { id: 'white', color: 0xf3f4f6, level: 1 }, { id: 'black', color: 0x15161a, level: 1 }, { id: 'silver', color: 0xb9bec7, level: 1 },
-  { id: 'red', color: 0xd4121c, level: 1 }, { id: 'orange', color: 0xff6a00, level: 2 }, { id: 'yellow', color: 0xf5c400, level: 2 },
-  { id: 'lime', color: 0x7ad51f, level: 3 }, { id: 'teal', color: 0x0fb8a8, level: 3 }, { id: 'blue', color: 0x1d4fd8, level: 4 },
-  { id: 'purple', color: 0x6b2bd9, level: 4 }, { id: 'pink', color: 0xff3d8b, level: 5 }, { id: 'gold', color: 0xc9a227, level: 6 },
-  { id: 'mint', color: 0x8fe3c4, level: 7 }, { id: 'midnight', color: 0x1a2440, level: 8 }, { id: 'chrome', color: 0xd9dde3, level: 10, chrome: 1 },
+  { id: 'sunset', color: 0xff873c, level: 1 }, { id: 'flamingo', color: 0xff5d95, level: 1 }, { id: 'lagoon', color: 0x19b8bc, level: 1 },
+  { id: 'violet', color: 0x7a3df0, level: 2 }, { id: 'gold', color: 0xffc93c, level: 2 }, { id: 'night', color: 0x23203a, level: 3 },
+  { id: 'ice', color: 0xe9f4ff, level: 3 }, { id: 'lava', color: 0xe0221f, level: 4 }, { id: 'white', color: 0xf3f4f6, level: 4 },
+  { id: 'black', color: 0x15161a, level: 5 }, { id: 'lime', color: 0x7ad51f, level: 5 }, { id: 'blue', color: 0x1d4fd8, level: 6 },
+  { id: 'mint', color: 0x8fe3c4, level: 7 }, { id: 'silver', color: 0xb9bec7, level: 8 }, { id: 'chrome', color: 0xd9dde3, level: 10, chrome: 1 },
 ];
 export const LIVERIES = [
   { id: 'clean', level: 1 }, { id: 'stripes', level: 2 }, { id: 'side', level: 3 }, { id: 'twotone', level: 4 }, { id: 'race', level: 6 },
