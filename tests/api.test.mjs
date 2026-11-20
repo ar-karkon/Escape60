@@ -287,7 +287,7 @@ function mockAI({ fail = false, evil = false } = {}) {
     if (prompt.includes('Write police-radio chatter in Persian')) return reply(JSON.stringify({ start: ['همه‌ی واحدها، {car} در {zone}!'], heat: ['تعقیب داغ شد!'], roadblock: ['راه را ببندید!'], takedown: ['یک گشتی رفت!'], nearCop: ['لیز خورد!'], hit: ['ضربه خورد!'], pit: ['در پیت‌استاپ است!'] }));
     if (prompt.includes('Write police-radio chatter in English')) return reply(JSON.stringify({ start: ['Harbor Control: {car} rolling in {zone}!'], heat: ['Bring everyone!'], roadblock: ['Wall it off!'], takedown: ['Cruiser down!'], nearCop: ['He slipped us!'], hit: ['He is hurt!'], pit: ['Pit stop, watch it!'] }));
     if (prompt.includes('Write the single radio call')) return reply(body.messages[1].content.includes('in Persian') ? '«کنترل بندر: یک کازه نارنجی در اسکله!»' : '"Harbor Control: orange Kaze S15 spotted on The Docks, all units!"');
-    if (prompt.includes('You are Ray')) return reply(JSON.stringify({ tip: { en: 'Brake earlier into the canyon hairpins.', fa: 'زودتر قبل از پیچ‌های دره ترمز کن.' }, headline: { en: 'Kaze survives the tide', fa: 'کازه از جزر جان سالم برد' }, taunt: { en: 'See you at the docks.', fa: 'در اسکله می‌بینمت.' }, next: { type: 'points', goal: 999999999 } }));
+    if (prompt.includes('You are Ray')) return reply(JSON.stringify({ tip: { en: 'Brake earlier into the canyon hairpins.', fa: 'زودتر قبل از پیچ‌های دره ترمز کن.' }, headline: { en: 'Kaze survives the tide', fa: 'کازه از جزر جان سالم برد' }, taunt: { en: 'See you at the docks.', fa: 'در اسکله می‌بینمت.' }, persona: { en: 'Tide Rider', fa: 'موج‌سوار' }, taunts: { youPass: { en: 'Enjoy the view.', fa: 'از منظره لذت ببر.' }, beaten: { en: '<b>x</b>', fa: 'نه' } }, next: { type: 'points', goal: 999999999 } }));
     return reply('{}');
   };
   return { calls, fetchImpl };
@@ -332,6 +332,10 @@ test('AIaaS writes the daily briefing once; the simulation plays by its rules an
   assert.equal(h.m.calls.filter((c) => c.prompt.includes('You are Ray')).length, 1, 'cached');
   const rv = await h.call(`/api/v1/rival?seed=${day.seed}`);
   assert.equal(rv.body.rival.taunt.en, 'See you at the docks.');
+  assert.equal(rv.body.rival.persona.en, 'Tide Rider'); assert.equal(rv.body.rival.taunts.youPass.fa, 'از منظره لذت ببر.');
+  assert.equal(rv.body.rival.taunts.start.en, 'Catch me if you can.', 'missing taunt moments come from the handwritten bank');
+  assert.equal(rv.body.rival.taunts.beaten.en, 'Fine. Enjoy it while it lasts.', 'too-short / markup-only lines are replaced');
+  assert.equal((await h.call('/api/v1/radio')).body.source.fa, 'ai', 'the radio defaults to Persian');
   assert.match((await h.call(`/r/${f.body.id}`)).body, /Kaze survives the tide/);
   // radio bank and dispatcher call
   const radioEn = (await h.call('/api/v1/radio?lang=en')).body;
@@ -360,4 +364,92 @@ test('hostile or broken model output is contained; a down gateway falls back eve
   assert.deepEqual((await down.call('/api/v1/radio')).body.source, { en: 'fallback', fa: 'fallback' });
   const m = (await down.call('/api/v1/edge')).body;
   assert.ok(m.today.c.aiFails >= 3);
+});
+
+/* ---------- v4.2: several ghosts, verified splits, leagues, pursuit commander ---------- */
+async function finishAt(h, seed, car, spawn, rules = null) {
+  const t = await h.call('/api/v1/runs/start', { seed, car, spawn, ...(rules ? { rules: rules.id } : {}) });
+  const run = play(seed, car, spawn, rules);
+  h.advance(run.result.timeMs + 2000);
+  const f = await h.call('/api/v1/runs/finish', { runId: t.body.runId, token: t.body.token, trace: run.trace, result: run.result });
+  assert.equal(f.status, 200, JSON.stringify(f.body));
+  return { ...run, f: f.body };
+}
+const splitsOf = (seed, car, spawn) => {
+  const g = createGame(seed, { car, spawn }), sp = [];
+  while (g.state === 'playing') { stepGame(g, pilot(g)); g.events.length = 0; if (g.ticks % 60 === 0) sp.push(g.points); }
+  return sp;
+};
+
+test('GET /ghosts returns pb, rival, top and friend; only same-start ghosts carry inputs; splits are verified', async () => {
+  const h = harness();
+  const a = await finishAt(h, 'multi', 'kaze', 3), b = await finishAt(h, 'multi', 'toro', 5), c = await finishAt(h, 'multi', 'volta', 3);
+  assert.deepEqual((await h.call('/api/v1/health')).body.api, '4.2.0');
+  const r = await h.call(`/api/v1/ghosts?seed=multi&spawn=3&points=0&not=${a.f.id}&id=${b.f.id}`);
+  assert.equal(r.status, 200);
+  const g = r.body.ghosts;
+  assert.equal(r.body.spawn, 3);
+  assert.equal(g.pb.id, a.f.id); assert.equal(g.pb.role, 'pb');
+  assert.equal(g.friend.id, b.f.id); assert.equal(g.friend.trace, null, 'a friend from another start races on splits only');
+  assert.equal(g.rival.id, c.f.id, 'rival prefers runs from your start'); assert.ok(g.rival.trace.length > 0);
+  assert.ok(g.pb.trace.length > 0);
+  assert.deepEqual(g.pb.splits, splitsOf('multi', 'kaze', 3), 'edge splits equal the local points every second');
+  assert.equal(g.pb.splits.length, Math.floor((a.result.timeMs * 60) / 1000 / 60));
+  for (const x of Object.values(g)) if (x) { assert.ok(x.persona?.en && x.taunts?.passYou?.fa, 'persona and taunt bank'); assert.ok(x.rank >= 1 && x.of === 3); }
+  const ids = new Set(Object.values(g).filter(Boolean).map((x) => x.id));
+  assert.equal(ids.size, Object.values(g).filter(Boolean).length, 'no ghost twice');
+  // no spawn: the race starts at the friend's start, and only ghosts from there carry inputs
+  const r2 = await h.call(`/api/v1/ghosts?seed=multi&id=${b.f.id}`);
+  assert.equal(r2.body.spawn, 5);
+  assert.ok(r2.body.ghosts.friend.trace.length > 0);
+  for (const x of [r2.body.ghosts.rival, r2.body.ghosts.top]) if (x) assert.equal(x.trace, x.spawn === 5 ? x.trace : null);
+  assert.deepEqual((await h.call('/api/v1/ghosts?seed=empty-board')).body.ghosts, { pb: null, rival: null, top: null, friend: null });
+  assert.equal((await h.call('/api/v1/ghosts?seed=bad seed!')).status, 400);
+});
+
+test('splits ride inside the signed checkpoint: tampering is refused', async () => {
+  const h = harness({ chunk: 600 });
+  const t = await h.call('/api/v1/runs/start', { seed: 'splits', car: 'kaze' });
+  const run = playSteps('splits', 'kaze');
+  h.advance(run.result.timeMs + 1000);
+  const body = { runId: t.body.runId, token: t.body.token, trace: encodeTrace(run.steps), result: run.result };
+  const first = await h.call('/api/v1/runs/finish', body);
+  assert.equal(first.status, 202);
+  const ck = first.body.checkpoint;
+  assert.equal(ck.sp.length, ck.t / 60); assert.equal(ck.sp[4], run.pts[300]);
+  const forged = await h.call('/api/v1/runs/finish', { ...body, checkpoint: { ...ck, sp: ck.sp.map((v, i) => (i === 3 ? v + 500 : v)) } });
+  assert.equal(forged.status, 401, 'changed splits break the checkpoint MAC');
+  const short = await h.call('/api/v1/runs/finish', { ...body, checkpoint: { ...ck, sp: ck.sp.slice(1) } });
+  assert.equal(short.status, 400);
+  let r = first, cp = ck;
+  while (r.status === 202) { r = await h.call('/api/v1/runs/finish', { ...body, checkpoint: cp }); cp = r.body.checkpoint; }
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(r.body.splits, Math.floor(run.steps.length / 60));
+});
+
+test('finish returns a league; the heat file feeds tomorrow\'s police focus (handwritten and written briefings)', async () => {
+  const h = harness();
+  const runs = [];
+  for (const car of ['kaze', 'toro', 'volta']) runs.push(await finishAt(h, 'daily-2026-11-19', car, 2, (await h.call('/api/v1/challenges/today')).body.rules));
+  assert.equal(runs[0].f.league, null, 'no league before there is anything to compare with');
+  for (const x of runs.slice(1)) assert.ok(['bronze', 'silver', 'gold', 'neon', 'legend'].includes(x.f.league), x.f.league);
+  const heat = JSON.parse((await h.store.get('heat/' + runs[0].result.version + '/2026-11-19.json')).body);
+  assert.equal(heat.n, 3); assert.deepEqual(heat.kinds, ['busts', 'wrecks', 'escapes', 'takedowns']);
+  assert.equal(heat.z.reduce((a, z) => a + z[0] + z[1], 0), runs.filter((x) => x.result.end !== 'legend').length);
+  const png = await h.app.handle(new Request(`http://edge/api/v1/card/${runs[2].f.id}.png`));
+  assert.equal(png.status, 200);
+  h.advance(86400000);
+  const next = (await h.call('/api/v1/challenges/today')).body;
+  assert.equal(next.seed, 'daily-2026-11-20');
+  assert.ok(next.rules.tactics.focus >= 0 && next.rules.tactics.focus < 10, 'commander picked a focus district');
+  assert.ok(next.rules.tactics.focusRate > 1);
+  assert.match(next.brief.briefing.en, /commander moved extra units/);
+  // the written briefing gets the same report and reacts to it
+  const ai = aiHarness();
+  await ai.store.put('heat/' + runs[0].result.version + '/2026-11-18.json', JSON.stringify({ date: '2026-11-18', n: 4, z: [[0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [1, 0, 3, 2], [0, 0, 0, 0]] }));
+  const day = (await ai.call('/api/v1/challenges/today')).body;
+  assert.match(ai.m.calls[0].prompt, /Pursuit commander report: .*most escapes in Neon Mile/);
+  assert.equal(day.rules.tactics.focus, 8);
+  const dis = (await ai.call('/api/v1/dispatch', { seed: day.seed, car: 'kaze', zone: 2 })).body;
+  assert.equal(dis.line, 'کنترل بندر: یک کازه نارنجی در اسکله!', 'dispatch defaults to Persian');
 });

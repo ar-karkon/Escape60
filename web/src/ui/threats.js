@@ -4,8 +4,11 @@
      pulsing faster as they close in,
    - small markers above the police you can see (brackets when they have locked onto you),
    - a tail warning when a cop is right behind you,
-   - a "YOU" pin over your car during the aerial intro. */
+   - a "YOU" pin over your car during the aerial intro,
+   - a gold ✕ badge with the cause and points over a cop you just took down (or a gold chevron with its
+     distance when it is off screen), for the 2 s after the takedown; wrecks you did not cause get none. */
 import * as T from "../../vendor/three.js";
+import { t, num } from "../i18n.js";
 
 const RED = [255, 51, 85], BLUE = [63, 152, 255], GOLD = [255, 227, 124], INK = "#1b0b2b";
 const FONT = '"Jersey 10", "Rooyin", "Vazirmatn", monospace';
@@ -49,6 +52,18 @@ export function createThreats(canvas, render) {
     ctx.lineWidth = 3 * dpr; ctx.strokeStyle = INK; ctx.lineJoin = "round";
     ctx.strokeText(text, x, y);
     ctx.fillStyle = col; ctx.fillText(text, x, y);
+    ctx.restore();
+  }
+  /** Gold pixel ✕ badge, centred at (x, y). */
+  function xBadge(x, y, s, alpha) {
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = INK; ctx.fillRect(x - s - 3 * dpr, y - s - 3 * dpr, 2 * s + 6 * dpr, 2 * s + 6 * dpr);
+    ctx.fillStyle = rgba(GOLD, 1); ctx.fillRect(x - s, y - s, 2 * s, 2 * s);
+    ctx.fillStyle = "rgba(255,255,255,0.5)"; ctx.fillRect(x - s, y - s, 2 * s, 2 * dpr);
+    ctx.strokeStyle = INK; ctx.lineWidth = Math.max(2, s * 0.32); ctx.lineCap = "square";
+    const k = s * 0.5;
+    ctx.beginPath(); ctx.moveTo(x - k, y - k); ctx.lineTo(x + k, y + k); ctx.moveTo(x + k, y - k); ctx.lineTo(x - k, y + k); ctx.stroke();
     ctx.restore();
   }
   function edgeGlow(b, k, col) {
@@ -145,6 +160,30 @@ export function createThreats(canvas, render) {
         const size = (11 + 9 * k) * dpr;
         chevron(x, y, b, size, col, pulse);
         label(`${Math.round(d)}m`, x - Math.sin(b) * (size + 10 * dpr), y + Math.cos(b) * (size + 10 * dpr), 15 + 3 * k, "#fff4e6", 0.95);
+      }
+      // ---- takedown badges: only for cops the simulation credited to you (c.tk), for ~2 s ----
+      for (const c of game.police) {
+        if (!c.tk || !(c.wreck > 4)) continue;
+        const u = clamp((6 - c.wreck) / 2, 0, 1), alpha = u < 0.75 ? 1 : 1 - (u - 0.75) / 0.25;
+        const pop = reduced ? 1 : 1 + 0.35 * Math.max(0, 1 - u * 6);
+        const dx = c.x - view.px, dz = c.y - view.pz, d = Math.hypot(dx, dz);
+        const cause = t("td_" + c.tk), pts = c.tkp ? `+${num(c.tkp)}` : "";
+        const p = project(c.x, 2.2, c.y);
+        if (p.ok && p.x > W * 0.04 && p.x < W * 0.96 && p.y > H * 0.08 && p.y < H * 0.94) {
+          const s = 11 * dpr * pop, y = p.y - (reduced ? 0 : u * 18 * dpr);
+          xBadge(p.x, y, s, alpha);
+          label(cause, p.x, y - s - 14 * dpr, 20, rgba(GOLD, 1), alpha);
+          if (pts) label(pts, p.x, y + s + 14 * dpr, 17, "#7ff3ff", alpha);
+        } else {
+          const b = Math.atan2(-fz * dx + fx * dz, fx * dx + fz * dz);
+          let x = hx + Math.sin(b) * rx, y = hy - Math.cos(b) * ry;
+          x = clamp(x, side, W - side); y = clamp(y, top, bottom);
+          const size = 14 * dpr * pop;
+          chevron(x, y, b, size, GOLD, alpha);
+          const lx = x - Math.sin(b) * (size + 16 * dpr), ly = y + Math.cos(b) * (size + 16 * dpr);
+          label(`✕ ${cause}`, lx, ly, 17, rgba(GOLD, 1), alpha);
+          label(`${Math.round(d)}m`, lx, ly + 17 * dpr, 14, "#fff4e6", alpha);
+        }
       }
       ctx.restore();
       // ---- tail warning ----

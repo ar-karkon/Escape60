@@ -167,6 +167,9 @@ body[data-view="results"] .overlay { background: linear-gradient(180deg, rgba(27
 .hud-score { display: flex; align-items: center; gap: 6px; padding: 3px 10px; background: rgba(27, 11, 43, 0.7); box-shadow: 3px 3px 0 var(--violet); }
 .hud-score [data-icon] { width: 20px; height: 18px; }
 .hud-score b { font: 400 32px/1 var(--px); direction: ltr; color: var(--cream); text-shadow: 2px 2px 0 var(--ink); }
+.hud-score.bump { animation: score-bump 0.45s steps(5); }
+.hud-score.bump b { color: var(--gold); text-shadow: 2px 2px 0 var(--ink), 0 0 10px var(--gold); }
+@keyframes score-bump { 0% { transform: scale(1); } 25% { transform: scale(1.22); box-shadow: 3px 3px 0 var(--violet), 0 0 16px var(--gold); } 100% { transform: scale(1); } }
 .popups { position: absolute; left: 0; right: 0; top: 36%; display: flex; flex-direction: column; align-items: center; }
 .pop { position: absolute; white-space: nowrap; font: 400 36px/1 var(--px); color: var(--gold); text-shadow: 2px 0 var(--ink), -2px 0 var(--ink), 0 2px var(--ink), 0 -2px var(--ink), 0 4px #c8174a; animation: pop 1.1s steps(9) forwards; }
 .pop small { display: block; text-align: center; font: 800 14px var(--fa); color: var(--cream); }
@@ -472,7 +475,14 @@ body[data-view="garage"] #app::before { background: linear-gradient(180deg, rgba
 .bust u { display: block; height: 100%; width: 0; background: repeating-linear-gradient(90deg, var(--hot) 0 8px, #3f98ff 8px 16px); }
 .pop.drift { color: var(--cyan); font-size: 40px; }
 .pop.good { color: #5dffb0; }
-.pop.take { color: var(--gold); font-size: 48px; }
+.pop.take { color: var(--gold); font-size: 48px; text-shadow: 2px 0 var(--ink), -2px 0 var(--ink), 0 2px var(--ink), 0 -2px var(--ink), 0 4px #1d6fa0, 0 0 14px rgba(61, 216, 231, 0.7); }
+.pop.take small { color: #7ff3ff; font-size: 16px; }
+/* takedown popup: snaps in and holds, then main.js flies it into the score counter */
+.pop.take.fly { animation: take-in 0.5s steps(6) forwards; }
+@keyframes take-in { 0% { transform: translateY(14px) scale(0.5); opacity: 0; } 30% { transform: translateY(0) scale(1.25); opacity: 1; } 55% { transform: scale(0.95); } 100% { transform: scale(1); opacity: 1; } }
+@keyframes take-fly { to { transform: translate(var(--fx, 0), var(--fy, -200px)) scale(0.35); opacity: 0.5; } }
+.pop.take.going { animation: take-fly 0.42s cubic-bezier(0.5, 0, 0.9, 0.4) forwards; }
+.pop.soft { color: #b9b3c6; font-size: 24px; }
 .popups { top: 33%; }
 .milestone { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; animation: logo-in 0.5s steps(5) both; }
 .milestone.out { animation: ms-out 0.6s steps(6) forwards; }
@@ -601,6 +611,10 @@ dialog.dlg[open] { display: flex; flex-direction: column; gap: 10px; }
 .vbar-health.hit { animation: shake 0.3s steps(3); }
 .vbar .nitro-fill { inset: auto 2px 2px 2px; background: linear-gradient(90deg, #b6f7ff 0 30%, var(--cyan) 30% 70%, #1d6fa0 70%); box-shadow: 0 0 8px var(--cyan); }
 .vbar-nitro.full .nitro-fill { animation: blink 0.5s steps(2) infinite; }
+/* nitro refilled by a takedown */
+.vbar-nitro.gain { --edge: var(--gold); animation: nitro-gain 0.9s steps(6); }
+.vbar-nitro.gain .nitro-fill { background: linear-gradient(90deg, #fff6c9 0 30%, var(--gold) 30% 70%, #1d6fa0 70%); box-shadow: 0 0 14px var(--gold), 0 0 4px #fff; }
+@keyframes nitro-gain { 0% { filter: brightness(2.2); } 40% { filter: brightness(1.5); } 100% { filter: none; } }
 .vbar-nitro.on { --edge: #5dffb0; }
 .vbar-nitro.on .nitro-fill { background: linear-gradient(90deg, #d9ffe9 0 30%, #5dffb0 30% 70%, #1f9e6a 70%); box-shadow: 0 0 10px #5dffb0; }
 .vbar b { font: 400 20px/1 var(--px); color: var(--cream); text-shadow: 2px 2px 0 var(--ink); direction: ltr; }
@@ -753,3 +767,30 @@ html[lang="fa"] .br-head b { font: 800 17px/1.2 var(--fa); }
 .chief.loading p { opacity: 0.55; }
 .how-link { color: var(--cyan); text-decoration: none; border-bottom: 2px dotted var(--cyan); }
 .challenge .verified { color: #5dffb0; }
+/* v3.6: several ghosts at once (role colours: your best white, rival cyan, #1 gold, friend magenta),
+   seconds delta, "N pts to #k" under the live rank, league badge on results */
+.rival-chip .rv-name { grid-column: 2 / 3; }
+.rival-chip .rv-sec { grid-column: 3; grid-row: 2; justify-self: end; font: 400 11px/1 var(--px); letter-spacing: 0; color: var(--muted); }
+.rival-chip.behind .rv-sec { color: #ffb3c4; }
+.rival-chip:not(.behind) .rv-sec { color: #5dffb0; }
+.rival-chip[data-role="pb"] { --edge: #f4f1ff; }
+.rival-chip[data-role="top"] { --edge: var(--gold); }
+.rival-chip[data-role="friend"] { --edge: #ff4fd8; }
+.rival-chip[data-role="pb"] small:first-of-type { color: #f4f1ff; }
+.rival-chip[data-role="top"] small:first-of-type { color: var(--gold); }
+.rival-chip[data-role="friend"] small:first-of-type { color: #ff8fe6; }
+.ghost-tag[data-role="pb"] { --edge: #f4f1ff; }
+.ghost-tag[data-role="pb"] b { color: #f4f1ff; }
+.ghost-tag[data-role="top"] { --edge: var(--gold); }
+.ghost-tag[data-role="top"] b { color: var(--gold); }
+.ghost-tag[data-role="friend"] { --edge: #ff4fd8; }
+.ghost-tag[data-role="friend"] b { color: #ff8fe6; }
+.live-ahead { margin-top: -6px; padding: 2px 6px; align-self: flex-end; max-width: 100%; box-sizing: border-box; font: 400 12px/1.1 var(--px); letter-spacing: 1px; color: var(--gold); background: rgba(27, 11, 43, 0.72); text-align: end; overflow-wrap: anywhere; text-shadow: 1px 1px 0 var(--ink); }
+html[lang="fa"] .live-ahead { direction: rtl; font: 700 10.5px/1.4 var(--fa); letter-spacing: 0; }
+.league-badge { margin-inline-start: auto; padding: 2px 8px; font: 400 15px/1 var(--px); letter-spacing: 1px; color: var(--ink); background: var(--gold); box-shadow: 2px 2px 0 var(--ink); white-space: nowrap; }
+html[lang="fa"] .league-badge { font: 800 12px/1.3 var(--fa); letter-spacing: 0; }
+.league-badge[data-league="bronze"] { background: #e0965a; }
+.league-badge[data-league="silver"] { background: #cdd3e6; }
+.league-badge[data-league="gold"] { background: var(--gold); }
+.league-badge[data-league="neon"] { background: var(--cyan); }
+.league-badge[data-league="legend"] { background: var(--pink); color: var(--cream); }

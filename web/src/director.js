@@ -38,7 +38,9 @@ export function sanitizeDirector(raw, { date, source = 'ai', model = '' } = {}) 
   const fb = fallbackDirector(date);
   if (!raw || typeof raw !== 'object') return fb;
   const zoneOf = (z) => (typeof z === 'number' ? z : ZONES.indexOf(String(z || '').toLowerCase().replace(/[^a-z]/g, '')));
-  const rules = cleanRules({ contracts: (Array.isArray(raw.contracts) ? raw.contracts : []).map((c) => ({ type: c?.type, goal: c?.goal, zone: zoneOf(c?.zone) })), tactics: raw.tactics });
+  // the focus district may come back as a district id ("port") instead of its index
+  const tactics = raw.tactics && typeof raw.tactics === 'object' && raw.tactics.focus !== undefined ? { ...raw.tactics, focus: zoneOf(raw.tactics.focus) } : raw.tactics;
+  const rules = cleanRules({ contracts: (Array.isArray(raw.contracts) ? raw.contracts : []).map((c) => ({ type: c?.type, goal: c?.goal, zone: zoneOf(c?.zone) })), tactics });
   if (rules.contracts.length < 2) return { ...fb, note: 'contracts' };
   const titles = new Map((Array.isArray(raw.contracts) ? raw.contracts : []).map((c) => [c?.type, c?.title]));
   const contracts = rules.contracts.map((c) => ({ ...c, title: pair(titles.get(c.type), 30, { en: TYPE_TITLES[c.type][0], fa: TYPE_TITLES[c.type][1] }) }));
@@ -90,11 +92,30 @@ export function targetText(t, lang = 'en') {
   const en = { points: `Score ${g}`, survive: `Survive ${g} s`, drift: `Drift ${g} pts`, near: `${g} near misses`, takedown: `Take down ${g} police`, chain: `Build a ×${g} chain` };
   return (lang === 'fa' ? fa : en)[t.type] || '';
 }
+/** Moments a ghost's driver speaks during your run (shown in the ghost's own voice). */
+export const TAUNT_MOMENTS = ['start', 'passYou', 'youPass', 'milestone', 'beaten'];
 export function sanitizeChief(raw, result) {
   const fb = fallbackChief(result);
   if (!raw || typeof raw !== 'object') return fb;
-  return { tip: pair(raw.tip, 170, fb.tip), headline: pair(raw.headline, 72, fb.headline), taunt: pair(raw.taunt, 64, fb.taunt), next: cleanTarget(raw.next, result) || fb.next, source: 'ai' };
+  const taunts = Object.fromEntries(TAUNT_MOMENTS.map((k) => [k, pair(raw.taunts?.[k], 64, fb.taunts[k])]));
+  return { tip: pair(raw.tip, 170, fb.tip), headline: pair(raw.headline, 72, fb.headline), taunt: pair(raw.taunt, 64, fb.taunt), persona: pair(raw.persona, 26, fb.persona), taunts, next: cleanTarget(raw.next, result) || fb.next, source: 'ai' };
 }
+/** A driver nickname from the run's strongest number. */
+function personaOf(r) {
+  if (r.takedowns >= 3) return { en: 'Cop Magnet', fa: 'آهن‌ربای پلیس' };
+  if (r.driftPts >= 3000) return { en: 'Smoke Artist', fa: 'هنرمند دود' };
+  if (r.near >= 10) return { en: 'Needle Threader', fa: 'نخ‌کش سوزن' };
+  if (r.topSpeed >= 230) return { en: 'Redline Rocket', fa: 'موشک خط قرمز' };
+  if (r.escaped) return { en: 'Night Escapist', fa: 'فراری شب' };
+  return { en: 'Street Runner', fa: 'دونده‌ی خیابان' };
+}
+const FALLBACK_TAUNTS = {
+  start: { en: 'Catch me if you can.', fa: 'اگه می‌تونی بگیرم.' },
+  passYou: { en: 'See you in the mirror.', fa: 'تو آینه می‌بینمت.' },
+  youPass: { en: 'Lucky gap. Won\'t happen twice.', fa: 'شانسی بود. دوباره نمی‌شه.' },
+  milestone: { en: 'Sixty seconds? I was just warming up.', fa: 'شصت ثانیه؟ تازه گرم شده بودم.' },
+  beaten: { en: 'Fine. Enjoy it while it lasts.', fa: 'باشه. تا وقتی دووم داره کیف کن.' },
+};
 /** Rule-based crew chief from the verified numbers. */
 export function fallbackChief(r) {
   const s = Math.floor(r.timeMs / 1000);
@@ -108,6 +129,7 @@ export function fallbackChief(r) {
     tip,
     headline: { en: `${Number(r.points).toLocaleString('en-US')} points in ${s} seconds of chaos`, fa: `${Number(r.points).toLocaleString('fa-IR')} امتیاز در ${Number(s).toLocaleString('fa-IR')} ثانیه تعقیب` },
     taunt: { en: 'Catch me if you can.', fa: 'اگه می‌تونی بگیرم.' },
+    persona: personaOf(r), taunts: { ...FALLBACK_TAUNTS },
     next: cleanTarget({ type: 'points', goal: Math.round(r.points * 1.25) }, r),
     source: 'rules',
   };
@@ -158,12 +180,43 @@ export const FALLBACK_RADIO = {
     busted: ['سوژه بازداشت شد. آفرین به همه‌ی واحدها.', 'گرفتیمش. همه‌ی واحدها برگردند.'],
   },
 };
-export function fallbackDirector(date) {
+/* ---------- pursuit commander: yesterday's per-district outcomes steer today's police focus ---------- */
+/** Per-district counters kept by the edge at every verified finish (heat/<sim>/<date>.json). */
+export const HEAT_KINDS = ['busts', 'wrecks', 'escapes', 'takedowns'];
+const argmax = (z, k) => { let best = -1, n = 0; z.forEach((row, i) => { if ((row?.[k] || 0) > n) { n = row[k]; best = i; } }); return best; };
+/** Summary of a day's heat file, or null: where players got caught, wrecked, escaped and hunted cops,
+    and the district the police concentrate on next (where players did best: escapes + takedowns). */
+export function heatSummary(h) {
+  if (!h || !Array.isArray(h.z) || !(h.n > 0)) return null;
+  const z = h.z.slice(0, ZONES.length).map((row) => (Array.isArray(row) ? row.map((v) => Math.max(0, Number(v) || 0)) : [0, 0, 0, 0]));
+  const score = z.map((row) => [0, 0, row[2] * 2 + row[3]]);
+  const focus = argmax(score, 2), total = score.reduce((a, r) => a + r[2], 0);
+  const share = focus >= 0 && total > 0 ? score[focus][2] / total : 0;
+  return { date: h.date || null, runs: h.n, bust: argmax(z, 0), wreck: argmax(z, 1), escape: argmax(z, 2), takedown: argmax(z, 3), focus, focusRate: focus >= 0 ? Math.min(1.5, Math.round((1.15 + share * 0.5) * 20) / 20) : 1 };
+}
+/** One line for the model prompt. */
+export function heatText(s) {
+  if (!s) return '';
+  const n = (i) => (i >= 0 ? ZONE_NAMES.en[i] : 'nowhere in particular');
+  return `Yesterday ${s.runs} verified runs: most busts in ${n(s.bust)}, most wrecks in ${n(s.wreck)}, most escapes in ${n(s.escape)}, most police cars taken down in ${n(s.takedown)}.`;
+}
+/** League of a verified run, from the share of today's runs it beat (and its board rank). */
+export const LEAGUES = ['bronze', 'silver', 'gold', 'neon', 'legend'];
+export function leagueOf(better, rank = null, runs = 0) {
+  if (!Number.isFinite(better)) return null;
+  if ((rank && rank <= 3 && runs >= 10) || better >= 99) return 'legend';
+  return better >= 90 ? 'neon' : better >= 70 ? 'gold' : better >= 40 ? 'silver' : 'bronze';
+}
+export function fallbackDirector(date, heat = null) {
   const t = THEMES[(hashSeed(`brief-${date}`) >>> 0) % THEMES.length];
-  const rules = cleanRules({ contracts: t.contracts, tactics: t.tactics });
+  const focus = heat && heat.focus >= 0 ? heat.focus : -1;
+  const rules = cleanRules({ contracts: t.contracts, tactics: focus >= 0 ? { ...t.tactics, focus, focusRate: heat.focusRate } : t.tactics });
+  const briefing = focus >= 0
+    ? { en: `${t.briefing.en} After yesterday, the commander moved extra units into ${ZONE_NAMES.en[focus]}.`, fa: `${t.briefing.fa} بعد از دیروز، فرمانده واحدهای بیشتری به ${ZONE_NAMES.fa[focus]} فرستاده.` }
+    : t.briefing;
   const d = {
     v: DIRECTOR_VERSION, date, seed: `daily-${date}`, source: 'fallback', model: '',
-    theme: t.theme, briefing: t.briefing, dispatcher: { en: 'Bay Dispatch', fa: 'مرکز خلیج' },
+    theme: t.theme, briefing, dispatcher: { en: 'Bay Dispatch', fa: 'مرکز خلیج' },
     contracts: rules.contracts.map((c, i) => ({ ...c, title: t.contracts[i].title })), tactics: rules.tactics, radio: FALLBACK_RADIO,
   };
   d.id = rulesIdOf(date, rules);

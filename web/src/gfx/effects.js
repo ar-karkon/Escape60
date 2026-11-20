@@ -131,6 +131,23 @@ export function createEffects(P) {
       const k = 0.5 + 0.5 * Math.sin(time / 400);
       P.add.spawn({ x, y, z, vx: 0, vy: 0, vz: 0, life: 0.034, s0: 4 + 10 * k * k, s1: 4 + 10 * k * k, a0: 0.4 + 0.6 * k, a1: 0.4 + 0.6 * k, rot: 0, cell: CELL.GLOW, c0: [2.4, 2.1, 1.4] });
     },
+    /** Takedown reward: ~24 gold and cyan sparkles stream from the wreck at (x, z) into your car over
+        about 0.5 s and pop on arrival. `target` is any live {x, z} (the hero's position), so the stream
+        follows the car at speed. Visual only. */
+    absorb(x, z, target, n = 24, cyan = false) {
+      const parts = [];
+      for (let i = 0; i < n; i++) {
+        const gold = cyan ? i % 3 === 0 : i % 3 !== 0;
+        const p = P.add.spawn({ x, y: 1.2, z, vx: 0, vy: 0, vz: 0, life: 9, s0: 0.55, s1: 0.55, a0: 1, a1: 1, rot: Math.random() * 6, spin: rnd(6), cell: i % 4 ? CELL.SPARKLE : CELL.STAR, c0: gold ? [3, 2.3, 0.7] : [0.7, 2.6, 3] });
+        parts.push({ p, ox: rnd(1.6), oy: Math.random() * 1.5, oz: rnd(1.6), side: rnd(5), lift: 2.5 + Math.random() * 3, delay: Math.random() * 0.16, dur: 0.38 + Math.random() * 0.14 });
+      }
+      emitters.push({ kind: "absorb", x, z, target, parts, age: 0, t: 1.2, popped: false });
+    },
+    /** Gold ring that blooms on the ground under the car. */
+    goldRing(x, z, cyan = false) {
+      P.flatAdd.spawn({ x, y: 0.1, z, vx: 0, vy: 0, vz: 0, life: 0.6, s0: 2, s1: 14, a0: 1, a1: 0, rot: 0, cell: CELL.RING, c0: cyan ? [0.6, 2.4, 3] : [3, 2.2, 0.7], ease: 1 });
+      P.add.spawn({ x, y: 1, z, vx: 0, vy: 0, vz: 0, life: 0.3, s0: 3, s1: 7, a0: 0.7, a1: 0, rot: 0, cell: CELL.GLOW, c0: cyan ? [0.6, 2, 2.6] : [2.6, 1.9, 0.6] });
+    },
     confetti(x, y, z, n = 40) {
       for (let i = 0; i < n; i++) P.alpha.spawn({ x: x + rnd(5), y: y + 4 + Math.random() * 4, z: z + rnd(5), vx: rnd(3), vy: 2 + Math.random() * 3, vz: rnd(3), life: 2.2, s0: 0.45, s1: 0.4, a0: 1, a1: 0.6, rot: Math.random() * 6, spin: rnd(6), cell: i % 3 ? CELL.STAR : CELL.SPARKLE, c0: rgb(ACCENTS[i % 6], 1.1), grav: 3, drag: 0.8 });
     },
@@ -140,10 +157,32 @@ export function createEffects(P) {
         const e = emitters[i];
         e.t -= dt;
         if (e.kind === "geyser") for (let k = 0; k < 3; k++) P.alpha.spawn({ x: e.x + rnd(0.15), y: 0.8, z: e.z + rnd(0.15), vx: rnd(1.2), vy: 9 + Math.random() * 4, vz: rnd(1.2), life: 1.6, s0: 0.4, s1: 1.2, a0: 0.8, a1: 0, rot: 0, cell: CELL.DROP, c0: [0.85, 0.92, 1], grav: 9.8, floor: 0.05 });
+        if (e.kind === "absorb") {
+          e.age += dt;
+          const tx = e.target.x, tz = e.target.z;
+          let left = 0;
+          for (const q of e.parts) {
+            const p = q.p;
+            if (p.age >= p.life) continue;
+            const u = Math.max(0, Math.min(1, (e.age - q.delay) / q.dur));
+            if (u >= 1) { p.life = p.age; continue; }
+            left++;
+            // quadratic arc: up and sideways out of the wreck, then down into the car
+            const ease = u * u * (3 - 2 * u), m = 1 - ease;
+            const sx = e.x + q.ox, sz = e.z + q.oz, cx = (sx + tx) / 2 + q.side * (tz - sz) * 0.02, cz = (sz + tz) / 2 - q.side * (tx - sx) * 0.02;
+            p.x = m * m * sx + 2 * m * ease * cx + ease * ease * tx;
+            p.z = m * m * sz + 2 * m * ease * cz + ease * ease * tz;
+            p.y = m * m * (1.2 + q.oy) + 2 * m * ease * (1.2 + q.lift) + ease * ease * 1;
+            p.vx = p.vy = p.vz = 0;
+            p.s0 = p.s1 = 0.55 - 0.25 * u;
+          }
+          if (!e.popped && e.age > 0.3 && left < e.parts.length * 0.5) { e.popped = true; P.add.spawn({ x: tx, y: 1, z: tz, vx: 0, vy: 0, vz: 0, life: 0.25, s0: 2.5, s1: 5, a0: 0.8, a1: 0, rot: 0, cell: CELL.GLOW, c0: [2.6, 2, 0.8] }); }
+          if (!left && e.age > 0.2) e.t = 0;
+        }
         if (e.t <= 0) emitters.splice(i, 1);
       }
     },
-    clear() { emitters.length = 0; },
+    clear() { for (const e of emitters) if (e.parts) for (const q of e.parts) q.p.life = q.p.age; emitters.length = 0; },
   };
   return fx;
 }

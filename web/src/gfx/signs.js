@@ -28,9 +28,12 @@ export function atlasTexture() {
   draw();
   texture = new T.CanvasTexture(canvas);
   texture.colorSpace = T.SRGBColorSpace;
-  texture.anisotropy = 4;
+  texture.anisotropy = aniso;
   return texture;
 }
+let aniso = 4;
+/** Called once the renderer is known: min(8, GPU max), so angled shop signs stay sharp without blur. */
+export function setAtlasAnisotropy(n) { aniso = Math.max(1, n | 0); if (texture && texture.anisotropy !== aniso) { texture.anisotropy = aniso; texture.needsUpdate = true; } }
 export function redrawAtlas() { if (!canvas) return; draw(); texture.needsUpdate = true; }
 export function cell(name) { atlasTexture(); return cells[name]; }
 

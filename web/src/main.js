@@ -3,7 +3,7 @@ import { createRenderer } from './render.js';
 import { AudioEngine, gearOf } from './audio.js';
 import { hydrateIcons, iconSVG } from './ui/icons.js';
 import { redrawAtlas } from './gfx/signs.js';
-import { loadProfile, saveProfile, applyRun, xpForLevel, missionInfo, parseChallenge, beats, carUnlocked, carLook } from './meta.js';
+import { loadProfile, saveProfile, applyRun, xpForLevel, missionInfo, parseChallenge, beats, carUnlocked, carLook, noteLeague, DUEL_XP } from './meta.js';
 import { CARS, carById, ratings, PAINTS, LIVERIES } from './cars.js';
 import { EFFECTS, ACCENTS } from './gfx/effects.js';
 import { stations, sample, pointAt, edges, district, DISTRICTS } from './map.js';
@@ -14,7 +14,7 @@ import { createThreats } from './ui/threats.js';
 import { pickRadio, fillRadio, contractText, targetText, fallbackChief } from './director.js';
 
 const $ = (id) => document.getElementById(id);
-const VERSION = 'v3.5.1';
+const VERSION = 'v3.6.0';
 /** Seconds of aerial intro + countdown before you get control (skippable with any input). */
 const INTRO = 4.8;
 hydrateIcons();
@@ -48,7 +48,7 @@ const challengeRun = challenge && /^[a-f0-9]{12}$/.test(qs.get('r') || '') ? qs.
 let seed = initialSeed, game = null, paused = false, runTicket = null, trace = [], last = 0, acc = 0, countdown = 0, countStep = -1;
 let lastEvent = -1, finishQueued = false, online = false, lastResult = null, view = 'loading', ready = false;
 let frozen = false;
-let live = null, ghost = null, lastShareUrl = null; // edge referee state, rival ghost, verified share link
+let live = null, ghosts = [], mySplits = [], lastShareUrl = null; // edge referee state, ghost rivals, your 1 s splits, verified share link
 let brief = null, briefRules = null, radioBank = null; // today's city briefing (contracts + tactics) and police-radio bank
 let target = null, targetHitDone = false, dispatchShown = false, bustSaid = false;
 const persisted = (() => { try { return JSON.parse(localStorage.getItem('escape60-bests-' + SIM_VERSION) || '{}'); } catch { return {}; } })();
@@ -113,7 +113,7 @@ async function checkOnline() {
     brief = res.brief || null; briefRules = res.rules || null;
     if (brief) api.radio(brief.date, getLang()).then((r) => { radioBank = r.radio; }).catch(() => {});
     if (view === 'home') renderBrief();
-    if (online && !nextRival) prefetchRival();
+    if (online && !nextGhosts) prefetchRival();
   }
   catch { online = false; $('online-state').textContent = t('offline'); $('online-state').className = 'status'; }
 }
@@ -177,7 +177,7 @@ document.querySelector('.garage-panel').addEventListener('click', (e) => {
 }
 
 /* ---------- HUD helpers ---------- */
-let shownHp = 100, trailHp = 100, trailHold = 0, shownMult = 1, shownHeat = 0, lastSecond = -1, bestPassed = false, targetPassed = false, msTimer = 0, howtoTimer = 0;
+let shownNitro = 0, shownHp = 100, trailHp = 100, trailHold = 0, shownMult = 1, shownHeat = 0, lastSecond = -1, bestPassed = false, targetPassed = false, msTimer = 0, howtoTimer = 0;
 function renderHeat(n) { $('heat').innerHTML = [0, 1, 2, 3, 4].map((i) => `<span class="${i < n ? 'on' : ''}">${iconSVG(i < n ? 'siren' : 'sirenOff')}</span>`).join(''); }
 function renderRepairs(n) { $('repairs').innerHTML = Array.from({ length: REPAIRS }, (_, i) => `<span class="${i < n ? '' : 'used'}">${iconSVG('wrench')}</span>`).join(''); }
 const pops = $('popups');
@@ -188,6 +188,20 @@ function popup(text, sub = '', cls = '') {
   el.style.top = `${(n % 3) * 46}px`;
   el.innerHTML = `${text}${sub ? `<small>${sub}</small>` : ''}`;
   pops.appendChild(el);
+  // a takedown popup snaps in, holds, then flies into the score counter, which bumps on arrival
+  if (cls.split(' ').includes('take') && !settings.motion) {
+    el.classList.add('fly');
+    setTimeout(() => {
+      const sc = document.querySelector('.hud-score');
+      if (!sc || !el.isConnected) return;
+      const a = el.getBoundingClientRect(), b = sc.getBoundingClientRect();
+      el.style.setProperty('--fx', `${Math.round(b.left + b.width / 2 - (a.left + a.width / 2))}px`);
+      el.style.setProperty('--fy', `${Math.round(b.top + b.height / 2 - (a.top + a.height / 2))}px`);
+      el.classList.add('going');
+      setTimeout(() => { el.remove(); sc.classList.remove('bump'); void sc.offsetWidth; sc.classList.add('bump'); }, 420);
+    }, 560);
+    return;
+  }
   setTimeout(() => el.remove(), 1250);
 }
 let bannerTimer = 0;
@@ -223,6 +237,8 @@ function updateHud(dt) {
   $('nitro-num').textContent = Math.round(game.nitro * 100);
   $('nitro-bar').classList.toggle('full', game.nitro > 0.98);
   $('nitro-bar').classList.toggle('on', p.boost);
+  if (game.ticks > 1 && game.nitro > shownNitro + 0.25) { const nb = $('nitro-bar'); nb.classList.remove('gain'); void nb.offsetWidth; nb.classList.add('gain'); }
+  shownNitro = game.nitro;
   $('nitro').classList.toggle('on', input.nitroLatch);
   $('nitro-ring').style.strokeDashoffset = String(360 * (1 - game.nitro));
   $('nitro').classList.toggle('ready', game.nitro > 0.25);
@@ -235,13 +251,7 @@ function updateHud(dt) {
   $('chain-fill').style.width = `${(100 * game.comboTimer) / COMBO_WINDOW}%`;
   if (mult > shownMult) { m.classList.remove('pump'); void m.offsetWidth; m.classList.add('pump'); }
   shownMult = mult;
-  if (ghost) {
-    const target = ghost.out ? ghost.info.points : ghost.game.points, d = game.points - target;
-    const dt2 = (d >= 0 ? '+' : '−') + fmtN(Math.abs(d)), db = $('rival-delta');
-    db.textContent = dt2; db.classList.toggle('long', dt2.length > 6);
-    $('rival').classList.toggle('behind', d < 0);
-    $('rival-tag').textContent = `${ghost.out ? t('rivalTarget') : t('rivalTag')} #${ghost.info.rank}`;
-  }
+  renderGhostHud();
   $('bust').classList.toggle('hidden', game.bust < 0.05 || game.state !== 'playing');
   if (game.bust > 0.55 && !bustSaid) { bustSaid = true; radioEvent('bust', game.ticks, 2); } else if (game.bust < 0.1) bustSaid = false;
   $('bust-fill').style.width = `${game.bust * 100}%`;
@@ -259,8 +269,9 @@ function updateHud(dt) {
 
 /* ---------- edge referee: live checks, live rank, ghost rival ---------- */
 function resetEdgeHud() {
-  ghost = null; render.setGhost(null);
-  for (const id of ['live', 'rival', 'ghost-tag']) $(id).classList.add('hidden');
+  ghosts = []; mySplits = []; render.setGhosts([]);
+  for (const id of ['live', 'rival', 'ghost-tag', 'live-ahead']) $(id).classList.add('hidden');
+  $('ghost-tag-1')?.classList.add('hidden');
   $('rival').classList.remove('beaten', 'behind');
   $('live-rank').textContent = '#—'; $('live-of').textContent = '';
 }
@@ -274,7 +285,7 @@ function renderLive(state, standing) {
     if (live.rank && standing.rank && standing.rank < live.rank) audio.play('coin', { gain: 0.35, rate: 1.3 });
     $('live-rank').textContent = txt; el.classList.remove('pump'); void el.offsetWidth; el.classList.add('pump');
   }
-  live.rank = standing.rank;
+  live.rank = standing.rank; live.ahead = standing.ahead || null;
   $('live-of').textContent = standing.rank ? `/${Math.max(standing.of, standing.rank)}` : '';
 }
 /** Send the inputs so far; the edge replays the new ticks and answers with its own score and rank. */
@@ -294,43 +305,139 @@ function sendLive() {
     else if (lv.fails > 2) $('live').classList.add('hidden');
   }).finally(() => { lv.inflight = null; });
 }
-/** Who should race you: a friend's shared run, else the run just above your best (the edge decides). */
+/** Who races you: a friend's shared run, your own best, the run just above your best and today's #1 (the edge picks). */
 function rivalQuery() {
   const best = persisted[seed], friend = challengeRun && seed === initialSeed ? challengeRun : null;
-  return friend ? { id: friend } : { points: best ? best.points : null, not: best?.id };
+  return { points: best ? best.points : null, not: best?.id || null, id: friend };
 }
-/** Fetch the next rival ahead of time, so the next run can start where the rival started. */
-let nextRival = null, rivalAsk = 0;
+/** Fetch the next ghosts ahead of time, so the next run can start where they started. */
+let nextGhosts = null, rivalAsk = 0;
 function prefetchRival() {
   if (!online) return;
   const ask = ++rivalAsk, forSeed = seed;
-  api.rival(seed, rivalQuery()).then(({ rival }) => { if (ask === rivalAsk && forSeed === seed) nextRival = rival?.trace?.length ? { ...rival, forSeed } : null; }).catch(() => {});
+  api.ghosts(seed, rivalQuery()).then((x) => { if (ask === rivalAsk && forSeed === seed) nextGhosts = x?.ghosts ? { ...x, forSeed } : null; }).catch(() => {});
 }
-function setGhost(rv) {
-  ghost = { info: rv, game: createGame(seed, { car: rv.car, spawn: rv.spawn, rules: rulesFor(seed) }), item: 0, used: 0, out: false, beaten: false, endTick: 0 };
-  render.setGhost(rv.car);
-  $('ghost-name').textContent = rv.self ? t('rivalSelf') : `${rv.label} · #${rv.rank}`;
-  $('rival-name').textContent = rv.self ? t('rivalSelf') : rv.label;
-  $('rival-tag').textContent = `${t('rivalTag')} #${rv.rank}`;
-  $('rival').classList.remove('hidden', 'beaten', 'behind');
-  ghostAdvance(); // catches up if the rival arrived after the start
-}
-/** Re-simulate the rival's verified inputs up to the current tick (bit-exact, like the edge does). */
-function ghostAdvance(cap = 900) {
-  const gg = ghost.game, tr = ghost.info.trace;
-  for (let n = 0; gg.ticks < game.ticks && gg.state === 'playing' && ghost.item < tr.length && n < cap; n++) {
-    stepGame(gg, tr[ghost.item][0]); gg.events.length = 0;
-    if (++ghost.used >= tr[ghost.item][1]) { ghost.item++; ghost.used = 0; }
+/** Which ghost speaks and leads the results line first. */
+const ROLE_ORDER = ['friend', 'rival', 'top', 'pb'];
+const MAX_CAR_GHOSTS = 2; // full re-simulations per frame are the expensive part on a phone
+const roleName = (g) => (g.role === 'pb' ? t('ghost_pb') : g.info.label);
+/** Race these ghosts: up to two that started with you are re-simulated as cars on the road; the others
+    race you through their verified 1 s splits (HUD only). Ghosts never change ranked points. */
+function setGhosts(resp) {
+  const list = [];
+  for (const role of ROLE_ORDER) { const info = resp?.ghosts?.[role]; if (info && !list.some((g) => g.info.id === info.id)) list.push({ info, role }); }
+  const mine = persisted[seed]; // your best on this device races on its splits when the edge has no copy of it
+  if (!list.some((g) => g.role === 'pb') && mine?.splits?.length) list.push({ info: { id: 'local', label: t('ghost_pb'), points: mine.points, timeMs: mine.timeMs, splits: mine.splits, car: mine.car, rank: null }, role: 'pb' });
+  let cars = 0;
+  ghosts = list.map(({ info, role }) => {
+    const full = cars < MAX_CAR_GHOSTS && !!info.trace?.length && info.spawn === game.spawn;
+    if (full) cars++;
+    return { info, role, game: full ? createGame(seed, { car: info.car, spawn: info.spawn, rules: rulesFor(seed) }) : null, item: 0, used: 0, out: false, endTick: 0, beaten: false,
+      sp: Array.isArray(info.splits) ? info.splits : [], ownSp: !Array.isArray(info.splits), end: Math.round((info.timeMs * TICK_RATE) / 1000), lead: 0, swapAt: 0, pts: 0, tag: null };
+  });
+  const carGhosts = ghosts.filter((g) => g.game);
+  render.setGhosts(carGhosts.map((g) => ({ car: g.info.car, role: g.role })));
+  for (let k = 0; k < MAX_CAR_GHOSTS; k++) {
+    const el = ghostTag(k), g = carGhosts[k];
+    if (!g) { el.classList.add('hidden'); continue; }
+    g.tag = el; el.dataset.role = g.role;
+    el.querySelector('b').textContent = g.role === 'pb' ? t('ghost_pb') : `${g.info.label}${g.info.rank ? ' · #' + g.info.rank : ''}`;
   }
-  if (!ghost.out && (gg.state !== 'playing' || ghost.item >= tr.length)) { ghost.out = true; ghost.endTick = game.ticks; }
+  $('rival').classList.toggle('hidden', !ghosts.length);
+  $('rival').classList.remove('beaten', 'behind');
+  for (const g of carGhosts) ghostAdvance(g); // catches up if the ghosts arrived after the start
+  for (const g of ghosts) g.lead = Math.sign(game.points - ghostPoints(g));
+  renderGhostHud();
 }
-function ghostPose() {
-  if (!ghost || !game) return null;
-  const p = ghost.game.player;
-  return { x: p.x, y: p.y, h: p.h, a: p.a, v: ghost.out ? 0 : p.v, moving: !ghost.out, fade: ghost.out ? Math.max(0, 1 - (game.ticks - ghost.endTick) / 120) : 1 };
+function ghostTag(k) {
+  if (k === 0) return $('ghost-tag');
+  let el = $('ghost-tag-' + k);
+  if (!el) { el = $('ghost-tag').cloneNode(true); el.id = 'ghost-tag-' + k; el.querySelector('b').removeAttribute('id'); $('ghost-tag').after(el); }
+  return el;
 }
-function placeGhostTag(gp) {
-  const el = $('ghost-tag');
+/** Re-simulate a ghost's verified inputs up to the current tick (bit-exact, like the edge does). */
+function ghostAdvance(g, cap = 900) {
+  const gg = g.game, tr = g.info.trace;
+  for (let n = 0; gg.ticks < game.ticks && gg.state === 'playing' && g.item < tr.length && n < cap; n++) {
+    stepGame(gg, tr[g.item][0]); gg.events.length = 0;
+    if (g.ownSp && gg.ticks % TICK_RATE === 0) g.sp.push(gg.points);
+    if (++g.used >= tr[g.item][1]) { g.item++; g.used = 0; }
+  }
+  if (!g.out && (gg.state !== 'playing' || g.item >= tr.length)) { g.out = true; g.endTick = game.ticks; }
+}
+/** A ghost's points at your current tick (its final score once its run is over; split-only ghosts use splits). */
+function ghostPoints(g) {
+  if (g.game) return g.out ? g.info.points : g.game.points;
+  if (game.ticks >= g.end) { if (!g.out) { g.out = true; g.endTick = game.ticks; } return g.info.points; }
+  const k = Math.min(Math.floor(game.ticks / TICK_RATE), g.sp.length);
+  return k > 0 ? g.sp[k - 1] : g.sp.length ? 0 : g.info.points;
+}
+/** Seconds between you and a ghost at the same score (positive: you got there first), or null. */
+function secondsGap(g, gp) {
+  const my = game.points, tk = game.ticks;
+  if (gp === my) return 0;
+  const sp = gp > my ? g.sp : mySplits, need = gp > my ? my : gp, i = sp.findIndex((v) => v >= need);
+  if (i < 0 || (i + 1) * TICK_RATE > tk) return null;
+  const sec = Math.round((tk - (i + 1) * TICK_RATE) / TICK_RATE);
+  return gp > my ? -sec : sec;
+}
+/** The ghost the HUD shows: the closest one still ahead of you, else the best one you are beating. */
+function hudGhost() {
+  let ahead = null, top = null;
+  for (const g of ghosts) {
+    g.pts = ghostPoints(g);
+    if (g.pts > game.points && (!ahead || g.pts < ahead.pts)) ahead = g;
+    if (!top || g.pts > top.pts) top = g;
+  }
+  return ahead || top;
+}
+function renderGhostHud() {
+  if (!game) return;
+  const ah = live?.ahead, la = $('live-ahead'), gap = ah ? ah.points - game.points : 0;
+  la.classList.toggle('hidden', !(gap > 0) || view !== 'game');
+  if (gap > 0) la.textContent = t('aheadGap', { n: num(gap), rank: num(ah.rank) });
+  if (!ghosts.length) return;
+  const g = hudGhost(), d = game.points - g.pts, sec = secondsGap(g, g.pts), el = $('rival');
+  const dt2 = (d >= 0 ? '+' : '−') + fmtN(Math.abs(d)), db = $('rival-delta');
+  db.textContent = dt2; db.classList.toggle('long', dt2.length > 6);
+  $('rival-sec').textContent = sec === null || sec === 0 ? '' : t(sec > 0 ? 'secAhead' : 'secBehind', { n: num(Math.abs(sec)) });
+  el.classList.toggle('behind', d < 0); el.classList.toggle('beaten', g.beaten); el.dataset.role = g.role;
+  $('rival-tag').textContent = `${g.out ? t('rivalTarget') : t('ghost_' + g.role)}${g.info.rank && g.role !== 'top' ? ' #' + g.info.rank : ''}`;
+  const persona = g.info.persona?.[getLang()] || g.info.persona?.en || '';
+  $('rival-name').textContent = g.role === 'pb' ? persona : `${g.info.label}${persona ? ' · ' + persona : ''}`;
+}
+/** A ghost's driver speaks (their own words: written with their crew chief after their run). */
+function ghostSay(g, moment, prio = 1) {
+  const lang = getLang(), pick = (x) => x?.[lang] || x?.en || '';
+  const line = pick(g.info.taunts?.[moment]) || (moment === 'start' ? pick(g.info.taunt) : '');
+  if (line) say(lang === 'fa' ? `«${line}»` : `“${line}”`, roleName(g), 'rival', prio, 3600);
+}
+/** Lead changes against each ghost: a sting and a line when you pass one (no ranked points). */
+function ghostDuels() {
+  for (const g of ghosts) {
+    const s = Math.sign(game.points - ghostPoints(g));
+    if (!s) continue;
+    if (g.lead && s !== g.lead && !g.out && game.ticks > 240 && game.ticks - g.swapAt > 180) {
+      g.swapAt = game.ticks;
+      if (s > 0) { popup(t('ghostPassed', { name: roleName(g) }), '', 'good'); audio.play('whoosh', { gain: 0.7, rate: 1.25 }); audio.play('coin', { gain: 0.5, rate: 1.5, delay: 0.08 }); vibrate(20); ghostSay(g, 'youPass'); }
+      else { popup(t('ghostPassedYou', { name: roleName(g) }), '', 'bad'); audio.play('whoosh', { gain: 0.5, rate: 0.75 }); ghostSay(g, 'passYou'); }
+    }
+    g.lead = s;
+  }
+}
+function ghostPoses() {
+  if (!game) return [];
+  return ghosts.filter((g) => g.game).map((g) => {
+    const p = g.game.player;
+    return { x: p.x, y: p.y, h: p.h, a: p.a, v: g.out ? 0 : p.v, moving: !g.out, role: g.role, fade: g.out ? Math.max(0, 1 - (game.ticks - g.endTick) / 120) : 1 };
+  });
+}
+function ghostPose() { return ghostPoses()[0] || null; }
+function placeGhostTags(poses) {
+  const cars = ghosts.filter((g) => g.game);
+  for (let k = 0; k < MAX_CAR_GHOSTS; k++) placeGhostTag(cars[k]?.tag || ghostTag(k), poses[k]);
+}
+function placeGhostTag(el, gp) {
   if (!gp || gp.fade < 0.1 || !game) { el.classList.add('hidden'); return; }
   const [sx, sy, front] = render.project(gp.x, 2.4, gp.y), d = Math.hypot(gp.x - game.player.x, gp.y - game.player.y);
   if (!front || d < 7 || d > 170 || sx < 0.04 || sx > 0.96 || sy < 0.12 || sy > 0.9) { el.classList.add('hidden'); return; }
@@ -399,7 +506,7 @@ const fixedSpawn = qs.has('capture') && /^\d{1,3}$/.test(qs.get('spawn') || '') 
 function pickSpawn() {
   if (fixedSpawn !== null) return fixedSpawn % SPAWN_COUNT;
   if (challenge && seed === initialSeed && Number.isInteger(challenge.spawn) && challenge.spawn < SPAWN_COUNT) return challenge.spawn;
-  if (nextRival && nextRival.forSeed === seed && Number.isInteger(nextRival.spawn) && nextRival.spawn < SPAWN_COUNT) return nextRival.spawn; // race the ghost from its own start
+  if (nextGhosts && nextGhosts.forSeed === seed && Number.isInteger(nextGhosts.spawn) && nextGhosts.spawn < SPAWN_COUNT) return nextGhosts.spawn; // race the ghosts from their own start
   let k = Math.floor(Math.random() * SPAWN_COUNT);
   if (k === lastSpawn) k = (k + 1 + Math.floor(Math.random() * (SPAWN_COUNT - 1))) % SPAWN_COUNT;
   return (lastSpawn = k);
@@ -422,13 +529,14 @@ function begin() {
   updateHud(0);
   resetEdgeHud();
   live = { checkpoint: null, inflight: null, sent: 0, every: 90, expect: new Map(), fails: 0, rank: null };
-  const pre = nextRival; nextRival = null;
-  if (pre && pre.forSeed === seed && pre.spawn === game.spawn) setGhost(pre);
+  const pre = nextGhosts; nextGhosts = null;
+  const preOk = !!pre && pre.forSeed === seed && (pre.spawn === game.spawn || pre.spawn === null);
+  setGhosts(preOk ? pre : null);
   if (online) {
     const started = game;
     api.startRun(seed, profile.car, spawn, rulesFor(seed)?.id).then((r) => { if (game === started && !finishQueued) { runTicket = r; live.every = r.live?.every || 90; renderLive('sync'); } }).catch(() => {});
-    // no rival prefetched for this start: ask the edge for one that started here too
-    if (!ghost) api.rival(seed, { ...rivalQuery(), spawn }).then(({ rival }) => { if (game === started && !finishQueued && !ghost && rival?.trace?.length && rival.spawn === game.spawn) setGhost(rival); }).catch(() => {});
+    // no ghosts prefetched for this start: ask the edge for ghosts that started here too
+    if (!preOk) api.ghosts(seed, { ...rivalQuery(), spawn: game.spawn }).then((x) => { if (game === started && !finishQueued && x?.ghosts) setGhosts(x); }).catch(() => {});
   }
   // police radio: the dispatcher announces you (written for this run when the service is reachable)
   $('radio').classList.add('hidden'); radioUntil = 0; dispatchShown = false; bustSaid = false;
@@ -484,7 +592,9 @@ function tick() {
   const v = currentInput();
   trace.push(v);
   stepGame(game, v);
-  if (ghost) ghostAdvance();
+  if (game.ticks % TICK_RATE === 0) mySplits.push(game.points); // same 1 s splits the edge signs
+  for (const g of ghosts) if (g.game) ghostAdvance(g);
+  if (ghosts.length && game.ticks % 10 === 0) ghostDuels();
   if (runTicket && live && !live.inflight && game.state === 'playing' && trace.length - live.sent >= live.every) sendLive();
   const p = game.player;
   if (p.boost && !wasBoost) { audio.nitroBurst(); vibrate(15); }
@@ -496,10 +606,11 @@ function tick() {
   const ms = (game.ticks * 1000) / TICK_RATE;
   if (!bestPassed && persisted[seed] && game.points > persisted[seed].points) { bestPassed = true; popup(t('newRecord'), '', 'good'); audio.play('levelup', { gain: 0.6 }); }
   if (game.ticks === 30 && !dispatchShown) { dispatchShown = true; radioEvent('start', 0, 3, 4600); }
-  if (game.ticks === 300 && ghost?.info.taunt) { const tt = ghost.info.taunt[getLang()] || ghost.info.taunt.en; if (tt) say(`“${tt}”`, ghost.info.self ? t('rivalSelf') : ghost.info.label, 'rival', 2, 3800); }
+  if (game.ticks === 300 && ghosts[0]) ghostSay(ghosts[0], 'start', 2);
+  if (game.ticks === MILESTONE_TICKS + 240 && ghosts[0] && !ghosts[0].beaten) ghostSay(ghosts[0], 'milestone');
   if (game.ticks === 90 && target) say(t('nextTarget', { t: targetText(target, getLang()) }), t('chiefWho'), 'chief', 1, 3600);
   if (target && !targetHitDone && game.ticks % 30 === 0 && targetValue(target) >= target.goal) { targetHitDone = true; popup(t('targetHit'), targetText(target, getLang()), 'hot'); audio.play('levelup', { gain: 0.6 }); }
-  if (ghost && !ghost.beaten && game.points > ghost.info.points) { ghost.beaten = true; $('rival').classList.add('beaten'); popup(t('rivalBeaten'), ghost.info.label, 'hot'); audio.play('levelup'); vibrate(40); }
+  for (const g of ghosts) if (!g.beaten && game.points > g.info.points) { g.beaten = true; popup(t('rivalBeaten'), roleName(g), 'hot'); audio.play('levelup'); vibrate(40); ghostSay(g, 'beaten', 2); }
   if (!targetPassed && game.points > challenge.points) { targetPassed = true; popup(t('friendWon'), '', 'hot'); audio.play('levelup'); }
   const sec = Math.floor(ms / 1000);
   if (sec !== lastSecond) { lastSecond = sec; if (sec >= 55 && sec < 60) audio.play('beep', { rate: 1 + (sec - 55) * 0.1, gain: 0.7 }); }
@@ -522,8 +633,11 @@ function onEvent(ev) {
     }
     case 'drift': popup(`+${fmtN(ev.pts)}`, `${t('drift')}${ev.mult > 1 ? ' ×' + ev.mult : ''}`, 'drift'); audio.play('coin', { gain: 0.4, rate: 1.1 }); break;
     case 'driftLost': popup(`-${fmtN(ev.pts)}`, t('driftLost'), 'bad'); break;
-    case 'takedown': popup(`+${fmtN(ev.pts)}`, t('takedown'), 'take'); audio.play('crash', { gain: 0.8 }); audio.explosion(0.55); audio.play('combo', { delay: 0.15, gain: 0.6 }); vibrate(60); break;
+    case 'takedown': popup(`+${fmtN(ev.pts)}`, `${ev.how ? t('td_' + ev.how) : t('takedown')}${ev.mult > 1 ? ' ×' + ev.mult : ''}`, 'take'); audio.takedownSting(ev.mult); vibrate([20, 30, 20]); break;
+    case 'wreck': break; // a wreck you did not cause: no reward, no fanfare
     case 'hit': {
+      // the damage you take landing a lethal ram is part of the takedown: no red overlay or crash
+      if (ev.soft) { popup(`-${ev.dmg}`, '', 'soft'); break; }
       popup(`-${ev.dmg}`, '', 'bad');
       audio.play('crash', { gain: Math.min(1, 0.35 + ev.dmg / 40) }); audio.duckMusic(0.45, 400); vibrate(30 + ev.dmg * 2);
       const h = $('hurt'); h.classList.remove('on'); void h.offsetWidth; h.classList.add('on'); break;
@@ -548,7 +662,7 @@ function onEvent(ev) {
   }
   if (ev.type === 'police' && ev.tick > 5) audio.play('horn', { gain: 0.25, rate: 0.8 });
   // police radio reacts to the chase
-  const R = { heat: ev.heat > 1 && ['heat', 1], roadblock: ['roadblock', 1], takedown: ['takedown', 2], near: ev.cop && ev.tick % 3 === 0 && ['nearCop', 0], hit: ev.dmg >= 12 && ['hit', 1], repair: ['pit', 1], milestone: ['milestone', 3], wrecked: ['wrecked', 4], busted: ['busted', 4] }[ev.type];
+  const R = { heat: ev.heat > 1 && ['heat', 1], roadblock: ['roadblock', 1], takedown: ['takedown', 2], near: ev.cop && ev.tick % 3 === 0 && ['nearCop', 0], hit: !ev.soft && ev.dmg >= 12 && ['hit', 1], repair: ['pit', 1], milestone: ['milestone', 3], wrecked: ['wrecked', 4], busted: ['busted', 4] }[ev.type];
   if (R) radioEvent(R[0], ev.tick, R[1]);
 }
 function finish() {
@@ -559,8 +673,9 @@ function finish() {
   lastResult = r;
   const prev = persisted[seed];
   const newBest = !prev || r.points > prev.points;
-  if (newBest) { persisted[seed] = r; try { localStorage.setItem('escape60-bests-' + SIM_VERSION, JSON.stringify(persisted)); } catch {} }
-  const meta = applyRun(profile, r);
+  if (newBest) { persisted[seed] = { ...r, splits: mySplits.slice() }; try { localStorage.setItem('escape60-bests-' + SIM_VERSION, JSON.stringify(persisted)); } catch {} }
+  const duelsWon = ghosts.filter((g) => r.points > g.info.points).length;
+  const meta = applyRun(profile, r, { duelsWon });
   const end = r.end || 'legend';
   const res = $('results');
   res.classList.remove('wrecked', 'busted', 'legend'); res.classList.add(end);
@@ -580,6 +695,7 @@ function finish() {
   if (meta.unlocks.paints) notes.push(t('newPaint'));
   for (const f of meta.unlocks.fx) notes.push(t('newFx', { name: t(f) }));
   for (const m of meta.completed) notes.push('✓ ' + t('m_' + m));
+  if (duelsWon) notes.push(t('duelXp', { n: num(duelsWon * DUEL_XP) }));
   $('res-unlocks').classList.toggle('hidden', !notes.length); $('res-unlocks').textContent = notes.join('  ·  ');
   if (challenge && seed === initialSeed) { const won = beats(r, challenge), el = $('challenge-result'); el.className = 'challenge-result ' + (won ? 'won' : 'lost'); el.textContent = won ? t('friendWon') : t('friendLost', { n: num(challenge.points - r.points) }); }
   else $('challenge-result').className = 'challenge-result hidden';
@@ -587,12 +703,14 @@ function finish() {
   if (end === 'legend') audio.play('win'); else if (end === 'busted') audio.play('busted');
   if (meta.levelUp) audio.play('levelup', { delay: 1.2 });
   setTimeout(() => { if (game?.state === 'ended' && view === 'game') setView('results'); }, end === 'wrecked' ? 2600 : 1300);
-  if (ghost) {
-    const won = r.points > ghost.info.points, el = $('res-rival');
+  if (ghosts.length) {
+    const g = ghosts[0], won = r.points > g.info.points, el = $('res-rival');
     el.classList.remove('hidden'); el.classList.toggle('won', won);
-    const who = { name: ghost.info.self ? t('rivalSelf') : ghost.info.label, rank: num(ghost.info.rank), n: num(ghost.info.points - r.points) };
-    $('res-rival-text').textContent = t(won ? 'rivalWon' : r.points === ghost.info.points ? 'rivalTie' : 'rivalAhead', who);
+    const who = { name: roleName(g), rank: g.info.rank ? num(g.info.rank) : '—', n: num(g.info.points - r.points) };
+    const rest = ghosts.slice(1).map((x) => t(r.points > x.info.points ? 'duelWon' : 'duelLost', { name: roleName(x) }));
+    $('res-rival-text').textContent = [t(won ? 'rivalWon' : r.points === g.info.points ? 'rivalTie' : 'rivalAhead', who), ...rest].join('  ·  ');
   } else $('res-rival').classList.add('hidden');
+  $('res-league').classList.add('hidden');
   renderContracts($('res-contracts'), game.contracts);
   showChief(fallbackChief(r), r, true);
   lastShareUrl = null;
@@ -604,6 +722,7 @@ function finish() {
       let txt = x.rank ? t('rankDone', { rank: num(x.rank), of: num(x.of) }) : t('rankSaved');
       if (Number.isFinite(x.better)) txt += ' · ' + t('betterThan', { n: num(x.better) });
       $('rank').textContent = txt;
+      if (x.league) { const lg = $('res-league'); lg.dataset.league = x.league; lg.textContent = t('league_' + x.league); lg.title = t('leagueTag'); lg.classList.remove('hidden'); if (noteLeague(profile, x.league)) lg.title += ' · ' + t('leagueNew'); }
       if (x.share) lastShareUrl = new URL(x.share, location.href).href;
       if (x.id && persisted[seed] && persisted[seed].points === r.points) { persisted[seed].id = x.id; try { localStorage.setItem('escape60-bests-' + SIM_VERSION, JSON.stringify(persisted)); } catch {} }
       prefetchRival(); // the next retry races the run just above this one, from its start
@@ -649,11 +768,11 @@ function frame(now) {
   }
   const kmh = p ? p.v * 3.6 : 0, g = gearOf(kmh);
   audio.update({ active: playing, speed: p ? p.v / 70 : 0, rpm: g.rpm, gear: g.gear, drift: p ? Math.min(1, Math.abs(p.slip) * 1.6) * (p.v > 12 ? 1 : 0) : 0, brake: p && p.brake && p.v > 12 ? 1 : 0, nitro: !!p?.boost && playing, siren, sirenPan: pan, close, heli: game ? game.heat >= 4 : false });
-  const gp = view === 'game' ? ghostPose() : null;
+  const gps = view === 'game' ? ghostPoses() : [], gp = gps[0] || null;
   if (game && view === 'game') minimap.draw(game, now, gp && gp.fade > 0.1 ? gp : null);
   const mode = view === 'garage' ? 'garage' : view === 'game' || view === 'results' ? 'game' : 'menu';
-  render.frame(view === 'game' || view === 'results' ? game : null, now, { mode, alpha: acc * TICK_RATE, countdown: Math.max(0, countdown), introTotal: INTRO, reduced: settings.motion, shakeOn: settings.shake, ghost: gp });
-  placeGhostTag(gp);
+  render.frame(view === 'game' || view === 'results' ? game : null, now, { mode, alpha: acc * TICK_RATE, countdown: Math.max(0, countdown), introTotal: INTRO, reduced: settings.motion, shakeOn: settings.shake, ghost: gp, ghosts: gps });
+  placeGhostTags(gps);
   threats.draw(game, now, { active: view === 'game' && !paused, reduced: settings.motion, tail: t('copBehind'), you: t('you'), radio: !$('radio').classList.contains('hidden') });
   requestAnimationFrame(frame);
 }

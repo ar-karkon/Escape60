@@ -1,4 +1,4 @@
-# Deployment runbook — Escape60 on Arvan (v3.5.1: SIM 2.2.0 · API 4.1.2)
+# Deployment runbook — Escape60 on Arvan (v3.6.0: SIM 2.3.0 · API 4.2.0)
 
 Live URL: **https://escape60.lavanai2525-3qem7.arvanedge.ir** — API 4.1.2 / SIM 2.2.0 deployed and checked on 2026-11-20. What runs where is explained for judges in [TECHNOLOGY.md](TECHNOLOGY.md); the API is in [06_EDGE_SPEC.md](06_EDGE_SPEC.md).
 
@@ -16,7 +16,7 @@ Live URL: **https://escape60.lavanai2525-3qem7.arvanedge.ir** — API 4.1.2 / SI
    - اختیاری: `AI_BASE` (پیش‌فرض `https://api.arvancloudai.ir/v1` — اگر آدرس درگاه شما در پنل AIaaS فرق دارد همان را بگذارید)، `AI_MODEL` (پیش‌فرض `DeepSeek-V4-Flash`)، `AI_DAILY_CAP` (پیش‌فرض ۴۰۰۰ فراخوانی در روز برای تماس مرکز و سرمکانیک).
 ۳. در پوشه‌ی پروژه بزنید: `npm run deploy` و کلیدهای Object Storage را وقتی پرسید وارد کنید (نمایش داده و ذخیره نمی‌شوند). اسکریپت تست می‌کند، می‌سازد و فایل‌های تغییرکرده را آپلود می‌کند.
 ۴. وقتی اسکریپت منتظر ماند: پنل ← Edge Computing ← `escape60` ← **ویرایش کد** ← همه‌ی کد را پاک کنید و محتوای کلیپ‌بورد را (همان `dist/edge/worker.js`) بچسبانید ← **انتشار** ← در ترمینال Enter بزنید.
-۵. اسکریپت خودش بررسی می‌کند: نسخه‌ی API ‏`4.1.2` و شبیه‌ساز `2.2.0`، ذخیره‌سازی `arvan-object-storage`، فشرده‌سازی Brotli، صفحه‌ی `/edge`، اتصال AIaaS و منبع گزارش امروز (`ai`). اگر چیزی قرمز شد خروجی را بفرستید.
+۵. اسکریپت خودش بررسی می‌کند: نسخه‌ی API ‏`4.2.0` و شبیه‌ساز `2.3.0`، ذخیره‌سازی `arvan-object-storage`، فشرده‌سازی Brotli، صفحه‌ی `/edge`، اتصال AIaaS و منبع گزارش امروز (`ai`). اگر چیزی قرمز شد خروجی را بفرستید.
 ۶. (اختیاری) تست کامل با مرورگر: `GAME_URL=https://escape60.lavanai2525-3qem7.arvanedge.ir npm run test:browser` (با `CHROME_BIN` مثل مرحله‌ی ۰).
 ۷. **چک‌لیست بعد از دیپلوی — در گوشی آدرس بازی را باز کنید و ببینید:**
    - صفحه‌ی اول: کارت **TODAY** (گزارش امروز شهر) و وضعیت «جدول جهانی آنلاین است».
@@ -25,7 +25,7 @@ Live URL: **https://escape60.lavanai2525-3qem7.arvanedge.ir** — API 4.1.2 / SI
    - تراشه‌ی **LIVE** با رتبه‌ی زنده زیر نقشه، رقیب شبح (بعد از اولین رکورد تأییدشده)، پیام‌های بی‌سیم و قراردادها.
    - محله‌ها واقعاً فرق دارند: نئون، آجری، سنگفرش و ریسه‌ی لامپ، هتل‌های پاستلی، انبارها، ویلاها، شهرک فناوری با دروازه‌ی اسم.
    - پایان: «رتبه‌ی جهانی #…»، گزارش سرمکانیک و لینک اشتراک `/r/…`.
-   - نکته: جدول رکوردها برای هر نسخه‌ی شبیه‌ساز جداست، پس جدول SIM 2.2.0 خالی شروع می‌شود؛ بازیکنی که صفحه‌ی قدیمی را باز نگه داشته پیام «بازی به‌روز شده — دوباره بارگذاری کنید» می‌گیرد.
+   - نکته: جدول رکوردها برای هر نسخه‌ی شبیه‌ساز جداست، پس جدول SIM 2.3.0 خالی شروع می‌شود؛ بازیکنی که صفحه‌ی قدیمی را باز نگه داشته پیام «بازی به‌روز شده — دوباره بارگذاری کنید» می‌گیرد.
 
 ### برگشت به نسخه‌ی قبل (اگر چیزی خراب شد)
 ۱. پنل Edge ← `escape60` ← ویرایش کد ← محتوای `edge-backup.js` را بچسبانید ← انتشار.
@@ -90,7 +90,7 @@ Release 3.5.1 was checked in the cloud session before handing over: `npm run che
 ## After deploying: what to check
 | Check | Expected |
 |---|---|
-| `GET /api/v1/health` | `api: "4.1.2"`, `version: "2.2.0"`, `storage: "arvan-object-storage"`, `secured: true`, `ai: {configured: true, model: "DeepSeek-V4-Flash"}` |
+| `GET /api/v1/health` | `api: "4.2.0"`, `version: "2.3.0"`, `storage: "arvan-object-storage"`, `secured: true`, `ai: {configured: true, model: "DeepSeek-V4-Flash"}` |
 | `GET /api/v1/challenges/today` | `brief.source: "ai"` (the first request of a UTC day writes it, ≈5–15 s; later requests read the frozen copy) and `rules` with three contracts |
 | `GET /api/v1/radio?lang=en|fa` | HTTP 200; the selected language reports `ai` or `fallback` |
 | `/edge` | today's briefing, model calls/tokens/latency, live counters; Live Lab refuses the cheats |

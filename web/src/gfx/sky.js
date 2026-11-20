@@ -1,17 +1,18 @@
 import * as T from "../../vendor/three.js";
 import { U, GLSL_NOISE } from "./materials.js";
+import { setAtlasAnisotropy } from "./signs.js";
 
 /* Sky dome (gradient, sun, clouds, stars), distant mountains, time-of-day presets and the environment
    map used for car paint, glass and wet-road reflections. */
 export const TOD = {
   sunset: { top: 0x2b1658, horizon: 0xff7a78, haze: 0xff9db4, sun: 0xff9a86, sunI: 2.0, elev: 0.12, az: 2.55, hemiSky: 0xb49cff, hemiGround: 0x4a2550, hemiI: 1.0,
-    fog: 0xd27aa6, fogD: 0.0016, exposure: 1.02, night: 0.45, head: 1.2, wet: 0.35, cloud: 0xff9bb0, stars: 0, sat: 1.18, mount: 0x4a2d72, retro: 1,
+    fog: 0xd27aa6, fogD: 0.0024, exposure: 1.02, night: 0.45, head: 1.2, wet: 0.35, cloud: 0xff9bb0, stars: 0, sat: 1.18, mount: 0x4a2d72, retro: 1,
     shadowTint: [0.42, 0.12, 0.62], highTint: [1, 0.5, 0.55] },
   night: { top: 0x07051a, horizon: 0x2a1650, haze: 0x3d1e5e, sun: 0xa9b4ff, sunI: 0.45, elev: 0.55, az: 1.0, hemiSky: 0x4a3f96, hemiGround: 0x180e24, hemiI: 0.78,
-    fog: 0x1e1438, fogD: 0.0021, exposure: 1.25, night: 1, head: 1.7, wet: 0.7, cloud: 0x3a2a6a, stars: 1, sat: 1.18, mount: 0x120b2a,
+    fog: 0x1e1438, fogD: 0.0031, exposure: 1.25, night: 1, head: 1.7, wet: 0.7, cloud: 0x3a2a6a, stars: 1, sat: 1.18, mount: 0x120b2a,
     shadowTint: [0.25, 0.1, 0.6], highTint: [1, 0.45, 0.7] },
   day: { top: 0x2f6fd0, horizon: 0xc4dcf2, haze: 0xd7e4ee, sun: 0xfff2dd, sunI: 3.1, elev: 0.85, az: 2.2, hemiSky: 0xbcd4ff, hemiGround: 0x7d6e58, hemiI: 1.2,
-    fog: 0xc9d9e8, fogD: 0.0011, exposure: 0.95, night: 0, head: 0.6, wet: 0.08, cloud: 0xffffff, stars: 0, sat: 1.1, mount: 0x7d8fa8,
+    fog: 0xc9d9e8, fogD: 0.00165, exposure: 0.95, night: 0, head: 0.6, wet: 0.08, cloud: 0xffffff, stars: 0, sat: 1.1, mount: 0x7d8fa8,
     shadowTint: [0.2, 0.2, 0.5], highTint: [1, 0.7, 0.45] },
 };
 
@@ -100,7 +101,8 @@ export function createSky(renderer) {
     envScene.add(m); panels.push(m);
   }
   let envRT = null;
-  let current = null;
+  let current = null, fogScene = null;
+  setAtlasAnisotropy(Math.min(8, renderer.capabilities.getMaxAnisotropy()));
   function apply(name, scene, lights) {
     const p = TOD[name] || TOD.sunset;
     current = name;
@@ -110,6 +112,7 @@ export function createSky(renderer) {
     U.uNight.value = p.night; U.uHead.value = p.head; U.uWet.value = p.wet;
     U.uFogColor.value.set(p.fog);
     scene.fog = new T.FogExp2(p.fog, p.fogD);
+    fogScene = scene; U.uFogDensity.value = p.fogD;
     lights.hemi.color.set(p.hemiSky); lights.hemi.groundColor.set(p.hemiGround); lights.hemi.intensity = p.hemiI;
     lights.sun.color.set(p.sun); lights.sun.intensity = p.sunI;
     // mountains tinted to the haze
@@ -127,7 +130,7 @@ export function createSky(renderer) {
     group,
     apply,
     get current() { return current; },
-    update(camera) { dome.position.copy(camera.position); mountMesh.position.set(camera.position.x * 0.92, 0, camera.position.z * 0.92); },
+    update(camera) { if (fogScene?.fog) U.uFogDensity.value = fogScene.fog.density; dome.position.copy(camera.position); mountMesh.position.set(camera.position.x * 0.92, 0, camera.position.z * 0.92); },
   };
 }
 

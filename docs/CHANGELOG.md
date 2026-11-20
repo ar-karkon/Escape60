@@ -1,5 +1,14 @@
 # Changelog
 
+## 3.6.0 — earned takedowns, crisp city, ghosts to beat (SIM 2.3.0, API 4.2.0) — 2026-11-20
+- **Takedowns are a reward, and only yours count (SIM 2.3.0)**: a cop wreck is a takedown only when you caused it — ram, wall slam (within 2 s of touching it), traffic you knocked loose, a pile-up of a cop you touched, or a cop shaken off at speed. Each refills nitro and gives a 1.2 s speed surge plus a +4 m/s kick; a lethal ram is a soft hit that keeps your chain. Wrecks you did not cause pay nothing. Passive nitro refill is lower, so nitro comes from takedowns.
+- **Clear feedback**: gold ✕ badge with the cause and points over the cop (or an off-screen chevron), sparkles streaming from the wreck into your car, a FOV punch instead of shake/slow-mo, a synthesised rising sting, a popup that flies into the score and a nitro bar flash. Cause labels in Persian and English.
+- **Crisper look**: MSAA on the HDR target (FXAA only without it), filtered lane markings with whole-step dashes and distance fade, analytic AA on facade/ground patterns, Karis-weighted bloom, denser fog, near plane 0.6, per-rung physical resolution caps, 1px depth outlines and ordered dither on high rungs. Not yet measured on real devices.
+- **Compete with ghosts (API 4.2.0)**: `GET /api/v1/ghosts` returns personal best, rival, #1 and friend ghosts; up to two race as cars, the rest on verified splits recorded by the edge referee. Live points/seconds delta, "N points to #k", overtake moments with rival taunts, leagues (bronze → legend) on results and share cards, 150 XP per ghost beaten.
+- **Heat commander**: each day's police briefing reads yesterday's per-district outcomes and may pick a `focus` district where police spawn faster.
+- Persian is the default language; the browser smoke test and screenshot capture default to Persian.
+- The SIM bump empties the leaderboard, runs and ghosts for the new version; old-version tickets get a 409 "reload".
+
 ## 3.5.1 — integration check of 3.3 + 3.4 + 3.5 — 2026-11-19
 - Verified together on the merged code: pursuit overlay, pursuit camera and cop reveal, random starts, aerial intro and district cards, the ten districts, live referee, ghost rival, edge cards, daily briefing contracts, police radio, dispatcher call and crew chief. 31 Node tests; browser smoke test (a real autopiloted run verified live and finally) against the dev server and against the built edge worker (`npm run edge:local`).
 - Portrait: the pursuit overlay keeps clear of the police-radio line above the touch controls (bottom arrows sit higher; the tail warning gives way while a radio line is showing).

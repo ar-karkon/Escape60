@@ -10,7 +10,9 @@ const INK = 0, PLUM = 1, DEEP = 2, VIOLET = 3, MAGENTA = 4, PINK = 5, HOT = 6, A
 const fmt = (n) => Math.round(n).toLocaleString('en-US');
 const fmtTime = (ms) => { const s = ms / 1000, m = Math.floor(s / 60); return `${m}:${(s - m * 60).toFixed(2).padStart(5, '0')}`; };
 
-export function drawCard({ label, carName, carPaint = 0xff873c, result, rank, of }) {
+/** League badge colours (from the share of today's runs this run beat). */
+const LEAGUE_COL = { bronze: AMBER, silver: MUTED, gold: GOLD, neon: CYAN, legend: PINK };
+export function drawCard({ label, carName, carPaint = 0xff873c, result, rank, of, league = null }) {
   const pal = PAL.slice(); pal[PAINT] = carPaint & 0xffffff;
   const W = 300, H = 157, HORIZON = 104, p = createPix(W, H, pal);
   // banded sky with 2-row dither between bands
@@ -62,6 +64,10 @@ export function drawCard({ label, carName, carPaint = 0xff873c, result, rank, of
   p.rect(px0 + 8, y, textWidth(tag, 1) + 8, 11, end === 'LEGEND' ? GOLD : HOT);
   text(p, tag, px0 + 12, y + 2, 1, INK);
   text(p, 'SCORE', px0 + 8 + textWidth(tag, 1) + 14, y + 2, 1, MUTED);
+  if (LEAGUE_COL[league] !== undefined) { // league badge, right-aligned on the tag row
+    const lg = league.toUpperCase(), lw = textWidth(lg, 1) + 8, lx = px0 + pw - 8 - lw;
+    p.rect(lx, y, lw, 11, LEAGUE_COL[league]); text(p, lg, lx + 4, y + 2, 1, INK);
+  }
   y += 15;
   const score = fmt(result.points), k = textWidth(score, 4) <= pw - 16 ? 4 : 3;
   text(p, score, px0 + 8, y, k, GOLD, HOT);

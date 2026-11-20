@@ -134,7 +134,7 @@ docs/                           design, decisions, deployment and status
 
 `npm run build` produces `dist/web/` (static site; works on any static host and on the edge proxy) and `dist/edge/worker.js` (API + static proxy). See `docs/22_DEPLOYMENT.md`. `npm run deploy` releases from your own computer without CI: it uploads only changed files, guides the one panel step (pasting the edge worker) and verifies the live URL, compression and the `/edge` dashboard. `npm run edge:local` runs the exact worker file locally first. The game service needs only an S3-compatible bucket (`S3_ACCESS_KEY`, `S3_SECRET_KEY`); without it the leaderboard falls back to memory. Replays run in chunks (`REPLAY_CHUNK`, default 90 ticks) to fit small per-request CPU budgets.
 
-**Status:** see `docs/00_STATUS.md`. Real-device FPS and an audible mix check are still outstanding; the live deployment must be rebuilt and redeployed for this version.
+**Status:** v3.6.0 (SIM 2.3.0, API 4.2.0) — earned takedowns with nitro refill and a speed surge, crisper rendering (MSAA, filtered markings, outlines), multi-ghost racing with splits and leagues; verified in local tests and a headless-browser smoke run, **not yet deployed**. See `docs/00_STATUS.md`. Real-device FPS and an audible mix check are still outstanding; the live deployment must be rebuilt and redeployed for this version.
 
 ## 🏁 Release status
 
@@ -142,7 +142,7 @@ docs/                           design, decisions, deployment and status
 | :--- | :--- |
 | Driving, cars, garage and map | ✅ Implemented in source |
 | Deterministic replay and ranking logic | ✅ Implemented; local tests available |
-| Arvan Edge service | ✅ API 4.1.2 and SIM 2.2.0 verified live; one transient live-check 500 observed |
+| Arvan Edge service | ✅ API 4.1.2 and SIM 2.2.0 verified live; 🟡 v3.6.0 (API 4.2.0, SIM 2.3.0) not yet deployed |
 | iOS Safari / real-device FPS / final audio mix | 🟡 Still needs hands-on QA |
 
 Source-of-truth documents: **[Status](docs/00_STATUS.md)** · **[Deployment guide](docs/22_DEPLOYMENT.md)** · **[Changelog](docs/CHANGELOG.md)** · **[Documentation index](docs/README.md)**.

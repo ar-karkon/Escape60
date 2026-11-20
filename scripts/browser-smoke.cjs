@@ -40,15 +40,15 @@ const OFFLINE = !!process.env.OFFLINE;
     await p.waitForFunction(() => window.__escape60.state()?.ticks > 120, null, { timeout: 60000 });
     await p.locator("#pause-btn").tap(); await p.locator("#resume").tap();
     if (!OFFLINE) {
-      await p.waitForFunction(() => /#\d+/.test(document.querySelector("#live-rank").textContent) && document.querySelector("#live").dataset.state === "ok", null, { timeout: 60000 }).catch(async (e) => { console.log('live state:', await p.evaluate(() => ({ chip: document.querySelector('#live').outerHTML.slice(0, 450), ticks: window.__escape60.state()?.ticks }))); throw e; });
+      await p.waitForFunction(() => /#[\d۰-۹]+/.test(document.querySelector("#live-rank").textContent) && document.querySelector("#live").dataset.state === "ok", null, { timeout: 60000 }).catch(async (e) => { console.log('live state:', await p.evaluate(() => ({ chip: document.querySelector('#live').outerHTML.slice(0, 450), ticks: window.__escape60.state()?.ticks }))); throw e; });
       console.log("live chip:", (await p.locator("#live").innerText()).replace(/\s+/g, " "));
     }
     await p.waitForFunction(() => document.body.dataset.view === "results", null, { timeout: 400000 });
     console.log(await p.locator(".res-card").innerText());
-    await p.waitForFunction(() => /Global rank|Verified|verify/i.test(document.querySelector("#rank").textContent) && !/Verifying/.test(document.querySelector("#rank").textContent), null, { timeout: 60000 });
+    await p.waitForFunction(() => /Global rank|Verified|verify|رتبه جهانی|تأیید/i.test(document.querySelector("#rank").textContent) && !/Verifying|در حال تأیید/.test(document.querySelector("#rank").textContent), null, { timeout: 60000 });
     const rank = await p.locator("#rank").innerText();
     console.log("rank:", rank);
-    if (!OFFLINE) assert.match(rank, /Global rank|Verified/);
+    if (!OFFLINE) assert.match(rank, /Global rank|Verified|رتبه جهانی|تأیید و ثبت/);
     await p.locator("#share").tap();
     await p.waitForFunction(() => document.querySelector("#share-preview").src.startsWith("data:image"), null, { timeout: 120000 });
     await p.locator("#copy-link").tap();

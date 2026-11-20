@@ -1,4 +1,4 @@
-# Edge service — the edge referee (API 4.1.2)
+# Edge service — the edge referee (API 4.2.0)
 
 **Status:** implemented and tested locally (Node tests incl. a mocked AIaaS gateway, a browser run against the built worker in `npm run edge:local`). Judge-facing overview: [TECHNOLOGY.md](TECHNOLOGY.md). Deployed on Arvan on 2026-11-20; see `22_DEPLOYMENT.md` for the live checks and remaining transient error.
 
@@ -15,6 +15,10 @@ The browser only sends inputs. The edge is the only judge, and it stays **statel
 | **Live global rank** from the edge's own score | live responses |
 | Final verdict: replays only what the live checks have not covered, compares the result field by field, stores once | `POST /runs/finish` |
 | **Ghost rival**: picks the verified run just above your best (or your friend's / your own) and sends its inputs | `GET /rival` |
+| **Several ghosts** (4.2): your best, the run just above it, today's #1 and a friend's run in one call, from cached reads (no replay work) | `GET /ghosts` |
+| **Verified splits** (4.2): points every 60 ticks recorded during the replay, carried inside the HMAC checkpoint and stored with the run | live / finish |
+| **League** (4.2) from the percentile: bronze < 40, silver 40–69, gold 70–89, neon 90–98, legend ≥ 99 or top 3 with ≥ 10 runs | finish response, PNG card |
+| **Pursuit commander** (4.2): per-district counts (busts, wrecks, escapes, takedowns) at every finish; tomorrow's briefing reads them and sets the `focus`/`focusRate` tactic | `heat/<sim>/<date>.json` → director |
 | **PNG share card** drawn and encoded on the edge | `GET /api/v1/card/<id>.png` |
 | **Link previews** (Open Graph) for verified runs | `GET /r/<id>` |
 | Percentile among today's runs (histogram) | finish response |
@@ -27,17 +31,18 @@ The browser only sends inputs. The edge is the only judge, and it stays **statel
 | `GET /api/v1/health` | status, API/SIM versions, storage kind, `secured`, feature list |
 | `GET /api/v1/challenges/today` | `{seed, version, api, expiresAt, live: {every}}` — daily UTC route |
 | `POST /api/v1/runs/start` `{seed, car, spawn, rules?, lab?}` | `{runId, token, seed, car, spawn, rules, live: {every}}`; ticket `{r, s, c, p, d?, t, v, l?}` (`p` = start index; invalid → seed default; `d` = daily rules id). `lab: true` → route `edge-lab`, verified but never stored |
-| `POST /api/v1/runs/live` `{runId, token, trace, checkpoint?}` | `{verified, complete, ended, points, health, standing: {rank, of, ahead}, cpuMs, checkpoint}` |
-| `POST /api/v1/runs/finish` `{runId, token, trace, result, checkpoint?}` | `202 {continue, progress, checkpoint}` while replaying, then `200 {accepted, rank, of, label, result, verifyMs, ticks, live, better, runs, id, share}` |
+| `POST /api/v1/runs/live` `{runId, token, trace, checkpoint?}` | `{verified, complete, ended, points, health, standing: {rank, of, ahead: {rank, label, points, gap}}, cpuMs, checkpoint}` — the checkpoint carries `sp` (points at every 60th tick), covered by its MAC |
+| `POST /api/v1/runs/finish` `{runId, token, trace, result, checkpoint?}` | `202 {continue, progress, checkpoint}` while replaying, then `200 {accepted, rank, of, label, result, verifyMs, ticks, live, better, league, runs, id, share, splits}` |
 | `GET /api/v1/leaderboard?seed=&limit=` | top entries `{rank, timeMs, points, car, label, ghost}`, 5 s isolate cache |
 | `GET /api/v1/rival?seed=&points=&not=&id=&spawn=` | `{rival: {id, rank, of, label, car, spawn, points, timeMs, end, trace, friend?, self?}}` — with `spawn`, only runs that started there; the game prefetches a rival and starts the next run at the rival's start |
+| `GET /api/v1/ghosts?seed=&spawn=&points=&not=&id=` | `{seed, spawn, ghosts: {pb, rival, top, friend}}`; each slot is a rival object plus `role, splits, persona, taunts` or `null`. `not` = your best run id (pb), `id` = a friend's run. The race starts at `spawn` (else the friend's / rival's start); ghosts from another start come back with `trace: null` and race on splits only. The browser re-simulates at most two ghosts as cars |
 | `GET /api/v1/card/<id>.png` | 1200×628 pixel-art PNG of a verified run (≈19 KB, ≈3 ms) |
 | `GET /r/<id>` | the game page with OG/Twitter tags for that run and its route, start position and score as the target (and that run as the ghost) |
 | `GET /api/v1/stats` | today's runs, escapes, live-verified runs, average verify ms |
 | `GET /api/v1/edge` | telemetry (today / all time / this isolate), features, config |
 | `GET /api/v1/edge/bench?ticks=` | steps the simulation ≤ 600 ticks on this node; µs per tick |
 | `GET /api/v1/challenges/today` (AI) | also returns `brief` (theme, briefing, dispatcher, contract titles in EN/FA, `source: ai|fallback`, `model`) and `rules` (`{id, contracts, tactics}`) |
-| `GET /api/v1/radio?date=` | police-radio bank `{radio: {en, fa}: {event: [lines]}, source}` for the day |
+| `GET /api/v1/radio?date=&lang=` (`lang` defaults to `fa`; dispatch too) | police-radio bank `{radio: {en, fa}: {event: [lines]}, source}` for the day |
 | `POST /api/v1/dispatch` `{seed, car, zone, lang, last?}` | `{who, line, source}` — the dispatcher's call for one run (`line: null` → the client uses the radio bank) |
 | `POST /api/v1/runs/debrief` `{id}` | `{chief: {tip, headline, taunt, next, source}}` for a verified run; generated once and cached in `runs-by-id` |
 
@@ -62,10 +67,15 @@ The browser only sends inputs. The edge is the only judge, and it stays **statel
 Refusals are counted by reason (`pacing`, `mismatch`, `checkpoint`, `ticket`, `replayed`, `replay`, `trace`, `expired`, `version`, …) and shown on `/edge`.
 
 ## Storage layout (bucket `escape60-data`)
-`director/v1/<date>.json` (frozen daily briefing) · `radio/v1/<date>.json` · `runs/<sim>/<date>/<runId>.json` (single-use guard) · `runs-by-id/<sim>/<id>.json` (trace, result, rank at acceptance — rivals, cards, previews) · `leaderboard/<sim>/<seed>.json` (top 100) · `hist/<sim>/<seed>.json` (score histogram) · `stats/v2/<date>.json` · `metrics/v1/day/<date>.json`, `metrics/v1/total.json`.
+`director/v1/<date>.json` (frozen daily briefing) · `radio/v1/<date>.json` · `runs/<sim>/<date>/<runId>.json` (single-use guard) · `runs-by-id/<sim>/<id>.json` (trace, splits, result, rank, percentile and league at acceptance — ghosts, cards, previews) · `heat/<sim>/<date>.json` (per-district counts `z[district] = [busts, wrecks, escapes, takedowns]`, no ids) · `leaderboard/<sim>/<seed>.json` (top 100) · `hist/<sim>/<seed>.json` (score histogram) · `stats/v2/<date>.json` · `metrics/v1/day/<date>.json`, `metrics/v1/total.json`.
 
 ## Static delivery
 The build uploads Brotli (`.br`) and gzip (`.gz`) copies of every flat text file and bakes their sizes into the worker. The edge serves the best one the browser accepts (`Content-Encoding`, `Vary: Accept-Encoding`), skips variants that do not exist, passes byte ranges (Safari audio) through untouched and counts the bytes saved. The game bundle travels as ~176 KB instead of ~732 KB. Edge variable `PRECOMPRESSED=false` switches it off; `npm run deploy` checks that the bundle decodes byte-for-byte.
 
 ## Privacy
 No accounts, cookies, analytics or IP storage (the IP is used only for in-memory rate limits). Labels are call signs derived from the run id. Telemetry holds counts, refusal reasons and public call signs only.
+
+## Ghosts, personas and the commander (4.2)
+- Ghosts never change ranked points: overtaking one plays a sting and a line in that driver's voice; beating one gives local XP only (`meta.js` `DUEL_XP`).
+- The crew-chief call also returns a driver `persona` and a taunt bank for `start, passYou, youPass, milestone, beaten` (same call, no extra model calls); handwritten fallbacks from the run's numbers otherwise. Nothing is labelled AI in the game.
+- The commander summary in the director prompt is counts per district only. The handwritten briefing reacts too (focus = district with the most escapes ×2 + takedowns, rate 1.15–1.5). Rules stay frozen per day and are signed by the rules id, so replays stay deterministic.

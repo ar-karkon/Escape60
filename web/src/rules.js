@@ -4,7 +4,8 @@
    values on every JS engine.
 
    contracts: up to three objectives with point rewards, judged inside the simulation every run.
-   tactics:   how the police play today (heat pace, patrol rate, interceptors, roadblocks, spikes, traffic).
+   tactics:   how the police play today (heat pace, patrol rate, interceptors, roadblocks, spikes, traffic,
+              and an optional focus district where patrols and roadblocks come faster).
    Defaults reproduce the base rules exactly. */
 
 export const ZONES = ['downtown', 'beach', 'port', 'oldtown', 'hills', 'canyon', 'park', 'north', 'neon', 'midtown'];
@@ -32,6 +33,8 @@ export const TACTICS = {
   blocks: [0.7, 1.4, 1, 0.05], // roadblock rate
   spikes: [3, 5, 4, 1], // heat level from which roadblocks carry spike strips
   traffic: [12, 24, 18, 1], // civilian cars around you
+  focus: [-1, 9, -1, 1], // district (ZONES index) the police concentrate on today; -1 = none
+  focusRate: [1, 1.6, 1, 0.05], // patrol and roadblock rate multiplier while the player is in the focus district
 };
 export const DEFAULT_TACTICS = Object.fromEntries(Object.entries(TACTICS).map(([k, v]) => [k, v[2]]));
 
@@ -58,6 +61,9 @@ export function cleanRules(r) {
   }
   const tactics = {};
   for (const [k, [min, max, dflt, step]] of Object.entries(TACTICS)) tactics[k] = clampQ(r.tactics?.[k], min, max, step, dflt);
+  // an out-of-range or fractional district means "no focus", never the nearest district
+  const f = r.tactics?.focus;
+  tactics.focus = Number.isInteger(f) && f >= 0 && f < ZONES.length ? f : -1;
   return { id: String(r.id || 'rules').replace(/[^\w.-]/g, '').slice(0, 48), contracts, tactics };
 }
 

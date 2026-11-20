@@ -57,7 +57,7 @@ const S = {
     l: { starting: 'requesting a lab ticket…', ticket: 'ticket {id} · route {seed}', check: '✓ tick {t}: edge {e} = browser {b} · {ms} ms edge CPU · rank {r}', mismatch: '✗ tick {t}: edge {e} ≠ browser {b} — this run would be refused', refused: '✗ edge refused: {err}', fake: 'cheat: browser now claims +5,000 points', speed: 'cheat: game clock ×3', forge: 'cheat: final result will claim +5,000', crash: 'steering into the wall…', ended: 'run ended ({end}) at tick {t} — asking for the verdict', accepted: '✓ VERIFIED by the edge: {p} pts · {ms} ms CPU · {n} live checks · not stored (lab)', offline: 'game service unreachable' },
   },
 };
-let lang = (() => { const q = new URLSearchParams(location.search).get('lang'); if (q === 'fa' || q === 'en') return q; try { const v = localStorage.getItem('escape60-lang'); if (v === 'fa' || v === 'en') return v; } catch {} return /^fa\b/i.test(navigator.language || '') ? 'fa' : 'en'; })();
+let lang = (() => { const q = new URLSearchParams(location.search).get('lang'); if (q === 'fa' || q === 'en') return q; try { const v = localStorage.getItem('escape60-lang'); if (v === 'fa' || v === 'en') return v; } catch {} return 'fa'; })();
 const T = (k) => S[lang][k] ?? S.en[k] ?? k;
 const fill = (s, v) => Object.entries(v).reduce((a, [k, x]) => a.replaceAll(`{${k}}`, x), s);
 const fmtN = (n) => Math.round(n || 0).toLocaleString('en-US');

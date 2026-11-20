@@ -216,6 +216,36 @@ export class AudioEngine {
       }
     } catch {}
   }
+  /** Takedown reward sting (synthesised, original): a fast rising major arpeggio in square/triangle
+      "chip" voices over an upward filtered-noise whoosh and a soft low thump. Higher chains go higher. */
+  takedownSting(mult = 1, gain = 0.5) {
+    if (!this.ctx || !this.sfxOn) return;
+    try {
+      const c = this.ctx, t = c.currentTime, m = Math.max(1, Math.min(6, mult | 0 || 1));
+      const root = 392 * Math.pow(2, (m - 1) * 2 / 12); // +2 semitones per chain step
+      const steps = [0, 4, 7, 12, 16];
+      steps.forEach((st, k) => {
+        const f = root * Math.pow(2, st / 12), tk = t + k * 0.055, len = k === steps.length - 1 ? 0.42 : 0.12;
+        for (const [type, det, a] of [['square', 1, 0.16], ['triangle', 2.003, 0.22]]) {
+          const o = c.createOscillator(), g = c.createGain();
+          o.type = type; o.frequency.setValueAtTime(f * det, tk);
+          if (k === steps.length - 1) o.frequency.exponentialRampToValueAtTime(f * det * 1.06, tk + len);
+          g.gain.setValueAtTime(0.0001, tk); g.gain.exponentialRampToValueAtTime(gain * a, tk + 0.008); g.gain.exponentialRampToValueAtTime(0.0001, tk + len);
+          o.connect(g); g.connect(this.sfxBus); o.start(tk); o.stop(tk + len + 0.02);
+        }
+      });
+      // upward whoosh
+      const src = c.createBufferSource(); src.buffer = this.noiseBuffer(0.55, (i, n) => Math.sin(Math.PI * i / n) * (i / n));
+      const bp = c.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 2.2; bp.frequency.setValueAtTime(420, t); bp.frequency.exponentialRampToValueAtTime(5200, t + 0.5);
+      const wg = c.createGain(); wg.gain.value = gain * 0.9;
+      src.connect(bp); bp.connect(wg); wg.connect(this.sfxBus); src.start(t);
+      // soft thump (a punch, not a crash)
+      const o = c.createOscillator(), og = c.createGain();
+      o.type = 'sine'; o.frequency.setValueAtTime(150, t); o.frequency.exponentialRampToValueAtTime(60, t + 0.16);
+      og.gain.setValueAtTime(gain * 0.7, t); og.gain.exponentialRampToValueAtTime(0.0001, t + 0.2);
+      o.connect(og); og.connect(this.sfxBus); o.start(t); o.stop(t + 0.22);
+    } catch {}
+  }
   duckMusic(amount = 0.35, ms = 600) {
     if (!this.ctx) return;
     const t = this.ctx.currentTime, g = this.musicBus.gain, base = this.musicOn ? 0.55 : 0;

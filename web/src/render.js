@@ -33,7 +33,7 @@ export function createRenderer(canvas) {
   renderer.info.autoReset = false;
   const post = createPost(renderer);
   const scene = new T.Scene();
-  const camera = new T.PerspectiveCamera(60, 0.5, 0.25, 2200);
+  const camera = new T.PerspectiveCamera(60, 0.5, 0.6, 2200); // near 0.6: chase cam is >= 5 m away; 2.4x depth precision
   const hemi = new T.HemisphereLight(0x9aa6ff, 0x5e4048, 1);
   const sun = new T.DirectionalLight(0xffb27a, 2.5);
   scene.add(hemi, sun, sun.target);
@@ -140,17 +140,24 @@ export function createRenderer(canvas) {
     transparent: true, depthWrite: false, blending: T.AdditiveBlending,
   });
   ghostMat.customProgramCacheKey = () => "ghost";
-  let ghostCar = null, ghostKey = "";
-  function setGhost(id) {
-    if (id === ghostKey) return;
-    ghostKey = id || "";
-    if (ghostCar) { scene.remove(ghostCar); ghostCar.userData.body.geometry.dispose(); ghostCar = null; }
-    if (!id) return;
-    const c = carById(id);
-    ghostCar = carGroup(buildCar(c.body, { paint: 0x3dd8e7, stripe: 0xffffff, livery: null }), ghostMat, 0x3dd8e7);
-    ghostCar.traverse((o) => { o.castShadow = false; o.renderOrder = 5; });
-    scene.add(ghostCar);
+  /** Ghost colour per role: your best white, rival cyan, today's #1 gold, a friend magenta. */
+  const GHOST_COL = { pb: 0xf4f1ff, rival: 0x3dd8e7, top: 0xffc94a, friend: 0xff4fd8 };
+  const ghostCars = []; // up to 2 at once: { key, car, mat }
+  function dropGhost(g) { scene.remove(g.car); const u = g.car.userData; u.body.geometry.dispose(); u.wheels[0]?.mesh.geometry.dispose(); g.mat.dispose(); }
+  /** Ghost cars for this run: [{ car, role }] (empty / null clears them). */
+  function setGhosts(list) {
+    const want = (list || []).slice(0, 2).map((x) => ({ ...x, key: `${x.car}|${x.role || "rival"}` }));
+    if (want.map((x) => x.key).join(",") === ghostCars.map((x) => x.key).join(",")) return;
+    while (ghostCars.length) dropGhost(ghostCars.pop());
+    for (const w of want) {
+      const col = GHOST_COL[w.role] ?? GHOST_COL.rival, mat = ghostMat.clone();
+      mat.uniforms.uTime = U.uTime; mat.uniforms.uColor.value.setHex(col); mat.customProgramCacheKey = () => "ghost";
+      const car = carGroup(buildCar(carById(w.car).body, { paint: col, stripe: 0xffffff, livery: null }), mat, col);
+      car.traverse((o) => { o.castShadow = false; o.renderOrder = 5; });
+      scene.add(car); ghostCars.push({ key: w.key, car, mat });
+    }
   }
+  const setGhost = (id, role = "rival") => setGhosts(id ? [{ car: id, role }] : []);
   const model0 = () => hero.userData.model;
   const copModels = {};
   const copLivery = { cruiser: [0x0e1014, 0xf4f5f7, "twotone"], interceptor: [0x0d1b3a, 0xf4f5f7, "side"], suv: [0x101216, 0xf4f5f7, "twotone"] };
@@ -276,14 +283,26 @@ export function createRenderer(canvas) {
   }
 
   /* ---------- quality ---------- */
-  const LADDER = [{ dpr: 2, scale: 1, shadow: true }, { dpr: 1.5, scale: 1, shadow: true }, { dpr: 1.3, scale: 0.9, shadow: false }, { dpr: 1.1, scale: 0.8, shadow: false }, { dpr: 1, scale: 0.68, shadow: false }, { dpr: 1, scale: 0.55, shadow: false }];
+  /* Quality ladder. Scales are whole-number friendly (1, 3/4, 1/2 of a CSS pixel), so the browser's stretch
+     to the screen is an even 2x/3x/4x on common phones instead of a blurry 3.4x. `cap` is the largest
+     render-target side in physical pixels; msaa is the scene sample count (clamped to the GPU, FXAA runs
+     when it is 0); outline/dither drive the crisp blocky look on the higher steps; grain is off from 3 up. */
+  const LADDER = [
+    { dpr: 2, scale: 1, shadow: true, cap: 2560, msaa: 4, outline: 1, dither: 24, grain: 0.01 },
+    { dpr: 1.5, scale: 1, shadow: true, cap: 2560, msaa: 4, outline: 1, dither: 24, grain: 0.01 },
+    { dpr: 1.25, scale: 1, shadow: false, cap: 2048, msaa: 4, outline: 0.8, dither: 24, grain: 0.01 },
+    { dpr: 1, scale: 1, shadow: false, cap: 1600, msaa: 2, outline: 0, dither: 0, grain: 0 },
+    { dpr: 1, scale: 0.75, shadow: false, cap: 1400, msaa: 0, outline: 0, dither: 0, grain: 0 },
+    { dpr: 1, scale: 0.5, shadow: false, cap: 1200, msaa: 0, outline: 0, dither: 0, grain: 0 },
+  ];
+  let lookRung = -1;
   const gpu = (() => { try { const gl = renderer.getContext(), e = gl.getExtension("WEBGL_debug_renderer_info"); return String(e ? gl.getParameter(e.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER)).toLowerCase(); } catch { return ""; } })();
   const mobile = matchMedia("(pointer: coarse)").matches || /android|iphone|ipad|mobile/i.test(navigator.userAgent);
   const weak = /mali-[t4]|mali-g(31|51|52|57|68)|adreno \(tm\) [3-5]\d\d|adreno [3-5]\d\d|powervr|sgx|swiftshader|llvmpipe|intel\(r\) hd graphics [2-5]/.test(gpu);
   let rung = weak ? 4 : mobile ? 3 : 1, cost = 16, slow = 0, fast = 0, qualityMode = "auto";
 
   /* ---------- camera / director state ---------- */
-  const cam = { yaw: 0, lag: 0, fovKick: 0, trauma: 0, roll: 0, nitro: 0, brake: 0, hand: 0, blurPulse: 0, ca: 0, flash: 0, flashCol: new T.Color(), init: false, intro: 0, pursuit: 0, tailW: 0, tailD: 10 };
+  const cam = { yaw: 0, lag: 0, fovKick: 0, trauma: 0, roll: 0, nitro: 0, brake: 0, hand: 0, blurPulse: 0, surge: 0, td: null, tdLast: -1e9, ca: 0, flash: 0, flashCol: new T.Color(), init: false, intro: 0, pursuit: 0, tailW: 0, tailD: 10 };
   // pursuit director: a cinematic reveal the first time a cop locks onto your tail (with cooldown)
   let reveal = null, revealReadyAt = 0;
   const revealSeen = new Set();
@@ -299,6 +318,7 @@ export function createRenderer(canvas) {
   draw.init = (onProgress) => world.init(onProgress);
   draw.setCar = setCar;
   draw.setGhost = setGhost;
+  draw.setGhosts = setGhosts;
   draw.setEffects = (s) => { fx.setStyle(s); trails.setColor(s.trail === "neon" ? new T.Color(...fx.accent(2)) : TAILC); };
   draw.setTOD = (name) => { if (name === todName || !TOD[name]) return; todName = name; tod = sky.apply(name, scene, { hemi, sun }); world.refresh(); };
   draw.setQuality = (q) => { qualityMode = q; if (q === "high") rung = 0; if (q === "low") rung = 4; };
@@ -329,9 +349,11 @@ export function createRenderer(canvas) {
     const low = rung >= 4;
     const dpr = Math.min(window.devicePixelRatio || 1, L.dpr);
     const cw = canvas.clientWidth || 390, ch = canvas.clientHeight || 780;
-    const k = L.scale * dpr * Math.min(1, 1400 / Math.max(cw, ch));
+    // resolution cap in physical render pixels (the old cap ran on CSS pixels, so a 1080p monitor drew at 73%)
+    const k = L.scale * dpr * Math.min(1, L.cap / (Math.max(cw, ch) * L.scale * dpr));
     const w = Math.max(1, Math.round(cw * k)), h = Math.max(1, Math.round(ch * k));
     if (canvas.width !== w || canvas.height !== h) { renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix(); }
+    if (L !== LADDER[lookRung]) { lookRung = LADDER.indexOf(L); post.setSamples(L.msaa); post.setLook(L); }
     post.setSize(w, h);
     const shadows = L.shadow && !mobile;
     if (renderer.shadowMap.enabled !== shadows) { renderer.shadowMap.enabled = shadows; scene.traverse((o) => { if (o.material) o.material.needsUpdate = true; }); }
@@ -372,18 +394,18 @@ export function createRenderer(canvas) {
     heroMat.userData.u.uBrake.value = brake ? 1 : hand ? 0.7 : 0.15;
     heroMat.userData.u.uDamage.value += ((game ? Math.pow(1 - hp / 100, 1.2) * 0.9 : 0) - heroMat.userData.u.uDamage.value) * damp(3, realDt);
 
-    // ---------- ghost rival ----------
-    if (ghostCar) {
-      const gs = opts.ghost;
-      ghostCar.visible = !!(gs && game);
-      if (ghostCar.visible) {
-        const ex = playing && gs.moving ? alpha * TICK : 0, gx = gs.x + Math.cos(gs.a) * gs.v * ex, gz = gs.y + Math.sin(gs.a) * gs.v * ex;
-        ghostCar.position.set(gx, 0.02, gz);
-        ghostCar.rotation.y = -gs.h - Math.PI / 2;
-        const gu = ghostCar.userData; gu.spin -= (gs.v * vdt) / gu.wr;
-        for (const wh of gu.wheels) wh.mesh.rotation.x = gu.spin;
-        ghostMat.uniforms.uFade.value = clamp((Math.hypot(gx - px, gz - pz) - 3) / 10, 0.12, 1) * (gs.fade ?? 1);
-      }
+    // ---------- ghost rivals ----------
+    const gposes = opts.ghosts || (opts.ghost ? [opts.ghost] : []);
+    for (let k = 0; k < ghostCars.length; k++) {
+      const { car: gc, mat: gm } = ghostCars[k], gs = gposes[k];
+      gc.visible = !!(gs && game);
+      if (!gc.visible) continue;
+      const ex = playing && gs.moving ? alpha * TICK : 0, gx = gs.x + Math.cos(gs.a) * gs.v * ex, gz = gs.y + Math.sin(gs.a) * gs.v * ex;
+      gc.position.set(gx, 0.02, gz);
+      gc.rotation.y = -gs.h - Math.PI / 2;
+      const gu = gc.userData; gu.spin -= (gs.v * vdt) / gu.wr;
+      for (const wh of gu.wheels) wh.mesh.rotation.x = gu.spin;
+      gm.uniforms.uFade.value = clamp((Math.hypot(gx - px, gz - pz) - 3) / 10, 0.12, 1) * (gs.fade ?? 1);
     }
     // ---------- world ----------
     world.update(px, pz, t, vdt, fx);
@@ -402,8 +424,16 @@ export function createRenderer(canvas) {
       u2.spin -= (s.v * vdt) / u2.wr;
       for (const wh of u2.wheels) { wh.mesh.rotation.x = u2.spin; if (wh.front) wh.pivot.rotation.y = -clamp(Math.atan2(Math.sin(s.h - s.a), Math.cos(s.h - s.a)) * -1, -0.5, 0.5); }
       if (s.wreck > 0) {
-        if (!u2.wrecked) { u2.wrecked = true; u2.body.material = wreckMat; for (const wh of u2.wheels) wh.mesh.material = wreckMat; fx.explosion(o.position.x, 0, o.position.z, 0.75); cam.trauma = Math.min(1, cam.trauma + 0.5); flashLight.position.set(o.position.x, 3, o.position.z); flashLight.intensity = 400; }
-        fx.burning(o.position.x, 0.4, o.position.z, vdt, 0.8);
+        // a takedown you earned (s.tk) gets the full explosion and light, but no camera shake: it is a
+        // reward, not a crash. Wrecks you did not cause just smoke a little, and only nearby.
+        const near = Math.abs(o.position.x - px) + Math.abs(o.position.z - pz) < 120;
+        if (!u2.wrecked) {
+          u2.wrecked = true; u2.body.material = wreckMat; for (const wh of u2.wheels) wh.mesh.material = wreckMat;
+          if (s.tk) { fx.explosion(o.position.x, 0, o.position.z, 0.75); flashLight.position.set(o.position.x, 3, o.position.z); flashLight.intensity = 400; }
+          else if (near) fx.impact(o.position.x, 0.8, o.position.z, 3, [0.6, 0.6, 0.62]);
+        }
+        if (s.tk) fx.burning(o.position.x, 0.4, o.position.z, vdt, 0.8);
+        else if (near) fx.burning(o.position.x, 0.4, o.position.z, vdt, 0.25);
         u2.tilt.rotation.z = 0.08;
       } else cops.push(o);
     }
@@ -551,13 +581,14 @@ export function createRenderer(canvas) {
       // pursuit cam: police closing in from behind lift the camera; a cop right on your tail makes it
       // crane back and up until the chaser is framed with you, above the touch controls
       const pq = cam.pursuit;
-      const dist = Math.max(5, base.dist + sp * 0.9 + cam.lag + cam.nitro * 1.0 - cam.brake * 0.3 + pq * 2.6);
+      const sg = reduced ? 0 : cam.surge;
+      const dist = Math.max(5, base.dist + sp * 0.9 + cam.lag + cam.nitro * 1.0 - cam.brake * 0.3 + pq * 2.6 + sg * 0.7);
       const cy = Math.cos(cam.yaw), sy = Math.sin(cam.yaw);
       const side = -slip * 1.4 * (portrait ? 0.7 : 1) * moveK;
       eye.set(px - cy * dist - sy * side, base.height + sp * 0.3 - cam.nitro * 0.25 + pq * 1.8, pz - sy * dist + cy * side);
       const la = base.look * (1 - 0.3 * pq);
       look.set(px + cy * la, portrait ? 0.2 : 0.75, pz + sy * la);
-      fov = base.fov + sp * 7 + cam.nitro * 12 - cam.brake * 3 + pq * 3;
+      fov = base.fov + sp * 7 + cam.nitro * 12 - cam.brake * 3 + pq * 3 + sg * 6;
       const tw = cam.tailW;
       if (tw > 0.002) {
         const dc = cam.tailD, D = dc * (portrait ? 1.35 : 1.2) + 6.5, Hc = 2.5 + D * (portrait ? 0.38 : 0.3);
@@ -610,6 +641,12 @@ export function createRenderer(canvas) {
         }
       }
       if (!reveal) view.reveal = 0;
+      if (cam.td) {
+        // takedown glance: the aim swings briefly toward the wreck and back (< 0.5 s, render-only)
+        const u = (t - cam.td.t0) / 450;
+        if (u >= 1 || reveal || reduced) cam.td = null;
+        else { const k = Math.sin(Math.PI * u) * 0.32; look.lerp(tmp.set(cam.td.x, 0.8, cam.td.z), k); }
+      }
       if (playing && boost && shakeOn && !reduced) cam.trauma = Math.max(cam.trauma, 0.16);
       // keep the camera out of buildings: pull it in toward the car along the boom
       if (introK < 0.15) for (let k = 1; k <= 6; k++) {
@@ -647,6 +684,7 @@ export function createRenderer(canvas) {
     camera.position.y += Math.sin(tt * 41.7 + 1) * sh * 0.32;
     camera.position.z += Math.cos(tt * 29.9) * Math.sin(tt * 31.7) * sh * 0.5;
     cam.fovKick *= Math.exp(-realDt * 4);
+    cam.surge *= Math.exp(-realDt * 1.6);
     fov += reduced ? 0 : cam.fovKick;
     camera.fov += (fov - camera.fov) * damp(6, realDt);
     camera.updateProjectionMatrix();
@@ -666,7 +704,7 @@ export function createRenderer(canvas) {
     sky.update(camera);
 
     // ---------- post ----------
-    const blur = reduced ? 0 : clamp((v - 38) / 45, 0, 1) * 0.35 + cam.nitro * 0.75 + cam.blurPulse;
+    const blur = reduced ? 0 : clamp((v - 38) / 45, 0, 1) * 0.35 + cam.nitro * 0.75 + cam.blurPulse + cam.surge * 0.2;
     cam.blurPulse *= Math.exp(-realDt * 5);
     cam.ca *= Math.exp(-realDt * 4);
     cam.flash = Math.max(0, cam.flash - realDt * 2.2);
@@ -689,7 +727,7 @@ export function createRenderer(canvas) {
     if (comic) {
       comic.resize(cw, ch);
       if (game && playing && !reduced) {
-        comic.speedLines(clamp((v - 45) / 30, 0, 1) * 0.5 + cam.nitro, cam.nitro > 0.3 ? fx.style.nitro : "");
+        comic.speedLines(clamp((v - 45) / 30, 0, 1) * 0.5 + cam.nitro + cam.surge * 0.9, cam.nitro > 0.3 ? fx.style.nitro : "");
         if (cam.nitro > 0.5 && fx.style.burst === "graffiti") {
           const [lx, ly, lv] = draw.project(px - hx * (rear - 0.4) + rx * 0.95, 0.9, pz - hz * (rear - 0.4) + rz * 0.95);
           const [qx, qy, qv] = draw.project(px - hx * (rear - 0.4) - rx * 0.95, 0.9, pz - hz * (rear - 0.4) - rz * 0.95);
@@ -713,6 +751,8 @@ export function createRenderer(canvas) {
     const shake = (a) => { cam.trauma = Math.min(1, cam.trauma + a); };
     switch (e.type) {
       case "hit": {
+        // a lethal ram (soft) is your takedown landing: no red flash, CA, slow-mo or FOV pull-in
+        if (e.soft) break;
         shake(Math.min(0.9, 0.25 + e.dmg / 30));
         cam.fovKick -= Math.min(7, 2 + e.dmg * 0.2);
         cam.ca = Math.min(1.5, cam.ca + 0.6 + e.dmg / 30);
@@ -725,10 +765,15 @@ export function createRenderer(canvas) {
       case "near": fx.burst(px, 0.5, pz, "near", e.mult); cam.fovKick += 3.5; cam.blurPulse = 0.35; break;
       case "dodge": fx.burst(px, 0.5, pz, "near", e.mult + 2); cam.fovKick += 4; cam.blurPulse = 0.4; break;
       case "takedown": {
-        const c = game.police.find((q) => q.id === e.id);
-        if (c) fx.burst(c.x, 1, c.y, "takedown", e.mult);
-        shake(0.6); cam.flash = 0.35; cam.flashCol.setRGB(1, 0.7, 0.3);
-        if (!reduced) slowMo(t, 0.38, 0.7);
+        // reward feel: outward FOV punch, speed-line/blur pulse, gold (cyan on a 3x+ chain) flash and
+        // sparkles flying from the wreck into your car. No shake, no slow-mo: the sim never slows.
+        const cyan = (e.mult || 1) >= 3, wx = e.x ?? px, wz = e.y ?? pz;
+        fx.burst(wx, 1, wz, "takedown", e.mult);
+        cam.fovKick += 9; cam.blurPulse = 0.8; cam.surge = 1; cam.ca = Math.min(1.2, cam.ca + 0.3);
+        cam.flash = Math.max(cam.flash, 0.18); cyan ? cam.flashCol.setRGB(0.3, 0.9, 1) : cam.flashCol.setRGB(1, 0.85, 0.3);
+        fx.absorb(wx, wz, { get x() { return hero ? hero.position.x : px; }, get z() { return hero ? hero.position.z : pz; } }, reduced ? 12 : 24, cyan);
+        fx.goldRing(px, pz, cyan);
+        if (!reduced && (e.d ?? 99) < 60 && t - cam.tdLast > 3000) { cam.td = { x: wx, z: wz, t0: t }; cam.tdLast = t; }
         break;
       }
       case "repair": fx.repair(px, 0.3, pz); cam.flash = 0.35; cam.flashCol.setRGB(0.3, 1, 0.6); cam.fovKick += 2; break;

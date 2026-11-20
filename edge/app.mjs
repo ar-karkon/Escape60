@@ -18,19 +18,25 @@
    - With AIaaS (edge/ai.mjs): the daily city briefing (contracts + police tactics the simulation
      plays by, frozen per day), the police-radio bank, a dispatcher call per run and the crew chief
      after each verified run. Handwritten fallbacks keep everything working without the model. */
-import { createGame, gameResult, replayChunk, advanceTrace, tracePrefix, restoreGame, snapshotGame, traceTicks, compareResult, hashSeed, spawnIndex, stepGame, encodeInput, SIM_VERSION, MAX_TICKS, TICK_RATE } from '../web/src/simulation.js';
+import { createGame, gameResult, advanceTrace, tracePrefix, restoreGame, snapshotGame, traceTicks, compareResult, hashSeed, spawnIndex, stepGame, encodeInput, SIM_VERSION, MAX_TICKS, TICK_RATE } from '../web/src/simulation.js';
 import { CARS, carById } from '../web/src/cars.js';
 import { drawCard } from './card.mjs';
 import { createAI } from './ai.mjs';
-import { fallbackDirector, rulesOf, fallbackChief, FALLBACK_RADIO } from '../web/src/director.js';
+import { fallbackDirector, rulesOf, fallbackChief, FALLBACK_RADIO, heatSummary, leagueOf, HEAT_KINDS } from '../web/src/director.js';
+import { ZONES } from '../web/src/rules.js';
 import { createMetrics } from './metrics.mjs';
 
-export const API_VERSION = '4.1.2';
-export const FEATURES = ['tickets', 'live-referee', 'pacing-proof', 'live-rank', 'chunked-replay', 'ghost-rival', 'edge-cards', 'link-previews', 'percentile', 'telemetry', 'precompressed-static', 'ai-director', 'ai-radio', 'ai-dispatch', 'ai-crew-chief'];
+export const API_VERSION = '4.2.0';
+export const FEATURES = ['tickets', 'live-referee', 'pacing-proof', 'live-rank', 'chunked-replay', 'ghost-rival', 'edge-cards', 'link-previews', 'percentile', 'telemetry', 'precompressed-static', 'ai-director', 'ai-radio', 'ai-dispatch', 'ai-crew-chief', 'multi-ghost', 'verified-splits', 'leagues', 'heat-commander', 'rival-personas'];
+/** Points are recorded every SPLIT ticks (1 s) while the edge replays a run; the splits ride inside the
+    signed checkpoint and end up in the run document, so ghost deltas on the HUD are verified numbers. */
+export const SPLIT = TICK_RATE;
 const enc = new TextEncoder();
 const seedValid = (s) => typeof s === 'string' && /^[a-zA-Z0-9_-]{2,64}$/.test(s);
 const idValid = (s) => typeof s === 'string' && /^[a-f0-9]{12}$/.test(s);
 const dayOf = (ms) => new Date(ms).toISOString().slice(0, 10);
+const dayBefore = (date) => dayOf(Date.parse(`${date}T12:00:00Z`) - 86400000);
+const heatKey = (date) => `heat/${SIM_VERSION}/${date}.json`;
 const b64u = (bytes) => { let s = ''; const a = new Uint8Array(bytes); for (let i = 0; i < a.length; i++) s += String.fromCharCode(a[i]); return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); };
 const fromB64u = (s) => Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/')), (c) => c.charCodeAt(0));
 const fmt = (n) => Math.round(n).toLocaleString('en-US');
@@ -107,9 +113,11 @@ export function createApp({ env = {}, store, now = () => Date.now(), log = () =>
       const k = `director/v1/${date}.json`;
       let d = (await readJson(k).catch(() => null))?.value || null;
       if (!d && generate) {
+        // the pursuit commander reads yesterday's per-district outcomes (counts only) and picks a focus
+        const heat = heatSummary((await readJson(heatKey(dayBefore(date))).catch(() => null))?.value);
         let cand = null;
-        if (ai.configured) { try { cand = await ai.director(date); } catch (e) { log('director', e.message); } }
-        cand ||= fallbackDirector(date);
+        if (ai.configured) { try { cand = await ai.director(date, heat); } catch (e) { log('director', e.message); } }
+        cand ||= fallbackDirector(date, heat);
         cand.generatedAt = new Date(now()).toISOString();
         d = (await store.put(k, JSON.stringify(cand), { ifNoneMatch: '*' })) ? cand : (await readJson(k))?.value || cand;
         metrics.add(d.source === 'ai' ? 'briefsAi' : 'briefsFallback');
@@ -125,7 +133,7 @@ export function createApp({ env = {}, store, now = () => Date.now(), log = () =>
     if (!date) return null;
     return rulesOf(await directorFor(date, { generate: date === dayOf(now()) }));
   }
-  async function radioFor(date, lang = 'en') {
+  async function radioFor(date, lang = 'fa') {
     const id = `${date}|${lang}`;
     if (radios.has(id)) return radios.get(id);
     return once(`r|${id}`, async () => {
@@ -172,7 +180,7 @@ export function createApp({ env = {}, store, now = () => Date.now(), log = () =>
     const above = rows.filter((e) => e.points > points);
     const rank = above.length + 1, top = rows.length >= 100 && rank > 100;
     const next = above[above.length - 1];
-    return { rank: top ? null : rank, of: rows.length, ahead: next ? { label: next.label, points: next.points, gap: next.points - points } : null };
+    return { rank: top ? null : rank, of: rows.length, ahead: next ? { rank: above.length, label: next.label, points: next.points, gap: next.points - points } : null };
   }
 
   /* ---------- run tickets and checkpoints ---------- */
@@ -187,9 +195,9 @@ export function createApp({ env = {}, store, now = () => Date.now(), log = () =>
     return { ticket, total };
   }
   const prefixHash = async (trace, ticks) => b64u(await crypto.subtle.digest('SHA-256', enc.encode(JSON.stringify(tracePrefix(trace, ticks)))));
-  const ckText = (runId, hash, c) => `${runId}|${hash}|${c.t}|${c.ms}|${c.at}|${c.seen}|${c.n}|${c.state}`;
-  async function checkpoint(runId, trace, game, ms, seen, n) {
-    const c = { t: game.ticks, ms: Math.round(ms * 10) / 10, at: now(), seen, n, state: snapshotGame(game) };
+  const ckText = (runId, hash, c) => `${runId}|${hash}|${c.t}|${c.ms}|${c.at}|${c.seen}|${c.n}|${c.state}|${c.sp.join(',')}`;
+  async function checkpoint(runId, trace, game, ms, seen, n, sp) {
+    const c = { t: game.ticks, ms: Math.round(ms * 10) / 10, at: now(), seen, n, state: snapshotGame(game), sp };
     c.sig = await mac(ckText(runId, await prefixHash(trace, c.t), c));
     return c;
   }
@@ -198,24 +206,37 @@ export function createApp({ env = {}, store, now = () => Date.now(), log = () =>
     const c = b.checkpoint, t = now();
     if (c) {
       if (typeof c.state !== 'string' || c.state.length > 120000 || ![c.t, c.ms, c.at, c.seen, c.n].every(Number.isFinite) || c.t > total) throw bad(400, 'Invalid checkpoint', 'checkpoint');
+      if (!Array.isArray(c.sp) || c.sp.length !== Math.floor(c.t / SPLIT) || !c.sp.every(Number.isInteger)) throw bad(400, 'Invalid checkpoint', 'checkpoint');
       if (!(await macOk(ckText(ticket.r, await prefixHash(b.trace, c.t), c), c.sig))) throw bad(401, 'Invalid checkpoint', 'checkpoint');
       let game;
       try { game = restoreGame(c.state); } catch { throw bad(400, 'Invalid checkpoint', 'checkpoint'); }
       if (game.seed !== ticket.s || game.car !== ticket.c || game.spawn !== ticket.p || game.ticks !== c.t || (game.rules?.id || 0) !== (ticket.d || 0)) throw bad(401, 'Invalid checkpoint', 'checkpoint');
       if (total - c.seen > ((t - c.at) / 1000) * TICK_RATE * PACE + PACE_SLACK_TICKS) throw bad(422, 'Inputs arrived faster than real time', 'pacing');
-      return { game, ms: c.ms, n: c.n };
+      return { game, ms: c.ms, n: c.n, sp: c.sp.slice() };
     }
     if (!ticket.l && (await store.get(runKey(ticket)))) throw bad(409, 'Run already submitted', 'replayed');
     if (total > ((t - ticket.t) / 1000) * TICK_RATE * PACE + PACE_SLACK_TICKS) throw bad(422, 'Inputs arrived faster than real time', 'pacing');
     const rules = ticket.d ? await rulesForSeed(ticket.s) : null;
     if ((rules?.id || 0) !== (ticket.d || 0)) throw bad(409, 'Daily briefing changed — please reload', 'version');
-    return { game: createGame(ticket.s, { car: ticket.c, spawn: ticket.p, rules }), ms: 0, n: 0 };
+    return { game: createGame(ticket.s, { car: ticket.c, spawn: ticket.p, rules }), ms: 0, n: 0, sp: [] };
   }
   const runKey = (ticket) => `runs/${SIM_VERSION}/${dayOf(ticket.t)}/${ticket.r}.json`;
-  function replayWith(fn, game, trace) {
+  /** advanceTrace / replayChunk in steps that stop on every split boundary, recording the points there. */
+  function stepSplits(game, trace, budget, sp, final) {
+    for (let left = budget; ;) {
+      const before = game.ticks;
+      const done = advanceTrace(game, trace, Math.min(left, SPLIT - (game.ticks % SPLIT)));
+      const moved = game.ticks - before;
+      left -= moved;
+      if (moved > 0 && game.ticks % SPLIT === 0) sp.push(game.points);
+      if (done) { if (final && game.state !== 'ended') throw Error('Game has not ended'); return true; }
+      if (left <= 0) return false;
+    }
+  }
+  function replayWith(final, game, trace, sp) {
     const t0 = performance.now(), before = game.ticks;
     let out;
-    try { out = fn(game, trace, chunkTicks); } catch (e) { throw bad(422, `Invalid replay: ${e.message}`, 'replay'); }
+    try { out = stepSplits(game, trace, chunkTicks, sp, final); } catch (e) { throw bad(422, `Invalid replay: ${e.message}`, 'replay'); }
     const cpu = performance.now() - t0;
     metrics.add('ticks', game.ticks - before); metrics.add('cpuMs', cpu);
     return { out, cpu, stepped: game.ticks - before };
@@ -248,12 +269,12 @@ export function createApp({ env = {}, store, now = () => Date.now(), log = () =>
     const b = await body(req);
     const { ticket, total } = await ticketOf(b);
     const r = await resume(ticket, b, total);
-    const { out: complete, cpu, stepped } = replayWith(advanceTrace, r.game, b.trace);
+    const { out: complete, cpu, stepped } = replayWith(false, r.game, b.trace, r.sp);
     const g = r.game;
     metrics.add('live'); metrics.add('liveTicks', stepped);
     const standing = ticket.l ? null : standingOf(await boardRows(ticket.s), g.points);
     return json({ ok: true, verified: g.ticks, complete, ended: g.state === 'ended', points: g.points, health: Math.round(g.health), standing, cpuMs: Math.round(cpu * 10) / 10,
-      checkpoint: await checkpoint(ticket.r, b.trace, g, r.ms + cpu, total, r.n + 1) });
+      checkpoint: await checkpoint(ticket.r, b.trace, g, r.ms + cpu, total, r.n + 1, r.sp) });
   }
   async function finish(req, ip) {
     if (limited(ip, 'finish', 120, 60000)) return fail(429, 'Please slow down');
@@ -261,12 +282,12 @@ export function createApp({ env = {}, store, now = () => Date.now(), log = () =>
     const { ticket, total } = await ticketOf(b);
     if (!b.result || typeof b.result !== 'object') throw bad(400, 'Missing result', 'trace');
     const r = await resume(ticket, b, total), game = r.game;
-    const { out: complete, cpu, stepped } = replayWith(replayChunk, game, b.trace);
+    const { out: complete, cpu, stepped } = replayWith(true, game, b.trace, r.sp);
     metrics.add('chunks');
     const verifyMs = Math.round((r.ms + cpu) * 10) / 10;
     // Storage writes get a request of their own (no replay work), so neither part hits the CPU limit.
     if (!complete || (stepped > 0 && !env.SINGLE_PASS)) {
-      return json({ continue: true, progress: complete ? 100 : Math.round((100 * game.ticks) / total), checkpoint: await checkpoint(ticket.r, b.trace, game, r.ms + cpu, total, r.n) }, 202);
+      return json({ continue: true, progress: complete ? 100 : Math.round((100 * game.ticks) / total), checkpoint: await checkpoint(ticket.r, b.trace, game, r.ms + cpu, total, r.n, r.sp) }, 202);
     }
     const result = gameResult(game), c = b.result;
     if (c.version !== SIM_VERSION || c.seed !== ticket.s || c.car !== ticket.c || c.spawn !== result.spawn || (c.rules || null) !== (result.rules || null) || c.timeMs !== result.timeMs || c.points !== result.points || c.health !== result.health || c.end !== result.end) throw bad(422, 'Result does not match authoritative replay', 'mismatch');
@@ -279,18 +300,24 @@ export function createApp({ env = {}, store, now = () => Date.now(), log = () =>
     const rows = await update(`leaderboard/${SIM_VERSION}/${ticket.s}.json`, (list = []) => { const next = list.filter((e) => e.id !== entry.id); next.push(entry); next.sort((a, x) => compareResult(a, x) || a.at - x.at); return next.slice(0, 100); });
     boards.delete(ticket.s);
     const idx = rows.findIndex((e) => e.id === id), rank = idx >= 0 ? idx + 1 : null;
-    const doc = { id, seed: ticket.s, car: ticket.c, spawn: ticket.p, rules: ticket.d || null, label, result, trace: b.trace, at, live: r.n, verifyMs, rank, of: rows.length, cdone: game.contracts.map((k) => k.done) };
-    const [hist] = await Promise.all([
-      update(`hist/${SIM_VERSION}/${ticket.s}.json`, (h = { n: 0, b: {} }) => { const k = histBin(result.points); h.n++; h.b[k] = (h.b[k] || 0) + 1; return h; }).catch(() => null),
-      store.put(`runs-by-id/${SIM_VERSION}/${id}.json`, JSON.stringify(doc)),
-      bump(date, (s) => { s.runs++; if (result.escaped) s.escapes++; if (r.n) s.live = (s.live || 0) + 1; s.verifyMs += verifyMs; s.bestTimeMs = Math.max(s.bestTimeMs, result.timeMs); s.bestPoints = Math.max(s.bestPoints, result.points); }),
-    ]);
+    const doc = { id, seed: ticket.s, car: ticket.c, spawn: ticket.p, rules: ticket.d || null, label, result, trace: b.trace, splits: r.sp, at, live: r.n, verifyMs, rank, of: rows.length, cdone: game.contracts.map((k) => k.done) };
+    const hist = await update(`hist/${SIM_VERSION}/${ticket.s}.json`, (h = { n: 0, b: {} }) => { const k = histBin(result.points); h.n++; h.b[k] = (h.b[k] || 0) + 1; return h; }).catch(() => null);
     let better = null;
     if (hist && hist.n > 1) { const k = histBin(result.points); let below = 0; for (const [bin, cnt] of Object.entries(hist.b)) if (Number(bin) < k) below += cnt; better = Math.round((100 * (below + ((hist.b[k] || 1) - 1) / 2)) / (hist.n - 1)); }
-    doc.better = better; docs.set(id, doc);
+    doc.better = better; doc.league = leagueOf(better, rank, hist?.n || 1);
+    const z = Number.isInteger(result.zone) && result.zone >= 0 && result.zone < ZONES.length ? result.zone : 0;
+    await Promise.all([
+      store.put(`runs-by-id/${SIM_VERSION}/${id}.json`, JSON.stringify(doc)),
+      bump(date, (s) => { s.runs++; if (result.escaped) s.escapes++; if (r.n) s.live = (s.live || 0) + 1; s.verifyMs += verifyMs; s.bestTimeMs = Math.max(s.bestTimeMs, result.timeMs); s.bestPoints = Math.max(s.bestPoints, result.points); }),
+      // pursuit commander: per-district outcome counts of the day (no runs, ids or traces), read by tomorrow's briefing
+      update(heatKey(date), (h = { date, n: 0, kinds: HEAT_KINDS, z: ZONES.map(() => HEAT_KINDS.map(() => 0)) }) => {
+        const row = h.z[z]; if (result.end === 'busted') row[0]++; else if (result.end === 'wrecked') row[1]++; if (result.escaped) row[2]++; row[3] += result.takedowns || 0; h.n++; return h;
+      }).catch((e) => log('heat', e.message)),
+    ]);
+    docs.set(id, doc);
     metrics.add('runs'); if (r.n) metrics.add('liveRuns');
     metrics.recent({ label, car: ticket.c, points: result.points, timeMs: result.timeMs, end: result.end, live: r.n, verifyMs, ticks: game.ticks, rank, at });
-    return json({ accepted: true, rank, of: rows.length, label, result, verification: 'edge-replay-v4', verifyMs, ticks: game.ticks, live: r.n, better, runs: hist?.n || null, id, share: `/r/${id}` });
+    return json({ accepted: true, rank, of: rows.length, label, result, verification: 'edge-replay-v4', verifyMs, ticks: game.ticks, live: r.n, better, league: doc.league, runs: hist?.n || null, id, share: `/r/${id}`, splits: r.sp.length });
   }
   async function leaderboard(url) {
     const seed = url.searchParams.get('seed') || `daily-${dayOf(now())}`;
@@ -299,7 +326,13 @@ export function createApp({ env = {}, store, now = () => Date.now(), log = () =>
     const rows = await boardRows(seed);
     return json({ seed, total: rows.length, entries: rows.slice(0, limit).map((e, i) => ({ rank: i + 1, timeMs: e.timeMs, points: e.points, car: e.car, label: e.label, ghost: !!e.g })), verified: true }, 200, { 'Cache-Control': 'public, max-age=5' });
   }
-  const rivalOf = (doc, extra = {}) => ({ id: doc.id, rank: doc.rank, of: doc.of, label: doc.label, car: doc.car, spawn: doc.spawn, points: doc.result.points, timeMs: doc.result.timeMs, end: doc.result.end, trace: doc.trace, taunt: doc.chief?.taunt || null, ...extra });
+  /** A ghost for the browser: verified inputs (re-simulated bit-exactly), verified 1 s splits and the
+      driver's persona and taunt bank (written by the crew chief, else handwritten from the run's numbers). */
+  const rivalOf = (doc, extra = {}) => {
+    const ch = doc.chief || fallbackChief(doc.result);
+    return { id: doc.id, rank: doc.rank, of: doc.of, label: doc.label, car: doc.car, spawn: doc.spawn, points: doc.result.points, timeMs: doc.result.timeMs, end: doc.result.end, trace: doc.trace, splits: doc.splits || null, league: doc.league || null,
+      taunt: ch.taunt || null, persona: ch.persona || null, taunts: ch.taunts || null, ...extra };
+  };
   /** The edge picks your rival: the verified run just above your best (or a mid-table run).
       With `spawn`, only runs that started at that position qualify (the ghost must start with you). */
   async function rival(url) {
@@ -327,11 +360,44 @@ export function createApp({ env = {}, store, now = () => Date.now(), log = () =>
     metrics.add('rivals');
     return json({ rival: rivalOf(doc, { rank: all.indexOf(pick) + 1, of: all.length }) }, 200, { 'Cache-Control': 'public, max-age=20' });
   }
+  /** Up to four ghosts in one call — your best (pb), the run just above your best (rival), today's #1 (top)
+      and a friend's shared run — all from cached board/run reads (no replay work). The race starts at
+      `spawn` (or at the friend's / rival's start); ghosts from another start come back without inputs, as
+      split-only ghosts (HUD delta, no car on the road). */
+  async function ghosts(url) {
+    const q = url.searchParams, seed = q.get('seed') || `daily-${dayOf(now())}`;
+    if (!seedValid(seed)) throw bad(400, 'Invalid seed', 'seed');
+    const mine = q.has('points') ? Number(q.get('points')) : null, not = q.get('not'), want = q.get('id');
+    const at = q.has('spawn') && /^\d{1,3}$/.test(q.get('spawn')) ? Number(q.get('spawn')) : null;
+    const all = await boardRows(seed), used = new Set();
+    const take = (doc) => (doc && doc.seed === seed && !used.has(doc.id) ? (used.add(doc.id), doc) : null);
+    const friend = idValid(want) ? take(await runDoc(want)) : null;
+    const pb = idValid(not) ? take(await runDoc(not)) : null;
+    const pool = all.filter((e) => e.g && !used.has(e.id));
+    const pick = (rows) => {
+      if (!rows.length) return null;
+      if (Number.isFinite(mine)) { const above = rows.filter((e) => e.points > mine); return above.length ? above[above.length - 1] : rows[0]; }
+      return rows[Math.min(rows.length - 1, Math.floor(rows.length / 2))];
+    };
+    const prefer = at ?? friend?.spawn ?? null;
+    const rv = (prefer !== null && pick(pool.filter((e) => e.p === prefer))) || pick(pool);
+    const rival = rv ? take(await runDoc(rv.id)) : null;
+    const top = all[0]?.g && !used.has(all[0].id) ? take(await runDoc(all[0].id)) : null;
+    const spawn = at ?? friend?.spawn ?? rival?.spawn ?? pb?.spawn ?? top?.spawn ?? null;
+    const out = {};
+    for (const [role, doc] of Object.entries({ pb, rival, top, friend })) {
+      if (!doc) { out[role] = null; continue; }
+      const i = all.findIndex((e) => e.id === doc.id);
+      out[role] = rivalOf(doc, { role, rank: i >= 0 ? i + 1 : doc.rank, of: all.length || doc.of, trace: doc.spawn === spawn ? doc.trace : null });
+    }
+    metrics.add('ghosts');
+    return json({ seed, spawn, ghosts: out }, 200, { 'Cache-Control': 'public, max-age=10' });
+  }
   async function card(id) {
     const doc = await runDoc(id);
     if (!doc) return fail(404, 'Unknown run');
     const car = carById(doc.car), t0 = performance.now();
-    const png = drawCard({ label: doc.label, carName: car.name, carPaint: car.paint, result: doc.result, rank: doc.rank, of: doc.of });
+    const png = drawCard({ label: doc.label, carName: car.name, carPaint: car.paint, result: doc.result, rank: doc.rank, of: doc.of, league: doc.league || null });
     metrics.add('cards'); metrics.add('cardMs', performance.now() - t0);
     return new Response(png, { headers: { 'Content-Type': 'image/png', 'Content-Length': String(png.length), 'Cache-Control': 'public, max-age=86400', 'X-Content-Type-Options': 'nosniff' } });
   }
@@ -354,14 +420,14 @@ export function createApp({ env = {}, store, now = () => Date.now(), log = () =>
   }
   async function radioRoute(url) {
     const date = /^\d{4}-\d{2}-\d{2}$/.test(url.searchParams.get('date') || '') ? url.searchParams.get('date') : dayOf(now());
-    const r = await radioFor(date, url.searchParams.get('lang') === 'fa' ? 'fa' : 'en');
+    const r = await radioFor(date, url.searchParams.get('lang') === 'en' ? 'en' : 'fa');
     return json({ date, source: r.source, radio: r.radio }, 200, { 'Cache-Control': 'public, max-age=120' });
   }
   /** The dispatcher's call for one run, in the player's language (fallback: a line from the day's radio bank). */
   async function dispatch(req, ip) {
     if (limited(ip, 'dispatch', 12, 60000)) return fail(429, 'Please slow down');
     const b = await body(req), date = dailyDate(b.seed) || dayOf(now());
-    const lang = b.lang === 'fa' ? 'fa' : 'en', zone = Number.isInteger(b.zone) && b.zone >= 0 && b.zone < 10 ? b.zone : 0;
+    const lang = b.lang === 'en' ? 'en' : 'fa', zone = Number.isInteger(b.zone) && b.zone >= 0 && b.zone < 10 ? b.zone : 0;
     const car = CARS.some((c) => c.id === b.car) ? b.car : CARS[0].id;
     const last = b.last && Number.isFinite(b.last.points) && Number.isFinite(b.last.timeMs) ? { points: Math.round(b.last.points), timeMs: Math.round(b.last.timeMs), end: ['wrecked', 'busted', 'legend'].includes(b.last.end) ? b.last.end : 'wrecked' } : null;
     const d = (await directorFor(date, { generate: date === dayOf(now()) })) || fallbackDirector(date);
@@ -419,6 +485,7 @@ export function createApp({ env = {}, store, now = () => Date.now(), log = () =>
     if (path === '/api/v1/runs/finish' && method === 'POST') return finish(req, ip);
     if (path === '/api/v1/leaderboard' && method === 'GET') return leaderboard(url);
     if (path === '/api/v1/rival' && method === 'GET') return rival(url);
+    if (path === '/api/v1/ghosts' && method === 'GET') return ghosts(url);
     if (path === '/api/v1/stats' && method === 'GET') return statsRoute();
     if (path === '/api/v1/radio' && method === 'GET') return radioRoute(url);
     if (path === '/api/v1/dispatch' && method === 'POST') return dispatch(req, ip);

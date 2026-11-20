@@ -4,10 +4,10 @@
                  (bounded rules the simulation plays by; frozen, identical for everyone)
      radio     — once per UTC day and language: police-radio lines for twelve moments of a chase
      dispatch  — once per run: the dispatcher's call announcing you, from your car, district and last run
-     chief     — once per verified run: crew-chief tip, next target, share headline, ghost taunt
+     chief     — once per verified run: crew-chief tip, next target, share headline, ghost persona + taunt bank
    Every answer goes through the sanitizers in web/src/director.js; nothing the model writes can reach
    physics, scoring or ranking except through the clamped contract/tactic ranges. */
-import { sanitizeDirector, sanitizeChief, clean, RADIO_EVENTS, SCHEMA } from '../web/src/director.js';
+import { sanitizeDirector, sanitizeChief, clean, RADIO_EVENTS, SCHEMA, TAUNT_MOMENTS, heatText } from '../web/src/director.js';
 import { ZONES, ZONE_NAMES, contractText } from '../web/src/rules.js';
 import { carById } from '../web/src/cars.js';
 
@@ -43,8 +43,9 @@ export function createAI({ env = {}, fetchImpl = (...a) => fetch(...a), metrics 
     finally { clearTimeout(timer); }
   }
 
-  /** Today's briefing + rules. Returns a sanitized briefing (source "ai"), or throws. */
-  async function director(date) {
+  /** Today's briefing + rules. Returns a sanitized briefing (source "ai"), or throws.
+      `heat` (optional): yesterday's per-district outcome summary — the commander reacts to it. */
+  async function director(date, heat = null) {
     const dow = new Date(`${date}T12:00:00Z`).toLocaleDateString('en-US', { weekday: 'long', timeZone: 'UTC' });
     const user = `Design today's pursuit in Sunset Bay for ${dow} ${date}. Everyone plays the same city today.
 Districts (use the id): ${ZONE_LIST}.
@@ -52,12 +53,13 @@ Contract types (pick exactly 3 different types; goal must be inside the range; "
 ${Object.entries(SCHEMA.contracts).map(([k, v]) => `- ${k}: goal ${v.min}-${v.max}${v.zone ? ` (or ${v.zoneMin}-${v.zoneMax} when bound to a zone)` : ''}`).join('\n')}
 (drift = drift points, near = near misses with traffic or police, takedown = police cars wrecked, dodge = roadblocks dodged, speed = top speed km/h, chain = best skill chain, survive = seconds survived, explore = different districts driven through)
 Police tactics (numbers inside the range; base value in brackets): ${Object.entries(SCHEMA.tactics).map(([k, v]) => `${k} ${v.min}-${v.max} [${v.base}]`).join(', ')}.
-(pace = how fast heat rises, patrol = police spawn rate, intercept = chance a new unit comes head-on, blocks = roadblock rate, spikes = heat level from which roadblocks carry spike strips, traffic = civilian cars around)
-Make the theme, contracts and tactics tell one story (e.g. a docks lockdown means docks contracts and more roadblocks). Vary it from day to day.
+(pace = how fast heat rises, patrol = police spawn rate, intercept = chance a new unit comes head-on, blocks = roadblock rate, spikes = heat level from which roadblocks carry spike strips, traffic = civilian cars around, focus = index of the district in the list above (0 = first) where police concentrate today or -1 for none, focusRate = how much faster patrols and roadblocks come inside the focus district)
+${heat ? `Pursuit commander report: ${heatText(heat)} Suggested focus district: ${heat.focus} (rate ${heat.focusRate}). Set tactics.focus/focusRate to react to it and mention the move in the briefing as story.\n` : ''}Make the theme, contracts and tactics tell one story (e.g. a docks lockdown means docks contracts and more roadblocks). Vary it from day to day.
 Reply with JSON only, exactly this shape:
 {"theme":{"en":"≤30 chars","fa":"≤30 chars"},"briefing":{"en":"≤200 chars, second person","fa":"≤200 chars"},"dispatcher":{"en":"police dispatcher callsign ≤20 chars","fa":"..."},"contracts":[{"type":"drift","goal":1500,"zone":"port","title":{"en":"≤26 chars","fa":"≤26 chars"}}],"tactics":{"pace":1,"patrol":1,"intercept":0.35,"blocks":1,"spikes":4,"traffic":18}}`;
     const t0 = performance.now();
     const raw = await chat('director', user, { maxTokens: 700, temperature: 1, timeoutMs: 15000 });
+    if (heat && heat.focus >= 0 && raw?.tactics && typeof raw.tactics === 'object' && raw.tactics.focus === undefined) Object.assign(raw.tactics, { focus: heat.focus, focusRate: heat.focusRate });
     const d = sanitizeDirector(raw, { date, source: 'ai', model: cfg.model });
     if (d.source !== 'ai') throw Error(`briefing rejected (${d.note || 'invalid'})`);
     d.genMs = Math.round(performance.now() - t0);
@@ -105,13 +107,15 @@ Write the single radio call that starts the chase, in ${L}, one or two short sen
       todaysContracts: d ? d.contracts.map((k, i) => `${contractText(k, 'en')}: ${cdone?.[i] ? 'completed' : 'not completed'}`) : 'none on this route',
     };
     const user = `You are Ray, the player's crew chief in ESCAPE 60. Facts of the run that just ended (verified by replay): ${JSON.stringify(facts)}
-Game knowledge: brake while steering to drift; drifts and near misses build a chain multiplier up to ×8; takedowns (ramming cops or making them crash) give 800 points; pit stops repair the car up to 3 times; standing still near police fills the bust meter; nitro refills from near misses and takedowns; at 60 s there is a +2,500 bonus and the chase continues.
+Game knowledge: brake while steering to drift; drifts and near misses build a chain multiplier up to ×8; takedowns only count when the player causes them (ram 800, wall slam 1000, knocking traffic into a cop 1000, pile-up 1200, baiting a chasing cop into a crash 500) and each one refills nitro and gives a short speed surge, so hunting cops makes you faster; cops that crash on their own give nothing; pit stops repair the car up to 3 times; standing still near police fills the bust meter; nitro is earned mainly from takedowns (it refills only slowly on its own); at 60 s there is a +2,500 bonus and the chase continues.
 Reply with JSON only:
 {"tip":{"en":"one specific, actionable tip based on the weakest number, ≤160 chars","fa":"same in Persian"},
 "headline":{"en":"a punchy sports-style headline about this run, ≤70 chars","fa":"..."},
 "taunt":{"en":"a cheeky line this driver's ghost says to rivals, ≤60 chars","fa":"..."},
+"persona":{"en":"a nickname-style title for this driver from the run's strongest number (e.g. Smoke Artist), ≤24 chars","fa":"..."},
+"taunts":{${TAUNT_MOMENTS.map((k) => `"${k}":{"en":"≤60 chars","fa":"..."}`).join(',')}} (lines this driver's ghost says when racing others: start = race begins, passYou = the ghost overtakes the other driver, youPass = the other driver overtakes the ghost, milestone = 60 seconds survived, beaten = the other driver beat this score),
 "next":{"type":"one of points|survive|drift|near|takedown|chain","goal":number a bit above this run}}`;
-    const raw = await chat('chief', user, { maxTokens: 420, temperature: 0.8, timeoutMs: 9000 });
+    const raw = await chat('chief', user, { maxTokens: 800, temperature: 0.8, timeoutMs: 9000 });
     return sanitizeChief(raw, r);
   }
 

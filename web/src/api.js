@@ -10,9 +10,9 @@ export async function request(path, options = {}, ms = 6500) {
 /** Today's route and city briefing (the first request of a day may wait while the briefing is written). */
 export const today = () => request('/challenges/today', {}, 20000);
 export const startRun = (seed, car, spawn, rules) => request('/runs/start', { method: 'POST', body: JSON.stringify({ seed, car, spawn, rules }) });
-export const radio = (date, lang = 'en') => request(`/radio?date=${encodeURIComponent(date)}&lang=${lang === 'fa' ? 'fa' : 'en'}`, {}, 20000);
+export const radio = (date, lang = 'fa') => request(`/radio?date=${encodeURIComponent(date)}&lang=${lang === 'en' ? 'en' : 'fa'}`, {}, 20000);
 /** The dispatcher's call for this run. */
-export const dispatch = (payload) => request('/dispatch', { method: 'POST', body: JSON.stringify(payload) }, 7000);
+export const dispatch = (payload) => request('/dispatch', { method: 'POST', body: JSON.stringify({ ...payload, lang: payload.lang === 'en' ? 'en' : 'fa' }) }, 7000);
 /** Crew chief for a verified run. */
 export const debrief = (id) => request('/runs/debrief', { method: 'POST', body: JSON.stringify({ id }) }, 12000);
 /** Live referee: the edge re-simulates the newest inputs while the run is still being driven. */
@@ -30,11 +30,16 @@ export async function finishRun(runId, token, trace, result, onProgress = () => 
   throw Error('Replay did not finish');
 }
 /** The edge picks a ghost rival (the verified run just above `points`, or a friend's run by id). */
-export function rival(seed, { points = null, not = null, id = null } = {}) {
+const ghostQuery = (seed, { points = null, not = null, id = null, spawn = null } = {}) => {
   const q = new URLSearchParams({ seed });
   if (Number.isFinite(points)) q.set('points', String(points));
   if (not) q.set('not', not);
   if (id) q.set('id', id);
-  return request(`/rival?${q}`, {}, 4000);
-}
+  if (Number.isInteger(spawn)) q.set('spawn', String(spawn)); // only ghosts that started here come with inputs
+  return q;
+};
+export const rival = (seed, opts) => request(`/rival?${ghostQuery(seed, opts)}`, {}, 4000);
+/** Up to four ghosts at once: { spawn, ghosts: { pb, rival, top, friend } } (null slots when absent).
+    A ghost without `trace` started elsewhere: it races you through its verified splits only. */
+export const ghosts = (seed, opts) => request(`/ghosts?${ghostQuery(seed, opts)}`, {}, 5000);
 export const leaderboard = (seed, limit = 10) => request(`/leaderboard?seed=${encodeURIComponent(seed)}&limit=${limit}`);

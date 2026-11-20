@@ -1,4 +1,4 @@
-/** Deterministic 60 Hz game simulation (2.1). Shared by the browser and the authoritative replay.
+/** Deterministic 60 Hz game simulation (2.3). Shared by the browser and the authoritative replay.
  *
  * The player drives one of 14 cars through Sunset Bay with an arcade drift model: automatic throttle,
  * brake, handbrake slides, nitro. Health drops on impacts (and the car limps when damaged); three
@@ -19,7 +19,7 @@ import { dsin, dcos, datan2 } from './dmath.js';
 export const TICK_RATE = 60;
 export const MILESTONE_TICKS = 60 * TICK_RATE;
 export const MAX_TICKS = 10 * 60 * TICK_RATE;
-export const SIM_VERSION = '2.2.0';
+export const SIM_VERSION = '2.3.0';
 export const MAX_HEALTH = 100;
 export const REPAIRS = 3;
 export const COMBO_WINDOW = 4;
@@ -31,6 +31,9 @@ const POLICE_CAP = [1, 2, 3, 5, 6];
 const DT = 1 / TICK_RATE;
 const PI = Math.PI, TAU = 2 * Math.PI;
 const CAR_R = 2.15;
+/** Takedown attribution windows (ticks) and range (m); see wreckCop(). */
+const TOUCH_WIN = 120, TRAFFIC_WIN = 180, BAIT_D = 45, SURGE = 1.2;
+export const TAKEDOWN_PTS = { ram: 800, slam: 1000, traffic: 1000, pileup: 1200, bait: 500 };
 
 /** Encode one tick of input: steer in -3..3 (left..right), plus brake / handbrake / nitro flags. */
 export function encodeInput(steer, brake = false, hand = false, nitro = false) {
@@ -74,7 +77,7 @@ export function createGame(seed = 'daily', opts = {}) {
     contracts: rules ? rules.contracts.map((c) => ({ ...c, value: 0, done: false })) : [], ticks: 0, rs: (h ^ Math.imul(spawn + 1, 0x9e3779b1)) >>> 0 || 0x9e3779b9,
     state: 'playing', end: '', health: MAX_HEALTH, repairs: REPAIRS, invuln: 0, points: 0,
     chain: 0, comboTimer: 0, bestChain: 0, nitro: 0.6, heat: 1, bust: 0, milestone: false,
-    player: { x: sp.x, y: sp.y, h: heading, a: heading, v: 26, slip: 0, steer: 0, yaw: 0, boost: false, brake: false, hand: false, drifting: false, wallCd: 0, spike: 0 },
+    player: { x: sp.x, y: sp.y, h: heading, a: heading, v: 26, slip: 0, steer: 0, yaw: 0, boost: false, brake: false, hand: false, drifting: false, wallCd: 0, spike: 0, surge: 0 },
     drift: { acc: 0, time: 0, idle: 0 },
     stats: { near: 0, takedowns: 0, driftPts: 0, top: 0, hits: 0, repairs: 0, dodges: 0, nitroTicks: 0, dist: 0, contracts: 0 },
     police: [], traffic: [], blocks: [], stationCd: stations.map(() => 0), emptyCd: 0,
@@ -112,7 +115,7 @@ function spawnTraffic(s, minD, maxD, initial = false) {
   const dir = s.random() < 0.5 ? 1 : -1, lane = Math.floor(s.random() * k.lanes) % k.lanes;
   const vmax = (k.id === 0 ? 24 : k.id === 4 ? 16 : 15) + s.random() * 7;
   const type = Math.floor(s.random() * TRAFFIC.length) % TRAFFIC.length;
-  const t = { id: s.tid++, e: r.e, s: r.s, dir, lane, v: vmax, vmax, x: r.x, y: r.y, h: 0, turn: null, loose: 0, vx: 0, vy: 0, spin: 0, near: false, type, color: Math.floor(s.random() * 12) % 12, mass: type === 3 ? 1.6 : type === 5 ? 1.4 : 1.1 };
+  const t = { id: s.tid++, e: r.e, s: r.s, dir, lane, v: vmax, vmax, x: r.x, y: r.y, h: 0, turn: null, loose: 0, vx: 0, vy: 0, spin: 0, near: false, pk: -9999, type, color: Math.floor(s.random() * 12) % 12, mass: type === 3 ? 1.6 : type === 5 ? 1.4 : 1.1 };
   railPose(t);
   s.traffic.push(t);
 }
@@ -210,7 +213,7 @@ function spawnPolice(s, first = false) {
   const roll = s.random();
   const type = s.heat >= 4 && roll < 0.25 ? 'suv' : s.heat >= 3 && roll < 0.55 ? 'interceptor' : 'cruiser';
   const st = POLICE[type].stats, h = datan2(r.ty, r.tx);
-  s.police.push({ id: s.pid++, type, x: r.x, y: r.y, h, a: h, v: 30, hp: st.hp, wreck: 0, stun: 0, near: false, close: 0, mode: 0, tx: r.x, ty: r.y, los: 0 });
+  s.police.push({ id: s.pid++, type, x: r.x, y: r.y, h, a: h, v: 30, hp: st.hp, wreck: 0, stun: 0, near: false, close: 0, mode: 0, tx: r.x, ty: r.y, los: 0, touch: -9999, tk: 0, tkp: 0 });
   s.events.push({ type: 'police', tick: s.ticks, kind: type });
 }
 function policeTop(s, c) {
@@ -259,6 +262,7 @@ function skill(s, base, type, extra) {
   const mult = comboMult(s), pts = base * mult;
   s.points += pts;
   s.events.push({ type, tick: s.ticks, mult, pts, ...extra });
+  return pts;
 }
 function bankDrift(s) {
   const d = s.drift;
@@ -271,24 +275,44 @@ function bankDrift(s) {
   }
   d.acc = 0; d.time = 0; d.idle = 0;
 }
-function hurt(s, amount, kind) {
+/** Damage the player. `keep` (a lethal ram on a cop): a soft hit that keeps the chain and the drift
+    and does not count in stats.hits; its event carries soft: true. */
+function hurt(s, amount, kind, keep = false) {
   if (s.state !== 'playing') return;
   amount = Math.round(amount);
   if (amount <= 0) return;
   if (s.invuln > 0) amount = Math.round(amount * 0.35);
   if (amount <= 0) return;
   s.health = Math.max(0, s.health - amount);
-  s.stats.hits++; s.invuln = 0.35;
-  if (s.drift.acc > 0) { s.events.push({ type: 'driftLost', tick: s.ticks, pts: Math.round(s.drift.acc) }); s.drift.acc = 0; s.drift.time = 0; }
-  s.chain = 0; s.comboTimer = 0;
-  s.events.push({ type: 'hit', tick: s.ticks, kind, dmg: amount });
+  s.invuln = 0.35;
+  if (!keep) {
+    s.stats.hits++;
+    if (s.drift.acc > 0) { s.events.push({ type: 'driftLost', tick: s.ticks, pts: Math.round(s.drift.acc) }); s.drift.acc = 0; s.drift.time = 0; }
+    s.chain = 0; s.comboTimer = 0;
+  }
+  s.events.push({ type: 'hit', tick: s.ticks, kind, soft: keep, dmg: amount });
   if (s.health <= 0) { s.state = 'ended'; s.end = 'wrecked'; s.events.push({ type: 'wrecked', tick: s.ticks }); }
 }
-function takedown(s, c, how) {
+let kick = 0; // set by an earned takedown during a step; the speed kick is applied after the contact solve
+const touched = (s, c) => s.ticks - c.touch <= TOUCH_WIN;
+/** 'bait' when the cop wrecked while chasing the player closely (line of sight), otherwise null. */
+function baitOr(s, c) {
+  if (c.mode !== 1 || s.player.v <= 20) return null;
+  const dx = s.player.x - c.x, dy = s.player.y - c.y;
+  return dx * dx + dy * dy < BAIT_D * BAIT_D ? 'bait' : null;
+}
+/** Wreck a police car. Only a cause the player made (ram/slam/traffic/pileup/bait) is a takedown:
+    points through the chain, stats, full nitro and a short speed surge. A null cause is a plain
+    'wreck' event with no reward of any kind. */
+function wreckCop(s, c, cause) {
   c.wreck = 6; c.hp = 0;
+  const p = s.player, dx = c.x - p.x, dy = c.y - p.y, d = Math.round(Math.sqrt(dx * dx + dy * dy) * 10) / 10;
+  if (!cause) { s.events.push({ type: 'wreck', tick: s.ticks, id: c.id, x: c.x, y: c.y, d }); return; }
+  c.tk = cause;
   s.stats.takedowns++;
-  s.nitro = Math.min(1, s.nitro + 0.3);
-  skill(s, 800, 'takedown', { id: c.id, how });
+  s.nitro = 1;
+  p.surge = SURGE; kick = 1;
+  c.tkp = skill(s, TAKEDOWN_PTS[cause], 'takedown', { how: cause, id: c.id, x: c.x, y: c.y, d });
 }
 
 /* ---------------------------------------------------------------- contracts ---------- */
@@ -338,7 +362,9 @@ export function stepGame(s, input = 3) {
   const inp = Number.isInteger(input) && input >= 0 && input < 64 && (input & 7) <= 6 ? input : 3;
   const steerIn = ((inp & 7) - 3) / 3, brake = !!(inp & INPUT.BRAKE), hand = !!(inp & INPUT.HANDBRAKE), wantNitro = !!(inp & INPUT.NITRO);
   const car = carById(s.car), c = car.stats, p = s.player;
+  kick = 0;
   if (s.invuln > 0) s.invuln = Math.max(0, s.invuln - DT);
+  if (p.surge > 0) p.surge = Math.max(0, p.surge - DT);
   if (p.wallCd > 0) p.wallCd = Math.max(0, p.wallCd - DT);
   if (s.emptyCd > 0) s.emptyCd = Math.max(0, s.emptyCd - DT);
   if (s.comboTimer > 0) { s.comboTimer = Math.max(0, s.comboTimer - DT); if (s.comboTimer === 0) s.chain = 0; }
@@ -353,7 +379,7 @@ export function stepGame(s, input = 3) {
   p.boost = wantNitro && s.nitro > 0.002 && !brake;
   if (p.boost) { s.nitro = Math.max(0, s.nitro - DT / c.tank); s.stats.nitroTicks++; }
   p.brake = brake; p.hand = hand;
-  const top = c.top * limp + (p.boost ? c.nitro : 0);
+  const top = c.top * limp + (p.boost ? c.nitro : 0) + (p.surge > 0 ? c.nitro * 0.5 : 0);
   let v = p.v;
   if (brake) v -= 28 * DT;
   else if (v < top) {
@@ -394,7 +420,7 @@ export function stepGame(s, input = 3) {
     s.drift.acc += g; s.drift.time += DT; s.drift.idle = 0;
     s.nitro = Math.min(1, s.nitro + absSlip * v * 0.00011);
   } else if (s.drift.acc > 0) { s.drift.idle += DT; if (s.drift.idle > 0.55) bankDrift(s); }
-  s.nitro = Math.min(1, s.nitro + 0.006 * DT);
+  s.nitro = Math.min(1, s.nitro + 0.002 * DT);
 
   // walls
   sample(p.x, p.y, R);
@@ -421,11 +447,12 @@ export function stepGame(s, input = 3) {
   let cap = POLICE_CAP[s.heat - 1] + (s.heat >= 5 ? Math.floor((elapsed - HEAT_AT[4]) / 25) : 0);
   if (cap > 10) cap = 10;
   let alive = 0; for (const q of s.police) if (!q.wreck) alive++;
-  if (s.ticks >= s.nextPolice && alive < cap) { spawnPolice(s); s.nextPolice = s.ticks + Math.round(((s.heat >= 4 ? 3 : 5) * TICK_RATE) / s.tac.patrol); }
+  const focus = s.zone === s.tac.focus ? s.tac.focusRate : 1; // the day's focus district: faster patrols and roadblocks
+  if (s.ticks >= s.nextPolice && alive < cap) { spawnPolice(s); s.nextPolice = s.ticks + Math.round(((s.heat >= 4 ? 3 : 5) * TICK_RATE) / (s.tac.patrol * focus)); }
   const trafficCap = s.tac.traffic;
   if (s.ticks >= s.nextTraffic) { if (s.traffic.length < trafficCap) spawnTraffic(s, 230, 460); s.nextTraffic = s.ticks + 18; }
   if (s.heat >= 3 && s.ticks >= s.nextBlock) {
-    if (spawnRoadblock(s)) s.nextBlock = s.ticks + Math.round(((s.heat >= 5 ? 10 : 14) * TICK_RATE) / s.tac.blocks);
+    if (spawnRoadblock(s)) s.nextBlock = s.ticks + Math.round(((s.heat >= 5 ? 10 : 14) * TICK_RATE) / (s.tac.blocks * focus));
     else s.nextBlock = s.ticks + 2 * TICK_RATE;
   }
   if (s.routeAt < 0 || s.ticks - s.routeAt >= 30) {
@@ -464,14 +491,21 @@ export function stepGame(s, input = 3) {
     q.x += dcos(q.a) * q.v * DT; q.y += dsin(q.a) * q.v * DT;
     OB.x = q.x; OB.y = q.y; OB.vx = dcos(q.a) * q.v; OB.vy = dsin(q.a) * q.v;
     const vn = wallBounce(OB, WO);
+    if (vn > 12) q.hp -= (vn - 9) * 2.4; // wall damage first, so a ram that finishes the cop this tick counts as lethal
     // player collision
+    const pvx = PB.vx, pvy = PB.vy;
     const imp = collide(PB, OB, c.mass, st.mass, CAR_R * 2);
     if (imp >= 0) hitAny = true;
     if (imp > 0) {
+      q.touch = s.ticks;
       const attack = clamp(-(hx * PB.nx + hy * PB.ny), 0, 1);
       if (imp > 4) {
-        hurt(s, Math.min(30, (imp - 4) * 0.72 * (1.25 - attack * 0.6)) * c.armor, 'police');
+        const dmg = Math.min(30, (imp - 4) * 0.72 * (1.25 - attack * 0.6)) * c.armor;
         q.hp -= (imp - 3) * 1.6 * (0.45 + attack * 1.1);
+        if (q.hp <= 0) {
+          hurt(s, dmg * 0.5, 'ram', true); // a lethal ram is a soft hit: the chain survives
+          PB.vx = pvx * 0.92; PB.vy = pvy * 0.92; // and the player punches through instead of bouncing off
+        } else hurt(s, dmg, 'police');
         q.stun = 0.45;
         s.events.push({ type: 'bump', tick: s.ticks, id: q.id, imp: Math.round(imp), x: (p.x + q.x) / 2, y: (p.y + q.y) / 2 });
       }
@@ -480,8 +514,7 @@ export function stepGame(s, input = 3) {
     const qv = Math.sqrt(OB.vx * OB.vx + OB.vy * OB.vy);
     if (qv > 0.2) { const na = datan2(OB.vy, OB.vx); if (imp > 0 || vn > 0) { q.h = norm(q.h + norm(na - q.a) * 0.5); q.a = na; } }
     q.v = qv;
-    if (vn > 12) q.hp -= (vn - 9) * 2.4;
-    if (q.hp <= 0 && !q.wreck) { takedown(s, q, imp > 0 ? 'ram' : 'wall'); continue; }
+    if (q.hp <= 0 && !q.wreck) { wreckCop(s, q, imp > 0 ? 'ram' : vn > 12 && touched(s, q) ? 'slam' : baitOr(s, q)); continue; }
     // near miss / proximity
     const dx = p.x - q.x, dy = p.y - q.y, dd = Math.sqrt(dx * dx + dy * dy);
     if (dd < 11) closeCops++;
@@ -490,14 +523,26 @@ export function stepGame(s, input = 3) {
     if (dd > 760) { q.wreck = -1; q.gone = 1; s.nextPolice = Math.min(s.nextPolice, s.ticks + 60); }
   }
   // police vs police and police vs traffic (separation, damage at speed)
+  // a wrecked (or despawned) unit takes no further part; each wreck is attributed with its own context
   for (let i = 0; i < s.police.length; i++) {
     const a = s.police[i];
+    if (a.wreck) continue;
+    let why = null, hit = false;
     for (let j = i + 1; j < s.police.length; j++) {
       const b = s.police[j];
+      if (b.wreck) continue;
       if ((a.x - b.x) * (a.x - b.x) + (a.y - b.y) * (a.y - b.y) > 25) continue;
       const A = { x: a.x, y: a.y, vx: dcos(a.a) * a.v, vy: dsin(a.a) * a.v }, B = { x: b.x, y: b.y, vx: dcos(b.a) * b.v, vy: dsin(b.a) * b.v };
       const imp = collide(A, B, 1.2, 1.2, CAR_R * 2);
-      if (imp >= 0) { a.x = A.x; a.y = A.y; b.x = B.x; b.y = B.y; a.v = Math.sqrt(A.vx * A.vx + A.vy * A.vy); b.v = Math.sqrt(B.vx * B.vx + B.vy * B.vy); if (imp > 14) { a.hp -= imp; b.hp -= imp; } }
+      if (imp >= 0) {
+        a.x = A.x; a.y = A.y; b.x = B.x; b.y = B.y; a.v = Math.sqrt(A.vx * A.vx + A.vy * A.vy); b.v = Math.sqrt(B.vx * B.vx + B.vy * B.vy);
+        if (imp > 14) {
+          a.hp -= imp; b.hp -= imp;
+          const pile = touched(s, a) || touched(s, b) ? 'pileup' : null;
+          if (a.hp <= 0 && !hit) { hit = true; why = pile || baitOr(s, a); }
+          if (b.hp <= 0) wreckCop(s, b, pile || baitOr(s, b));
+        }
+      }
     }
     for (const t of s.traffic) {
       if ((a.x - t.x) * (a.x - t.x) + (a.y - t.y) * (a.y - t.y) > 25) continue;
@@ -506,10 +551,13 @@ export function stepGame(s, input = 3) {
       if (imp > 0) {
         a.x = A.x; a.y = A.y; a.v = Math.sqrt(A.vx * A.vx + A.vy * A.vy);
         t.loose = 7; t.turn = null; t.x = B.x; t.y = B.y; t.vx = B.vx; t.vy = B.vy; t.spin = (s.random() - 0.5) * 3;
-        if (imp > 12) { a.hp -= (imp - 8) * 1.8; a.stun = 0.5; }
+        if (imp > 12) {
+          a.hp -= (imp - 8) * 1.8; a.stun = 0.5;
+          if (a.hp <= 0 && !hit) { hit = true; why = s.ticks - t.pk <= TRAFFIC_WIN || touched(s, a) ? 'traffic' : baitOr(s, a); }
+        }
       }
     }
-    if (a.hp <= 0 && !a.wreck) takedown(s, a, 'crash');
+    if (a.hp <= 0 && !a.wreck) wreckCop(s, a, why);
   }
 
   // ---- traffic ----
@@ -536,6 +584,7 @@ export function stepGame(s, input = 3) {
       if (imp > 0) {
         if (imp > 5) { hurt(s, Math.min(30, (imp - 6) * 0.62) * c.armor, 'traffic'); s.events.push({ type: 'bump', tick: s.ticks, imp: Math.round(imp), x: (p.x + t.x) / 2, y: (p.y + t.y) / 2, traffic: 1 }); }
       }
+      if (imp > 0) t.pk = s.ticks; // the player knocked it loose: a cop it hits soon is a traffic check
       t.loose = 8; t.turn = null; t.x = OB.x; t.y = OB.y; t.vx = OB.vx; t.vy = OB.vy; t.spin = (s.random() - 0.5) * (2 + imp * 0.15);
     } else {
       const dx = p.x - t.x, dy = p.y - t.y, dd = dx * dx + dy * dy;
@@ -543,6 +592,8 @@ export function stepGame(s, input = 3) {
     }
   }
   if (hitAny) { p.x = PB.x; p.y = PB.y; const v2 = Math.sqrt(PB.vx * PB.vx + PB.vy * PB.vy); if (v2 > 0.3) { const na = datan2(PB.vy, PB.vx); p.h = norm(p.h + norm(na - p.a) * 0.5); p.a = na; } p.v = v2; }
+  // takedown reward: a speed kick on top of the surge (never slows the car down)
+  if (kick) { const cap = c.top + c.nitro; if (p.v < cap) p.v = Math.min(p.v + 4, cap); }
   // despawn far traffic
   for (let i = s.traffic.length - 1; i >= 0; i--) {
     const t = s.traffic[i], dx = t.x - p.x, dy = t.y - p.y;

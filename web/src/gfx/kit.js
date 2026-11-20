@@ -98,6 +98,7 @@ export class Kit {
     g.setAttribute("normal", new T.Float32BufferAttribute(this.n, 3));
     g.setAttribute("color", new T.Float32BufferAttribute(this.c, 3));
     g.setAttribute("aMat", new T.Float32BufferAttribute(this.m, 4));
+    if (this.extra?.attr) g.setAttribute(this.extra.attr, new T.Float32BufferAttribute(this.extra.data, this.extra.size));
     g.computeBoundingSphere();
     return g;
   }

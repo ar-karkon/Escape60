@@ -113,7 +113,7 @@ class Signs {
 export function createWorld(scene) {
   const mats = {
     ground: groundMaterial(), water: waterMaterial(), kit: kitMaterial(), facade: facadeMaterial(), glow: glowMaterial(),
-    mark: kitMaterial({ polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4 }),
+    mark: kitMaterial({ mark: true, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4 }),
     sign: new T.MeshBasicMaterial({ map: atlasTexture(), vertexColors: true, transparent: true, alphaTest: 0.05, side: T.DoubleSide }),
   };
   const root = new T.Group();
@@ -121,7 +121,7 @@ export function createWorld(scene) {
   const B = M.BOUNDS;
   let F = null; // field grid
   let occ = null, gw = 0, gh = 0;
-  const regions = []; for (let i = 0; i < REG * REG; i++) regions.push({ fac: new Fac(), kit: new Kit(), mark: new Kit(), wall: new Kit(), sign: new Signs() });
+  const regions = []; for (let i = 0; i < REG * REG; i++) regions.push({ fac: new Fac(), kit: new Kit(), mark: markKit(), wall: new Kit(), sign: new Signs() });
   const regionOf = (x, z) => { const i = Math.min(REG - 1, Math.max(0, Math.floor(((x - B.minX) / (B.maxX - B.minX)) * REG))), j = Math.min(REG - 1, Math.max(0, Math.floor(((z - B.minY) / (B.maxY - B.minY)) * REG))); return regions[j * REG + i]; };
   const r = {};
   const sampleG = (x, z) => M.sample(x, z, r).g;
@@ -437,14 +437,25 @@ export function createWorld(scene) {
   }
 
   /* ---------------- lane markings ---------------- */
+  /* Marking kits carry aLine = (across offset, half width) per vertex so the marking shader can anti-alias the
+     long edges analytically. Quads are padded by MPAD on each side to leave room for the soft edge. */
+  const MPAD = 0.04, QV = [0, 1, 2, 0, 2, 3];
+  function markKit() {
+    const K = new Kit();
+    K.extra = { attr: "aLine", size: 2, data: [], q: [0, 0, 0, 0], hw: 0, i: 0, onVertex() { this.data.push(this.q[QV[this.i++ % 6]] * (this.hw + MPAD), this.hw); } };
+    return K;
+  }
+  /** Quad a,b,c,d with sides sa..sd (-1/+1 across the line) for a paint stripe of half width hw. */
+  function markQuad(K, a, b, c, d, sa, sb, sc, sd, hw) { const e = K.extra; e.q[0] = sa; e.q[1] = sb; e.q[2] = sc; e.q[3] = sd; e.hw = hw; e.i = 0; K.quad(a, b, c, d, [0, 1, 0]); }
   function buildMarkings() {
     const W = new T.Color(0xf2f2ee), Y = new T.Color(0xffc21a);
     M.edges.forEach((e, ei) => {
       const k = e.k, lines = [];
       const two = k.lanes >= 2 || k.id === 0;
       if (two) { lines.push({ o: 0.18, w: 0.13, col: Y }, { o: -0.18, w: 0.13, col: Y }); }
-      else lines.push({ o: 0, w: 0.13, col: k.town ? W : Y, dash: [3, 5] });
-      for (let l = 1; l < k.lanes; l++) for (const sd of [1, -1]) lines.push({ o: sd * l * k.laneW, w: 0.13, col: W, dash: [3, 6] });
+      // dash periods are whole multiples of the 1.5 m build step, so every dash comes out the same length
+      else lines.push({ o: 0, w: 0.13, col: k.town ? W : Y, dash: [3, 4.5] });
+      for (let l = 1; l < k.lanes; l++) for (const sd of [1, -1]) lines.push({ o: sd * l * k.laneW, w: 0.13, col: W, dash: [3, 4.5] });
       if (!k.town) for (const sd of [1, -1]) lines.push({ o: sd * (k.hw - 0.45), w: 0.16, col: W });
       const step = 1.5, pt = {}, p2 = {};
       for (let s = 0; s < e.len - step; s += step) {
@@ -454,12 +465,12 @@ export function createWorld(scene) {
         if (jm < 2.2) continue;
         const reg = regionOf(pt.x, pt.y), K = reg.mark;
         for (const L of lines) {
-          if (L.dash && (s % (L.dash[0] + L.dash[1])) >= L.dash[0]) continue;
-          const nx0 = -pt.ty, nz0 = pt.tx, nx1 = -p2.ty, nz1 = p2.tx;
-          const a = [pt.x + nx0 * (L.o - L.w), 0.025, pt.y + nz0 * (L.o - L.w)], b = [p2.x + nx1 * (L.o - L.w), 0.025, p2.y + nz1 * (L.o - L.w)];
-          const c = [p2.x + nx1 * (L.o + L.w), 0.025, p2.y + nz1 * (L.o + L.w)], d = [pt.x + nx0 * (L.o + L.w), 0.025, pt.y + nz0 * (L.o + L.w)];
+          if (L.dash && (Math.round(s / step) % Math.round((L.dash[0] + L.dash[1]) / step)) >= Math.round(L.dash[0] / step)) continue;
+          const nx0 = -pt.ty, nz0 = pt.tx, nx1 = -p2.ty, nz1 = p2.tx, w = L.w + MPAD;
+          const a = [pt.x + nx0 * (L.o - w), 0.025, pt.y + nz0 * (L.o - w)], b = [p2.x + nx1 * (L.o - w), 0.025, p2.y + nz1 * (L.o - w)];
+          const c = [p2.x + nx1 * (L.o + w), 0.025, p2.y + nz1 * (L.o + w)], d = [pt.x + nx0 * (L.o + w), 0.025, pt.y + nz0 * (L.o + w)];
           K.set(L.col, 0.55, 0, 0.04, 0);
-          K.quad(a, d, c, b, [0, 1, 0]);
+          markQuad(K, a, d, c, b, -1, 1, 1, -1, L.w);
         }
       }
     });
@@ -482,12 +493,13 @@ export function createWorld(scene) {
         K.set(0xf2f2ee, 0.55, 0, 0.04, 0);
         for (let o = -k.hw + 0.7; o <= k.hw - 0.7; o += 1.1) {
           const cx = p.x + tx * 1.9 + nx * o, cz = p.y + tz * 1.9 + nz * o;
-          const hx = 0.28, hz = 1.6;
-          K.quad([cx + nx * hx - tx * hz, 0.026, cz + nz * hx - tz * hz], [cx + nx * hx + tx * hz, 0.026, cz + nz * hx + tz * hz], [cx - nx * hx + tx * hz, 0.026, cz - nz * hx + tz * hz], [cx - nx * hx - tx * hz, 0.026, cz - nz * hx - tz * hz], [0, 1, 0]);
+          const hx = 0.28 + MPAD, hz = 1.6;
+          markQuad(K, [cx + nx * hx - tx * hz, 0.026, cz + nz * hx - tz * hz], [cx + nx * hx + tx * hz, 0.026, cz + nz * hx + tz * hz], [cx - nx * hx + tx * hz, 0.026, cz - nz * hx + tz * hz], [cx - nx * hx - tx * hz, 0.026, cz - nz * hx - tz * hz], 1, 1, -1, -1, 0.28);
         }
         // stop line on the lanes that arrive at the junction (left of the outward direction)
         const sx = p.x + tx * 4.3, sz = p.y + tz * 4.3;
-        K.quad([sx - tx * 0.22, 0.026, sz - tz * 0.22], [sx + tx * 0.22, 0.026, sz + tz * 0.22], [sx + tx * 0.22 - nx * (k.hw - 0.4), 0.026, sz + tz * 0.22 - nz * (k.hw - 0.4)], [sx - tx * 0.22 - nx * (k.hw - 0.4), 0.026, sz - tz * 0.22 - nz * (k.hw - 0.4)], [0, 1, 0]);
+        const sw = 0.22 + MPAD;
+        markQuad(K, [sx - tx * sw, 0.026, sz - tz * sw], [sx + tx * sw, 0.026, sz + tz * sw], [sx + tx * sw - nx * (k.hw - 0.4), 0.026, sz + tz * sw - nz * (k.hw - 0.4)], [sx - tx * sw - nx * (k.hw - 0.4), 0.026, sz - tz * sw - nz * (k.hw - 0.4)], -1, 1, 1, -1, 0.22);
         // traffic light on the right-hand corner facing arriving traffic
         const lx = p.x + tx * 5 + nx * (-(k.hw + 0.9)), lz = p.y + tz * 5 + nz * (-(k.hw + 0.9));
         if (M.sample(lx, lz, r).g < 0.2) props.tlight.push({ x: lx, z: lz, ry: Math.atan2(nx, nz), s: 1, br: true });

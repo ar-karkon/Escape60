@@ -17,7 +17,7 @@ const pilot = () => {
     return (Math.max(-3, Math.min(3, Math.round(d * 5 + (hand ? 2 : 0)))) + 3) | (Math.abs(d) > 0.4 && q.v > 28 ? 8 : 0) | (hand ? 16 : 0) | (nitro ? 32 : 0);
   };
 };
-async function open(browser, w, h, q = "", lang = "en") {
+async function open(browser, w, h, q = "", lang = "fa") {
   const ctx = await browser.newContext({ viewport: { width: w, height: h }, deviceScaleFactor: w < h ? 2 : 1, hasTouch: w < h });
   const p = await ctx.newPage();
   await p.addInitScript((l) => { try { localStorage.setItem("escape60-lang", l); localStorage.setItem("escape60-profile-v2", JSON.stringify({ level: 18, xp: 0, runs: 5 })); } catch {} }, lang);

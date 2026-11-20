@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en" dir="ltr">
+<html lang="fa" dir="rtl">
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no"/>
@@ -119,7 +119,7 @@
         <p class="unlocks hidden" id="res-unlocks"></p>
         <p class="rival-result hidden" id="res-rival"><span data-icon="ghost"></span><b id="res-rival-text"></b></p>
         <div class="res-contracts hidden" id="res-contracts"></div>
-        <div class="rank-row"><span data-icon="bars"></span><p class="rank" id="rank"></p></div>
+        <div class="rank-row"><span data-icon="bars"></span><p class="rank" id="rank"></p><b id="res-league" class="league-badge hidden"></b></div>
         <div class="chief hidden" id="chief"><span class="ch-ico" data-icon="coach"></span><div class="ch-body"><small id="chief-who"></small><p id="chief-tip"></p><b id="chief-next"></b></div></div>
         <div class="actions">
           <button id="share" class="btn btn-secondary btn-share"><span class="btn-ico" data-icon="share"></span><b data-i18n="share">SHARE</b></button>
@@ -146,7 +146,8 @@
       <div class="minimap"><canvas id="minimap"></canvas><div class="mm-count"><b id="mm-count">60</b><small id="mm-label"></small></div></div>
       <div class="edge-stack" aria-live="off">
         <div id="live" class="live-chip hidden" data-state="sync"><i class="live-dot"></i><small id="live-tag">LIVE</small><b id="live-rank">#&#8212;</b><small id="live-of"></small></div>
-        <div id="rival" class="rival-chip hidden"><span class="rv-ico" data-icon="ghost"></span><small id="rival-tag">RIVAL</small><small id="rival-name" class="rv-name"></small><b id="rival-delta">+0</b></div>
+        <small id="live-ahead" class="live-ahead hidden"></small>
+        <div id="rival" class="rival-chip hidden"><span class="rv-ico" data-icon="ghost"></span><small id="rival-tag">RIVAL</small><small id="rival-name" class="rv-name"></small><b id="rival-delta">+0</b><small id="rival-sec" class="rv-sec"></small></div>
       </div>
       <div id="ghost-tag" class="ghost-tag hidden"><b id="ghost-name"></b></div>
       <div id="radio" class="radio-line hidden" aria-live="polite"><span class="rd-ico" data-icon="radio"></span><b id="radio-who"></b><span id="radio-text"></span></div>

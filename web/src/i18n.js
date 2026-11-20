@@ -1,5 +1,5 @@
-/* English (default) and Persian UI strings. Language follows the browser (fa* → Persian) until the
-   player picks one in Settings. `t(key, vars)` fills {name} placeholders. */
+/* Persian (default) and English UI strings. Persian is the default for everyone until the
+   player picks English in Settings (the choice is remembered). `t(key, vars)` fills {name} placeholders. */
 const S = {
   en: {
     title: "ESCAPE 60", tagline: "One city. 60 seconds. How long can you last?", playTag: "SUNSET BAY · 60s",
@@ -19,7 +19,7 @@ const S = {
     fxHint: "Effects are cosmetic. Pick a style before every run.",
     time: "TIME", score: "Total score", escapeIn: "ESCAPE {n}s", overtime: "overtime", heat: "pursuit", kmh: "KM/H",
     pit: "PIT STOP", noRepairs: "No repairs left", repaired: "REPAIRED! {n} LEFT", repairedLast: "REPAIRED! LAST ONE",
-    drift: "DRIFT", driftLost: "DRIFT LOST", near: "CLOSE CALL", nearCop: "COP DODGE", dodge: "ROADBLOCK DODGE", takedown: "TAKEDOWN!",
+    drift: "DRIFT", driftLost: "DRIFT LOST", near: "CLOSE CALL", nearCop: "COP DODGE", dodge: "ROADBLOCK DODGE", takedown: "TAKEDOWN!", td_ram: "RAMMED!", td_slam: "WALL SLAM!", td_traffic: "TRAFFIC TAKEDOWN!", td_pileup: "PILE-UP!", td_bait: "SHAKEN OFF!",
     heatUp: "HEAT LEVEL {n}", roadblock: "⚠ ROADBLOCK AHEAD — find the gap", spikes: "SPIKE STRIP!", police: "Police unit joined",
     go: "GO!", milestone: "60 seconds!", milestoneSub: "You escaped — keep going!", bestTime: "Best", newRecord: "NEW RECORD", bonus: "+2,500 BONUS",
     busting: "BUSTING", pause: "Paused", resume: "Resume", restart: "Restart", quit: "Back to menu",
@@ -29,6 +29,8 @@ const S = {
     briefTag: "TODAY", contractTag: "CONTRACT", contractsTitle: "Contracts", chiefWho: "CREW CHIEF · RAY", chiefWait: "Ray is looking at your run…", nextTarget: "Next target: {t}", targetTag: "TARGET", targetHit: "TARGET HIT!", dispatchWho: "DISPATCH", howBuilt: "How it's built", briefMore: "tap for briefing",
     liveTag: "LIVE", liveSync: "SYNC", liveCheck: "CHECK", rivalTag: "RIVAL", rivalTarget: "TARGET", rivalBeaten: "RIVAL BEATEN!", rivalWon: "You beat {name} (#{rank})", rivalAhead: "{name} (#{rank}) still ahead by {n}", rivalTie: "Dead heat with {name} (#{rank})", rivalSelf: "YOUR BEST", betterThan: "better than {n}% of today's runs", verifiedTag: "verified",
     rankLocal: "Record saved on this device", rankPending: "Verifying run…", rankDone: "Global rank #{rank} of {of}", rankSaved: "Verified and saved", rankFail: "Could not verify online · saved on this device",
+    ghost_pb: "YOUR BEST", ghost_rival: "RIVAL", ghost_top: "#1 TODAY", ghost_friend: "FRIEND", ghostPassed: "PASSED {name}", ghostPassedYou: "{name} PASSED YOU", aheadGap: "{n} pts to #{rank}", secAhead: "▲{n}s", secBehind: "▼{n}s", duelWon: "✓ {name}", duelLost: "✗ {name}", duelXp: "+{n} XP for ghosts beaten",
+    leagueTag: "League", league_bronze: "BRONZE", league_silver: "SILVER", league_gold: "GOLD", league_neon: "NEON", league_legend: "LEGEND", leagueNew: "new best league",
     xp: "XP", levelUp: "LEVEL {n}!", newCar: "New car: {name}", newPaint: "New paints unlocked", newFx: "New effect: {name}",
     lbTitle: "LEADERBOARD", lbEmpty: "No verified runs on this route yet. Be the first!", lbOff: "Global leaderboard unavailable.", lbYou: "Your best here: {score} pts · {time}",
     missionsTitle: "DAILY MISSIONS", missionHint: "+300 XP each · play on consecutive days for a streak bonus", playDaily: "PLAY TODAY'S ROUTE", done: "Done",
@@ -63,7 +65,7 @@ const S = {
     fxHint: "افکت‌ها فقط ظاهری‌اند. قبل از هر مسابقه سبکت رو انتخاب کن.",
     time: "زمان", score: "امتیاز کل", escapeIn: "فرار تا {n} ثانیه", overtime: "وقت اضافه", heat: "تعقیب", kmh: "KM/H",
     pit: "پیت‌استاپ", noRepairs: "تعمیر باقی نمانده", repaired: "تعمیر شد! {n} بار دیگر", repairedLast: "تعمیر شد! آخرین بار",
-    drift: "دریفت", driftLost: "دریفت از دست رفت", near: "از بیخ گوشش!", nearCop: "جاخالی از پلیس", dodge: "جاخالی از راه‌بند", takedown: "پلیس رو زدی!",
+    drift: "دریفت", driftLost: "دریفت از دست رفت", near: "از بیخ گوشش!", nearCop: "جاخالی از پلیس", dodge: "جاخالی از راه‌بند", takedown: "پلیس رو زدی!", td_ram: "کوبیدی!", td_slam: "کوبیدیش به دیوار!", td_traffic: "انداختیش تو ترافیک!", td_pileup: "تصادف زنجیره‌ای!", td_bait: "جا گذاشتیش!",
     heatUp: "سطح تعقیب {n}", roadblock: "⚠ راه‌بند جلوتر — راه باریک رو پیدا کن", spikes: "میخ‌های جاده!", police: "پلیس تازه رسید",
     go: "برو!", milestone: "۶۰ ثانیه!", milestoneSub: "فرار کردی — ادامه بده", bestTime: "بهترین", newRecord: "رکورد جدید", bonus: "+۲٬۵۰۰ جایزه",
     busting: "دستگیری", pause: "توقف بازی", resume: "ادامه بازی", restart: "از نو", quit: "برگشت به منو",
@@ -73,6 +75,8 @@ const S = {
     briefTag: "امروز", contractTag: "قرارداد", contractsTitle: "قراردادها", chiefWho: "سرمکانیک · ری", chiefWait: "ری دارد رانندگی‌ات را بررسی می‌کند…", nextTarget: "هدف بعدی: {t}", targetTag: "هدف", targetHit: "به هدف رسیدی!", dispatchWho: "مرکز", howBuilt: "پشت صحنه‌ی بازی", briefMore: "برای گزارش بزن",
     liveTag: "زنده", liveSync: "همگام", liveCheck: "بررسی", rivalTag: "رقیب", rivalTarget: "هدف", rivalBeaten: "رقیبت رو زدی!", rivalWon: "{name} (رتبه‌ی {rank}) رو شکست دادی", rivalAhead: "{name} (رتبه‌ی {rank}) هنوز {n} امتیاز جلوتره", rivalTie: "مساوی با {name} (رتبه‌ی {rank})", rivalSelf: "رکورد خودت", betterThan: "بهتر از {n}٪ رانندگی‌های امروز", verifiedTag: "تأییدشده",
     rankLocal: "رکورد روی همین دستگاه ذخیره شد", rankPending: "در حال تأیید رکورد…", rankDone: "رتبه جهانی #{rank} از {of}", rankSaved: "تأیید و ثبت شد", rankFail: "تأیید آنلاین نشد · رکورد روی همین دستگاه ذخیره شد",
+    ghost_pb: "رکورد خودت", ghost_rival: "رقیب", ghost_top: "نفر اول امروز", ghost_friend: "دوست", ghostPassed: "از {name} جلو زدی", ghostPassedYou: "{name} ازت جلو زد", aheadGap: "{n} امتیاز تا رتبه‌ی {rank}", secAhead: "▲{n} ث", secBehind: "▼{n} ث", duelWon: "✓ {name}", duelLost: "✗ {name}", duelXp: "+{n} XP برای شکست شبح‌ها",
+    leagueTag: "لیگ", league_bronze: "برنز", league_silver: "نقره", league_gold: "طلا", league_neon: "نئون", league_legend: "افسانه", leagueNew: "بهترین لیگ تازه",
     xp: "XP", levelUp: "سطح {n}!", newCar: "ماشین تازه: {name}", newPaint: "رنگ‌های تازه باز شد", newFx: "افکت تازه: {name}",
     lbTitle: "جدول رکوردها", lbEmpty: "هنوز رکورد تأییدشده‌ای برای این مسیر نیست. اولی باش!", lbOff: "جدول جهانی در دسترس نیست.", lbYou: "بهترین تو: {score} امتیاز · {time}",
     missionsTitle: "مأموریت‌های روزانه", missionHint: "هر مأموریت +۳۰۰ XP · بازی روزهای پشت سر هم جایزه دارد", playDaily: "مسیر امروز", done: "انجام شد",
@@ -91,7 +95,7 @@ const S = {
   },
 };
 const KEY = "escape60-lang";
-let lang = (() => { try { const v = localStorage.getItem(KEY); if (v === "en" || v === "fa") return v; } catch {} return /^fa\b/i.test(navigator.language || "") ? "fa" : "en"; })();
+let lang = (() => { try { const v = localStorage.getItem(KEY); if (v === "en" || v === "fa") return v; } catch {} return "fa"; })();
 export const getLang = () => lang;
 export function setLang(l) { lang = l === "fa" ? "fa" : "en"; try { localStorage.setItem(KEY, lang); } catch {} applyI18n(); }
 export function t(key, vars) {

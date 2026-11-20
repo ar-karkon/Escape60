@@ -5,6 +5,8 @@
 import { hashSeed } from './simulation.js';
 import { CARS, PAINTS, LIVERIES } from './cars.js';
 import { EFFECTS, ACCENTS } from './gfx/effects.js';
+import { LEAGUES } from './director.js';
+export { leagueOf, LEAGUES } from './director.js';
 
 const KEY = 'escape60-profile-v2';
 const MISSIONS = [
@@ -47,8 +49,10 @@ export function missionInfo(m) { const def = MISSIONS.find((x) => x.id === m.id)
 export const carUnlocked = (p, c) => c.level <= p.level;
 export function carLook(p, id) { const l = p.paints[id] || {}; return { paint: l.paint ?? 'stock', livery: l.livery ?? (CARS.find((c) => c.id === id)?.livery || 'clean') }; }
 
+/** XP for each ghost you beat in a run (local progression only — ghosts never change ranked points). */
+export const DUEL_XP = 150;
 /** Apply a finished run. Returns a summary for the results screen. */
-export function applyRun(p, r) {
+export function applyRun(p, r, { duelsWon = 0 } = {}) {
   refreshMissions(p);
   const d = today(), yesterday = new Date(Date.now() - 864e5).toISOString().slice(0, 10);
   let streakUp = false;
@@ -62,7 +66,8 @@ export function applyRun(p, r) {
   }
   const base = Math.floor(r.timeMs / 100) + Math.floor(r.points / 20) + r.takedowns * 60 + r.near * 10 + (r.escaped ? 300 : 0);
   const streakBonus = Math.min(0.5, (p.streak.days - 1) * 0.1);
-  const gained = Math.round(base * (1 + streakBonus)) + completed.length * 300;
+  const gained = Math.round(base * (1 + streakBonus)) + completed.length * 300 + duelsWon * DUEL_XP;
+  p.duels = (p.duels || 0) + duelsWon;
   const before = p.level, unlocks = { cars: [], paints: false, fx: [] };
   p.xp += gained;
   while (p.xp >= xpForLevel(p.level)) {
@@ -76,6 +81,13 @@ export function applyRun(p, r) {
   if (newBest) p.best = { points: r.points, timeMs: r.timeMs };
   saveProfile(p);
   return { gained, levelUp: p.level > before, level: p.level, unlocks, completed, streak: p.streak.days, streakUp };
+}
+
+/** Remember the best league this device reached (returns true when it is a new best). */
+export function noteLeague(p, league) {
+  const i = LEAGUES.indexOf(league);
+  if (i < 0 || i <= LEAGUES.indexOf(p.league)) return false;
+  p.league = league; saveProfile(p); return true;
 }
 
 /** Friend challenge carried in the link: ?seed=…&c=<timeMs>.<points>&sp=<start>. Unverified by design. */
