@@ -1,11 +1,33 @@
 # Deployment runbook — Escape60 on Arvan (v3.6.0: SIM 2.3.0 · API 4.2.0)
 
-Live URL: **https://escape60.lavanai2525-3qem7.arvanedge.ir** — API 4.1.2 / SIM 2.2.0 deployed and checked on 2026-11-20. What runs where is explained for judges in [TECHNOLOGY.md](TECHNOLOGY.md); the API is in [06_EDGE_SPEC.md](06_EDGE_SPEC.md).
+Live URL: **https://escape60.lavanai2525-3qem7.arvanedge.ir** — live: API 4.1.2 / SIM 2.2.0 (checked 2026-11-20). **Release 3.6.0 (API 4.2.0 / SIM 2.3.0) is on `main` and ready to deploy** — see «انتشار نسخه‌ی ۳.۶.۰» below. What runs where is explained for judges in [TECHNOLOGY.md](TECHNOLOGY.md); the API is in [06_EDGE_SPEC.md](06_EDGE_SPEC.md).
+
+## انتشار نسخه‌ی ۳.۶.۰ (آماده‌ی دیپلوی)
+**چه چیزی عوض شده:**
+- زبان پیش‌فرض فارسی (بازی و صفحه‌ی `/edge`).
+- تیک‌دان فقط وقتی امتیاز دارد که خود بازیکن باعثش باشد: کوبیدن، کوبیدن به دیوار، انداختن در ترافیک، تصادف زنجیره‌ای و جا گذاشتن. افکتش حالا جایزه است و دیگر تصادف نیست: لرزش و اسلوموشن ندارد، نیترو پر می‌شود و چند لحظه سرعت اضافه می‌دهد، و برچسب طلایی روی همان پلیس دیده می‌شود.
+- آنتی‌الیاسینگ (MSAA و فیلتر الگوهای دور) تا خط‌های دوردست درهم نروند، به‌اضافه‌ی خط دور نازک.
+- چند روح هم‌زمان: بهترین رکورد خودت، رقیب بالادستی، نفر اول و دوست. اختلاف زنده و تأییدشده با روح‌ها، لیگ، و فرمانده‌ی پلیس که از نقشه‌ی گیرافتادن‌های دیروز تاکتیک می‌چیند.
+
+**پیش از دیپلوی:**
+- `SIM_VERSION` عوض شده (2.2.0 → 2.3.0)، پس جدول رتبه‌ها، روح‌ها و نقشه‌ی گرمایی از صفر شروع می‌شوند. بازیکنی که صفحه‌ی قدیمی را باز نگه داشته پیام «دوباره بارگذاری کنید» می‌گیرد.
+- متغیر Edge جدیدی لازم نیست. همان `S3_ACCESS_KEY`، `S3_SECRET_KEY` و `AI_API_KEY` کافی است.
+- **فقط روی گوشی واقعی یک دور کامل بازی کنید و ببینید روان است.** FPS روی گوشی واقعی هنوز سنجیده نشده. اگر کند بود، در تنظیمات «گرافیک سبک» را بزنید یا با `?q=low` تست کنید و خبر بدهید.
+
+**مراحل:** همان «راهنمای سریع» پایین. خلاصه: `git pull` ← `npm ci` ← `npm run check` (باید ۴۳ تست پاس شود) ← پشتیبان از کد فعلی Edge ← `npm run deploy` ← کلیدها ← چسباندن `dist/edge/worker.js` در پنل و انتشار ← Enter.
+
+**بعد از دیپلوی این‌ها را ببینید:**
+- `GET /api/v1/health` ← `api: "4.2.0"`، `version: "2.3.0"`، و در `features` مقدارهای `multi-ghost`، `verified-splits`، `leagues`، `heat-commander` و `rival-personas`.
+- `GET /api/v1/ghosts?spawn=0` ← پاسخ ۲۰۰ با کلیدهای `pb`، `rival`، `top` و `friend`. اول روز خالی‌اند (`null`).
+- بازی بدون تنظیم قبلی با فارسی و راست‌به‌چپ باز شود.
+- یک پلیس را بکوبید تا از کار بیفتد: لرزش و اسلوموشن نباشد، دوربین باز شود، جرقه‌ی طلایی/فیروزه‌ای بیاید، برچسب «کوبیدی!» با امتیاز روی همان پلیس دیده شود و نوار نیترو پر شود. اگر پلیسی دور از شما تصادف کند، نباید امتیازی بگیرید.
+- خط‌کشی و پنجره‌های دوردست نلرزند و درهم نروند.
+- از دور دوم به بعد: روح بهترین رکوردتان (سفید) و برچسب اختلاف زنده بالای صفحه. در صفحه‌ی نتیجه هم نشان لیگ.
 
 ## راهنمای سریع به‌روزرسانی سرور (از کامپیوتر خودتان)
 ۰. **پیش از دیپلوی — تست روی کامپیوتر خودتان (۵ دقیقه، توصیه می‌شود):**
    - `git pull` و بعد `npm ci` (دقیقاً همان نسخه‌ی ابزارهای قفل‌شده).
-   - `npm run check` ← باید «۳۱ تست پاس» و `Syntax OK` ببینید.
+   - `npm run check` ← باید «۴۳ تست پاس» و `Syntax OK` ببینید.
    - `npm run build && npm run edge:local` ← همان فایل Edge که آپلود می‌شود روی http://localhost:4174 اجرا می‌شود. در مرورگر بازش کنید و یک دور بازی کنید (چک‌لیست «بعد از دیپلوی» پایین را همین‌جا هم می‌شود دید).
    - اختیاری، تست خودکار مرورگر: در ترمینال دوم `GAME_URL=http://localhost:4174 npm run test:browser`. این تست به کروم نیاز دارد: اگر پیدا نکرد، مسیرش را بدهید، مثلاً ویندوز `set CHROME_BIN=C:\Program Files\Google\Chrome\Application\chrome.exe` و مک `CHROME_BIN="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"`. آخرش باید `smoke OK` بنویسد. (در ویندوز متغیرها را جدا بدهید: `set GAME_URL=http://localhost:4174` و بعد `npm run test:browser`.)
    - **پشتیبان برای برگشت:** قبل از دیپلوی، در پنل Edge ← `escape60` ← ویرایش کد، کل کد فعلی را در یک فایل (مثلاً `edge-backup.js`) ذخیره کنید، و صفحه‌ی فعلی را هم نگه دارید: `curl -o index-backup.html https://escape60.lavanai2525-3qem7.arvanedge.ir/` (پایین «برگشت به نسخه‌ی قبل» را ببینید).
@@ -85,12 +107,15 @@ Flags: `--skip-build`, `--skip-tests`, `--force` (upload everything), `--no-wait
 
 Rehearsed (2026-11-19) against a local fake S3 + edge that re-verifies every signature. Not yet run against the real Arvan endpoints (the cloud build session could not reach Arvan hosts).
 
+Release 3.6.0 was checked locally on 2026-11-20: `npm run check` (43 tests), `npm run build`, and the browser smoke test against `npm start` (Persian UI, live referee, verified rank, edge card, rival chip), plus in-engine screenshots of a staged takedown (`docs/screenshots/takedown-reward.png`). The live Arvan deploy for 3.6.0 has not been run yet, and FPS on a real phone is still unmeasured.
+
 Release 3.5.1 was checked in the cloud session before handing over: `npm run check` (31 tests), `npm run build`, and the browser smoke test (a real autopiloted run verified live and finally, share card, rival) against both `npm start` and the built worker via `npm run edge:local`. The live Arvan steps above were not run from there.
 
 ## After deploying: what to check
 | Check | Expected |
 |---|---|
 | `GET /api/v1/health` | `api: "4.2.0"`, `version: "2.3.0"`, `storage: "arvan-object-storage"`, `secured: true`, `ai: {configured: true, model: "DeepSeek-V4-Flash"}` |
+| `GET /api/v1/ghosts?spawn=0` | HTTP 200 with `pb`, `rival`, `top`, `friend` (null until verified runs exist for SIM 2.3.0) |
 | `GET /api/v1/challenges/today` | `brief.source: "ai"` (the first request of a UTC day writes it, ≈5–15 s; later requests read the frozen copy) and `rules` with three contracts |
 | `GET /api/v1/radio?lang=en|fa` | HTTP 200; the selected language reports `ai` or `fallback` |
 | `/edge` | today's briefing, model calls/tokens/latency, live counters; Live Lab refuses the cheats |
